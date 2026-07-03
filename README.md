@@ -93,6 +93,10 @@ PulseMeter uses a proprietary freeware license. You may use the unmodified app f
 
 You may not copy, modify, reuse, redistribute, repackage, or create derivative works from the PulseMeter source code without prior written permission. See [LICENSE](LICENSE).
 
+## Pull Requests
+
+This repository does not accept pull requests. It is a public download and documentation page for the PulseMeter app, not an open-source contribution repository.
+
 ## Current Limitations
 
 - Exact current Codex Desktop thread detection is not implemented.
