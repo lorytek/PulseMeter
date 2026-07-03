@@ -8,6 +8,16 @@ PulseMeter is a free Windows tray app that helps Codex users keep an eye on usag
 
 It is an unofficial companion app and is not affiliated with OpenAI.
 
+## Screenshots
+
+<p align="center">
+  <img src="assets/pulsemeter-expanded-dashboard.png" alt="PulseMeter expanded dashboard" width="860">
+</p>
+
+<p align="center">
+  <img src="assets/pulsemeter-compact-hud.png" alt="PulseMeter compact floating HUD" width="420">
+</p>
+
 ## Download
 
 Download the latest portable Windows build from GitHub Releases:
