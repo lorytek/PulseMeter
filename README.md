@@ -15,6 +15,10 @@ It is an unofficial companion app and is not affiliated with OpenAI.
 </p>
 
 <p align="center">
+  <img src="assets/pulsemeter-account-project-usage.png" alt="PulseMeter account and project usage dashboard" width="860">
+</p>
+
+<p align="center">
   <img src="assets/pulsemeter-compact-hud.png" alt="PulseMeter compact floating HUD" width="420">
 </p>
 
