@@ -96,6 +96,5 @@ You may not copy, modify, reuse, redistribute, repackage, or create derivative w
 ## Current Limitations
 
 - Exact current Codex Desktop thread detection is not implemented.
-- Project usage is an estimate from local Codex metadata, not billing-exact accounting.
 - Reset-credit expiry relies on currently observed Codex/OpenAI behavior and may change.
 - PulseMeter is unsigned, so Windows may show an unknown-publisher warning.
