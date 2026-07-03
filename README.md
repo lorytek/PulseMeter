@@ -44,6 +44,7 @@ PulseMeter floats quietly on your desktop and shows a quick Codex-style usage su
 
 - Compact floating HUD for quick usage checks.
 - Expanded dashboard with rate limits, reset credits, account usage, project usage, and daily usage.
+- Sidebar section icons can show or hide dashboard sections.
 - Tray icon with show, hide, refresh, mock mode, and exit controls.
 - Live sync through the local Codex CLI/app-server when available.
 - Portable release: extract, run, delete the folder to uninstall.
@@ -72,6 +73,7 @@ Mock Mode works without Codex CLI, but it shows demo data only.
 - Start `PulseMeter.App.exe`.
 - Use the tray icon to show, hide, refresh, switch mock mode, or exit.
 - Click the floating HUD arrow to expand or collapse the dashboard.
+- Click the sidebar section icons to show or hide sections in the expanded dashboard.
 - Use `Sync` when you want to refresh usage immediately.
 - Use `Exit` from the tray menu when you want to fully close the app.
 
