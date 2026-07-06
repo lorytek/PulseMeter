@@ -5,21 +5,21 @@
 [![Latest release](https://img.shields.io/github/v/release/lorytek/PulseMeter?label=release)](https://github.com/lorytek/PulseMeter/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d4.svg)](#minimum-requirements)
 
-PulseMeter is an unofficial Windows tray HUD for Codex usage visibility. It shows rate-limit remaining, reset credits, account usage, and local usage estimates in a compact floating window.
+PulseMeter is a Windows app for Codex analytics. It shows rate-limit remaining, reset credits, account usage, and local usage estimates in a compact floating window.
 
 PulseMeter is not affiliated with OpenAI.
 
 ![PulseMeter rate limits and account usage dashboard](assets/pulsemeter-rate-limits-account-dashboard.png)
 
+****
+
 ![PulseMeter reset credits, account usage, and project usage dashboard](assets/pulsemeter-reset-account-project-dashboard.png)
 
-## More Screenshots
-
-**Project and daily usage**
+****
 
 ![PulseMeter showing project usage and daily usage rows](assets/pulsemeter-account-project-usage.png)
 
-**Compact HUD**
+****
 
 ![PulseMeter compact HUD with live status](assets/pulsemeter-compact-hud.png)
 
