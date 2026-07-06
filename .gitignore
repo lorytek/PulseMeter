@@ -1,0 +1,14 @@
+artifacts/
+bin/
+obj/
+**/bin/
+**/obj/
+TestResults/
+.vs/
+.agents/
+.codex/
+*.lnk
+*.user
+*.suo
+*.userosscache
+*.sln.docstates

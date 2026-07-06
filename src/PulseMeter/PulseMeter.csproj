@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>Assets\PulseMeter.ico</ApplicationIcon>
+    <AssemblyName>PulseMeter</AssemblyName>
+    <RootNamespace>PulseMeter</RootNamespace>
+    <Version>0.1.0</Version>
+    <Authors>PulseMeter contributors</Authors>
+    <Product>PulseMeter</Product>
+    <AssemblyTitle>PulseMeter</AssemblyTitle>
+    <Description>Windows tray monitor for Codex usage limits, reset credits, and usage summaries.</Description>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/lorytek/PulseMeter</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <Copyright>Copyright (c) 2026 PulseMeter contributors</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Remove="Bootstrap\Startup\App.xaml" />
+    <ApplicationDefinition Include="Bootstrap\Startup\App.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\PulseMeterLogo.png" />
+    <Resource Include="Assets\PulseMeter.ico" />
+  </ItemGroup>
+
+</Project>

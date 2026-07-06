@@ -1,13 +1,60 @@
 # Contributing
 
-PulseMeter is a free-to-use app, but this repository is not open source and does not accept code contributions.
+Thanks for helping improve PulseMeter.
 
-Please do not open pull requests. Pull requests will be closed without review.
+By participating, you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-The public GitHub repository is only for:
+## What To Open
 
-- downloading official PulseMeter releases
-- reading user-facing documentation
-- reviewing the freeware license, privacy notes, and security notes
+Small bug fixes and documentation fixes can open a pull request directly.
 
-If you need to report a security concern, follow [SECURITY.md](SECURITY.md). Do not include tokens, auth files, account IDs, or private Codex session contents in public messages.
+For new features, architecture changes, dependency additions, and refactor-only work, please open an issue first and wait for maintainer agreement before implementing. This keeps the app small, privacy-focused, and maintainable.
+
+## Bug Fixes
+
+Every bug-fix pull request should include:
+
+- A reproduction: minimal steps, a failing test, or a short explanation of the bad behavior.
+- A test that fails before the fix and passes after, when practical.
+- Manual verification details when an automated test is not practical.
+
+## Real Behavior Proof
+
+Every pull request should include a `Real Behavior Proof` section with:
+
+- Environment tested on, including Windows version.
+- Exact commands or manual steps run after the patch.
+- Observed result.
+- What was not tested.
+
+For UI changes, include a screenshot or short recording when possible.
+
+## Dependency Changes
+
+Dependency changes need written justification:
+
+- Why this package or version is needed.
+- Whether it changes install/runtime surface.
+- Whether it adds native code or network behavior.
+- How the dependency is maintained.
+
+Cosmetic dependency churn may be declined.
+
+## Development Checks
+
+Run the narrowest useful checks for your change. For most source changes:
+
+```powershell
+dotnet test PulseMeter.slnx -c Release
+dotnet build PulseMeter.slnx -c Release
+```
+
+For release/package changes:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-release.ps1 -Version 0.1.1
+```
+
+## Security
+
+Do not include access tokens, auth files, account IDs, local file paths, or private Codex session contents in public issues or pull requests. Follow [SECURITY.md](SECURITY.md) for vulnerability reports.

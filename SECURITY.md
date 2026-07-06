@@ -14,9 +14,16 @@ Security fixes target the latest public release only until the project has a sta
 
 ## Reporting A Vulnerability
 
-Do not include access tokens, auth files, account IDs, or private Codex session contents in public issues.
+Do not include access tokens, auth files, account IDs, local file paths, or private Codex session contents in public issues.
 
-If GitHub private vulnerability reporting is enabled for the repository, use it. Otherwise, open a minimal public issue that describes the affected component without secrets, and the maintainer can coordinate privately.
+If GitHub private vulnerability reporting is enabled for the repository, use it. Otherwise, open a minimal public issue that describes the affected component without secrets, and the maintainer can coordinate privately through the contact options on the `@lorytek` GitHub profile.
+
+Include:
+
+- The affected PulseMeter version or commit.
+- The affected source file or feature, if known.
+- Steps to reproduce with secrets redacted.
+- Impact and whether local Codex auth/session data may be exposed.
 
 ## Sensitive Areas
 

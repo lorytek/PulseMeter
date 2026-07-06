@@ -1,0 +1,9 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Synthetic test fixtures and non-secret example values."
+regexes = [
+  '''test-access-token''',
+  '''acct-test''',
+]

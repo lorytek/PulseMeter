@@ -1,0 +1,61 @@
+<UserControl x:Class="PulseMeter.Slices.ResetCredits.UI.ResetCreditsSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </UserControl.Resources>
+
+    <Border x:Name="ResetCreditsPanel"
+                                    Margin="0,12,0,0"
+                                    Padding="16"
+                                    Style="{DynamicResource LightCardStyle}"
+                                    Visibility="{Binding DataContext.IsResetCreditsVisible, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <StackPanel>
+                                    <Grid>
+                                        <TextBlock Text="RESET CREDITS"
+                                                   Foreground="#111827"
+                                                   FontSize="20"
+                                                   FontWeight="Bold" />
+                                        <TextBlock HorizontalAlignment="Right"
+                                                   Text="{Binding ResetCreditsAvailableText}"
+                                                   Foreground="#374151"
+                                                   FontSize="13" />
+                                    </Grid>
+
+                                    <ItemsControl Margin="0,16,0,0"
+                                                  ItemsSource="{Binding ResetCredits}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,0,0,12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="28" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Width="10"
+                                                            Height="10"
+                                                            Margin="0,4,0,0"
+                                                            HorizontalAlignment="Left"
+                                                            VerticalAlignment="Top"
+                                                            Background="#28B946"
+                                                            CornerRadius="5" />
+                                                    <StackPanel Grid.Column="1">
+                                                        <TextBlock Text="{Binding DisplayText}"
+                                                                   Foreground="#111827"
+                                                                   FontSize="14"
+                                                                   TextWrapping="Wrap" />
+                                                        <ProgressBar Height="6"
+                                                                     Margin="0,8,0,0"
+                                                                     Minimum="0"
+                                                                     Maximum="100"
+                                                                     Value="{Binding ExpiryProgressValue, Mode=OneWay}"
+                                                                     Foreground="{Binding ExpiryProgressBrush}"
+                                                                     Style="{DynamicResource LightProgressBarStyle}" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                </StackPanel>
+                            </Border>
+</UserControl>

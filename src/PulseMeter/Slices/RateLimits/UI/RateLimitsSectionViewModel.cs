@@ -1,0 +1,125 @@
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
+using PulseMeter.Slices.UsageCollection;
+
+namespace PulseMeter.Slices.RateLimits.UI;
+
+public sealed class RateLimitsSectionViewModel : INotifyPropertyChanged
+{
+    private readonly IRateLimitsPresenter _presenter;
+    private RateLimitOption? _selectedLimitOption;
+
+    public RateLimitsSectionViewModel(IRateLimitsPresenter presenter)
+    {
+        _presenter = presenter;
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public ObservableCollection<RateLimitOption> LimitOptions { get; } = new();
+
+    public ObservableCollection<QuotaDisplayRow> CompactQuotaRows { get; } = new();
+
+    public ObservableCollection<RateLimitBucket> SelectedBuckets { get; } = new();
+
+    public ObservableCollection<QuotaDisplayRow> SelectedQuotaRows { get; } = new();
+
+    public RateLimitOption? SelectedLimitOption
+    {
+        get => _selectedLimitOption;
+        set
+        {
+            if (EqualityComparer<RateLimitOption?>.Default.Equals(_selectedLimitOption, value))
+            {
+                return;
+            }
+
+            _selectedLimitOption = value;
+            RefreshSelectedBuckets();
+            OnPropertyChanged();
+        }
+    }
+
+    public string CompactTitleText => _presenter.BuildCompactTitle(SelectedBuckets, _buckets, SelectedLimitOption);
+
+    public string CompactQuotaSummaryText => _presenter.BuildCompactQuotaSummary(CompactQuotaRows);
+
+    public string ExpandedQuotaSummaryText => _presenter.BuildExpandedQuotaSummary(CompactQuotaRows);
+
+    private IReadOnlyList<RateLimitBucket> _buckets = [];
+
+    public void ApplyBuckets(IEnumerable<RateLimitBucket> buckets, DateTimeOffset now)
+    {
+        var selectedKey = SelectedLimitOption?.Key;
+        _buckets = buckets.ToList();
+        var options = _presenter.BuildOptions(_buckets);
+
+        LimitOptions.Clear();
+        foreach (var option in options)
+        {
+            LimitOptions.Add(option);
+        }
+
+        _selectedLimitOption = _presenter.SelectOption(options, selectedKey);
+        OnPropertyChanged(nameof(SelectedLimitOption));
+        RefreshSelectedBuckets(now);
+    }
+
+    public void Refresh(DateTimeOffset now)
+    {
+        RefreshQuotaRows(now);
+    }
+
+    private void RefreshSelectedBuckets()
+    {
+        RefreshSelectedBuckets(DateTimeOffset.UtcNow);
+    }
+
+    private void RefreshSelectedBuckets(DateTimeOffset now)
+    {
+        SelectedBuckets.Clear();
+        foreach (var bucket in _presenter.SelectBuckets(_buckets, SelectedLimitOption))
+        {
+            SelectedBuckets.Add(bucket);
+        }
+
+        RefreshQuotaRows(now);
+    }
+
+    private void RefreshQuotaRows(DateTimeOffset now)
+    {
+        SelectedQuotaRows.Clear();
+        foreach (var row in _presenter.BuildQuotaRows(SelectedBuckets, now))
+        {
+            SelectedQuotaRows.Add(row);
+        }
+
+        CompactQuotaRows.Clear();
+        foreach (var row in _presenter.BuildCompactRows(SelectedQuotaRows))
+        {
+            CompactQuotaRows.Add(row);
+        }
+
+        OnPropertyChanged(nameof(CompactTitleText));
+        OnPropertyChanged(nameof(CompactQuotaSummaryText));
+        OnPropertyChanged(nameof(ExpandedQuotaSummaryText));
+    }
+
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+
+    private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value))
+        {
+            return false;
+        }
+
+        field = value;
+        OnPropertyChanged(propertyName);
+        return true;
+    }
+}

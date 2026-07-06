@@ -4,7 +4,7 @@ Initial public alpha release.
 
 ## Download
 
-Download `PulseMeter-0.1.0-win-x64-portable.zip`, extract it, and run `PulseMeter.App.exe`.
+Download `PulseMeter-0.1.0-win-x64-portable.zip`, extract it, and run `PulseMeter.exe`.
 
 ## Minimum Requirements
 
@@ -29,4 +29,4 @@ PulseMeter is currently unsigned. Windows may show an unknown-publisher or Smart
 
 ## License
 
-PulseMeter is proprietary freeware. You may use the unmodified app for free, but the source code is not open source and may not be copied, modified, reused, or redistributed without written permission.
+For current source and release terms, see [LICENSE](LICENSE).

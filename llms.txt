@@ -1,0 +1,51 @@
+# PulseMeter
+
+Unofficial Windows tray HUD for Codex usage visibility. PulseMeter shows rate-limit remaining, reset credits, account usage, daily usage, estimated project usage, and sync status in a compact WPF floating window.
+
+PulseMeter is not affiliated with OpenAI.
+
+## Privacy Boundaries
+
+- No telemetry.
+- No maintainer-owned analytics or crash reporting.
+- No Codex Desktop UI scraping.
+- No OCR.
+- No password, API key, or token prompts.
+- Live mode may read `%USERPROFILE%\.codex\auth.json` only to request reset-credit expiry metadata.
+- Live mode may read `%USERPROFILE%\.codex\state_5.sqlite` and `%USERPROFILE%\.codex\sessions` to estimate local project usage shares.
+- PulseMeter should never print bearer tokens, account IDs, reset-credit IDs, local private paths, or Codex message text.
+
+## Key Files
+
+- `src/PulseMeter/PulseMeter.csproj`: WPF app project metadata.
+- `src/PulseMeter/Bootstrap`: startup and dependency registration.
+- `src/PulseMeter/Platform/Codex`: Codex CLI/app-server process and JSON-RPC integration.
+- `src/PulseMeter/Slices`: feature slices for rate limits, account usage, project usage, reset credits, navigation, and the window shell.
+- `tests/PulseMeter.Tests`: xUnit regression tests.
+- `scripts/package-release.ps1`: portable Windows release ZIP packaging.
+- `README.md`, `PRIVACY.md`, and `SECURITY.md`: user-facing behavior and trust docs.
+
+## Commands
+
+```powershell
+dotnet test PulseMeter.slnx -c Release
+dotnet build PulseMeter.slnx -c Release
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-release.ps1 -Version 0.1.1
+```
+
+## Contribution Rules
+
+- Small bug fixes and documentation fixes may open a pull request directly.
+- New features, architecture changes, dependency additions, and refactor-only work should start with an issue and maintainer agreement.
+- Bug fixes should include a reproduction and a test when practical.
+- Pull requests should include Real Behavior Proof: environment, exact command or manual steps, observed result, and what was not tested.
+- Do not include tokens, auth files, account IDs, local file paths, or private Codex session contents in public issues or pull requests.
+
+## Links
+
+- README: `README.md`
+- Privacy: `PRIVACY.md`
+- Security: `SECURITY.md`
+- Contributing: `CONTRIBUTING.md`
+- License: Apache License 2.0 in `LICENSE`
+- Repository: https://github.com/lorytek/PulseMeter

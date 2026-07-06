@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore PulseMeter.slnx
+
+      - name: Test
+        run: dotnet test PulseMeter.slnx -c Release --no-restore
+
+      - name: Build
+        run: dotnet build PulseMeter.slnx -c Release --no-restore
