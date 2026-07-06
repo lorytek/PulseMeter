@@ -11,6 +11,8 @@ PulseMeter is not affiliated with OpenAI.
 
 ![PulseMeter rate limits and account usage dashboard](assets/pulsemeter-rate-limits-account-dashboard.png)
 
+![PulseMeter reset credits, account usage, and project usage dashboard](assets/pulsemeter-reset-account-project-dashboard.png)
+
 ## More Screenshots
 
 **Project and daily usage**
