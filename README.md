@@ -11,6 +11,16 @@ PulseMeter is not affiliated with OpenAI.
 
 ![PulseMeter expanded dashboard](assets/pulsemeter-expanded-dashboard.png)
 
+## More Screenshots
+
+**Project and daily usage**
+
+![PulseMeter showing project usage and daily usage rows](assets/pulsemeter-account-project-usage.png)
+
+**Compact HUD**
+
+![PulseMeter compact HUD with live status](assets/pulsemeter-compact-hud.png)
+
 ## Quick Start
 
 1. Download `PulseMeter-<version>-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
