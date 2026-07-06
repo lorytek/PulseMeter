@@ -31,6 +31,7 @@ PulseMeter is not affiliated with OpenAI.
 4. If Windows shows an unknown-publisher or SmartScreen warning, choose `More info`, then `Run anyway`.
 
 Only run release zips you downloaded from a PulseMeter release page you trust.
+The `Source code (zip)` and `Source code (tar.gz)` links on GitHub Releases are automatic GitHub source archives for developers, not the portable Windows app.
 
 ## Minimum Requirements
 

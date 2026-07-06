@@ -6,6 +6,8 @@ Open-source launch release.
 
 Download `PulseMeter-0.1.1-win-x64-portable.zip`, extract it, and run `PulseMeter.exe`.
 
+On the GitHub release page, use the portable ZIP above for the app. GitHub also shows `Source code (zip)` and `Source code (tar.gz)` automatically for every release tag; those are source archives for developers, not the Windows app download.
+
 ## Minimum Requirements
 
 - Windows 10 or Windows 11, 64-bit.
