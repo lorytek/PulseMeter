@@ -5,9 +5,31 @@
 [![Latest release](https://img.shields.io/github/v/release/lorytek/PulseMeter?label=release)](https://github.com/lorytek/PulseMeter/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d4.svg)](#minimum-requirements)
 
-PulseMeter is a Windows app for Codex analytics. It shows rate-limit remaining, reset credits, account usage, and local usage estimates in a compact floating window.
+PulseMeter is a free local Windows tray app for OpenAI Codex usage limits. It shows rate-limit remaining, reset credits, account usage, and local project usage estimates in a compact floating window.
 
 PulseMeter is not affiliated with OpenAI.
+
+## Download the App
+
+[Download PulseMeter 0.1.1 for Windows](https://github.com/lorytek/PulseMeter/releases/latest/download/PulseMeter-0.1.1-win-x64-portable.zip), extract the ZIP, and run `PulseMeter.exe`.
+
+- SHA-256: `d3cf29d6a1838bbb1512e02350231ae7a6cc171e669e9673db41a1850c3faa3a`
+- Windows 10 or Windows 11, 64-bit.
+- No .NET install required for the portable release ZIP.
+
+Only run release zips you downloaded from a PulseMeter release page you trust. The `Source code (zip)` and `Source code (tar.gz)` links on GitHub Releases are automatic GitHub source archives for developers, not the portable Windows app.
+
+## Who This Is For
+
+- Windows users who want Codex rate-limit and reset-credit visibility without opening extra dashboards.
+- Codex CLI or Codex Desktop users who want a small always-available tray HUD.
+- People who prefer local-first tools: no telemetry, no UI scraping, and no stored credentials.
+
+Have feedback? Comment on the pinned issue: [what Codex usage data should PulseMeter show next?](https://github.com/lorytek/PulseMeter/issues/4)
+
+Want to help share PulseMeter? See [DISCOVERABILITY.md](DISCOVERABILITY.md).
+
+## Screenshots
 
 ![PulseMeter rate limits and account usage dashboard](assets/pulsemeter-rate-limits-account-dashboard.png)
 
@@ -25,13 +47,10 @@ PulseMeter is not affiliated with OpenAI.
 
 ## Quick Start
 
-1. Download `PulseMeter-<version>-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
+1. Download `PulseMeter-0.1.1-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
 2. Extract the zip to a normal folder, for example `Documents\PulseMeter`.
 3. Run `PulseMeter.exe`.
 4. If Windows shows an unknown-publisher or SmartScreen warning, choose `More info`, then `Run anyway`.
-
-Only run release zips you downloaded from a PulseMeter release page you trust.
-The `Source code (zip)` and `Source code (tar.gz)` links on GitHub Releases are automatic GitHub source archives for developers, not the portable Windows app.
 
 ## Minimum Requirements
 
@@ -85,6 +104,12 @@ If Codex CLI is not found, is not signed in, or `codex app-server` is unavailabl
 - Local app settings are stored under `%LOCALAPPDATA%\PulseMeter`.
 
 See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md) for more detail.
+
+## Roadmap
+
+- [Code signing for Windows releases](https://github.com/lorytek/PulseMeter/issues/5)
+- [Better current-thread or current-project detection](https://github.com/lorytek/PulseMeter/issues/6)
+- [Optional in-app update check](https://github.com/lorytek/PulseMeter/issues/7)
 
 ## Open Source
 
