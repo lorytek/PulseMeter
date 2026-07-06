@@ -9,7 +9,7 @@ PulseMeter is an unofficial Windows tray HUD for Codex usage visibility. It show
 
 PulseMeter is not affiliated with OpenAI.
 
-![PulseMeter expanded dashboard](assets/pulsemeter-expanded-dashboard.png)
+![PulseMeter rate limits dashboard](assets/pulsemeter-rate-limits-dashboard.png)
 
 ## More Screenshots
 
