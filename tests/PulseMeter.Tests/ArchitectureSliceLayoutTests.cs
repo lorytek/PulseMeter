@@ -73,12 +73,15 @@ public sealed class ArchitectureSliceLayoutTests
             "DataBar",
             "ExpandedHeader",
             "NavigationRail",
+            "NeedsAttention",
             "ProjectUsage",
             "PulseMeterWindow",
             "RateLimits",
             "RateLimitsDaily",
             "ResetCredits",
-            "UsageCollection"
+            "UsageCollection",
+            "UsageAttribution",
+            "UsageSignals"
         };
 
         foreach (var expectedSlice in expectedSlices)

@@ -5,15 +5,15 @@
 [![Latest release](https://img.shields.io/github/v/release/lorytek/PulseMeter?label=release)](https://github.com/lorytek/PulseMeter/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d4.svg)](#minimum-requirements)
 
-PulseMeter is a free local Windows tray app for OpenAI Codex usage limits. It shows rate-limit remaining, reset credits, account usage, and local project usage estimates in a compact floating window.
+PulseMeter is a free local Windows tray app for OpenAI Codex usage limits. It shows rate-limit remaining, reset credits, account usage, local project usage estimates, and local token-burn attribution in a compact floating window.
 
 PulseMeter is not affiliated with OpenAI.
 
 ## Download the App
 
-[Download PulseMeter 0.1.1 for Windows](https://github.com/lorytek/PulseMeter/releases/latest/download/PulseMeter-0.1.1-win-x64-portable.zip), extract the ZIP, and run `PulseMeter.exe`.
+[Download PulseMeter 0.2.0 for Windows](https://github.com/lorytek/PulseMeter/releases/latest/download/PulseMeter-0.2.0-win-x64-portable.zip), extract the ZIP, and run `PulseMeter.exe`.
 
-- SHA-256: `d3cf29d6a1838bbb1512e02350231ae7a6cc171e669e9673db41a1850c3faa3a`
+- SHA-256: updated on each GitHub release asset.
 - Windows 10 or Windows 11, 64-bit.
 - No .NET install required for the portable release ZIP.
 
@@ -47,7 +47,7 @@ Want to help share PulseMeter? See [DISCOVERABILITY.md](DISCOVERABILITY.md).
 
 ## Quick Start
 
-1. Download `PulseMeter-0.1.1-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
+1. Download `PulseMeter-0.2.0-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
 2. Extract the zip to a normal folder, for example `Documents\PulseMeter`.
 3. Run `PulseMeter.exe`.
 4. If Windows shows an unknown-publisher or SmartScreen warning, choose `More info`, then `Run anyway`.
@@ -59,7 +59,7 @@ Want to help share PulseMeter? See [DISCOVERABILITY.md](DISCOVERABILITY.md).
 - Codex CLI installed and signed in for live usage sync.
 - Internet access for Codex/OpenAI usage data.
 
-Mock Mode works without Codex CLI, but it shows demo data only.
+Mock Mode works without Codex CLI and shows full showcase demo data, including alert states.
 
 ## Unsigned App Notice
 
@@ -74,10 +74,14 @@ That warning is expected for this build. It is still a trust decision: only run 
 - Rate-limit daily allowance chunks.
 - Account usage summary and recent daily usage.
 - Estimated project usage for the last 30 days.
+- Burn Analysis showing top local chats by estimated token burn and largest token-burn events for the last 30 days.
+- Needs Attention automatic alert signals for local usage and rate-limit risk.
+- Limit Runway estimates when a 5-hour or weekly pool may run out before reset.
+- Idle Drain Detector flags usage movement while Windows reports you were idle.
 - Live, stale, unavailable, or mock sync status.
 - A tray icon with show, hide, refresh, mock mode, and exit controls.
 
-Project usage is an estimate from local Codex metadata, not billing-exact accounting.
+Project usage, Burn Analysis, automatic alert signals, Limit Runway, and Idle Drain Detector are local estimates and diagnostics, not billing-exact claims.
 
 ## How Live Mode Works
 
@@ -99,8 +103,11 @@ If Codex CLI is not found, is not signed in, or `codex app-server` is unavailabl
 - It does not modify Codex Desktop, scrape the UI, or use OCR.
 - It does not ask for passwords, API keys, or tokens.
 - In live mode it may read `%USERPROFILE%\.codex\auth.json` only to request reset-credit expiry metadata from OpenAI.
-- It may read `%USERPROFILE%\.codex\state_5.sqlite` and `%USERPROFILE%\.codex\sessions` to estimate project usage shares.
-- It does not parse or display Codex message text for project usage estimates.
+- It may read `%USERPROFILE%\.codex\state_5.sqlite`, `%USERPROFILE%\.codex\sessions`, and local rollout `token_count` records to estimate project usage and Burn Analysis shares.
+- It does not parse or display Codex message text for project usage or Burn Analysis estimates.
+- Burn Analysis displays project paths, thread titles/IDs, timestamps, and token counts only.
+- Automatic alert signals use local usage and rate-limit numbers; they do not read prompt text or Codex message content.
+- Idle Drain alerts do not read prompt text or Codex message content.
 - Local app settings are stored under `%LOCALAPPDATA%\PulseMeter`.
 
 See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md) for more detail.
@@ -131,6 +138,6 @@ Small bug fixes and documentation fixes are welcome. Larger features, dependency
 - If live app-server access fails, PulseMeter shows unavailable or stale last-good live data.
 - The rate-limit and usage parsers are defensive because app-server payloads may evolve.
 - Exact current Codex Desktop thread detection is not implemented.
-- Project usage is an estimate, not billing-exact accounting. Raw local thread activity is used only for ranking/share and is scaled to account usage.
+- Project usage and Burn Analysis are estimates, not billing-exact accounting. Raw local thread activity is used only for ranking/share and is scaled to account usage.
 - Reset credit rows use HUD-local numbers in the UI. Real server credit IDs are not displayed or stored.
 - If the reset-credit endpoint is unavailable, PulseMeter falls back to the previous count-based reset-credit display.

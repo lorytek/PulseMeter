@@ -6,10 +6,12 @@
         xmlns:dataBar="clr-namespace:PulseMeter.Slices.DataBar.UI"
         xmlns:expandedHeader="clr-namespace:PulseMeter.Slices.ExpandedHeader.UI"
         xmlns:navigationRail="clr-namespace:PulseMeter.Slices.NavigationRail.UI"
+        xmlns:needsAttention="clr-namespace:PulseMeter.Slices.NeedsAttention.UI"
         xmlns:projectUsage="clr-namespace:PulseMeter.Slices.ProjectUsage.UI"
         xmlns:rateLimits="clr-namespace:PulseMeter.Slices.RateLimits.UI"
         xmlns:rateLimitsDaily="clr-namespace:PulseMeter.Slices.RateLimitsDaily.UI"
         xmlns:resetCredits="clr-namespace:PulseMeter.Slices.ResetCredits.UI"
+        xmlns:usageAttribution="clr-namespace:PulseMeter.Slices.UsageAttribution.UI"
         Title="PulseMeter"
         Width="{Binding WindowWidth}"
         Height="{Binding WindowHeight}"
@@ -103,7 +105,11 @@
 
                             <projectUsage:ProjectUsageSection DataContext="{Binding ProjectUsage}" />
 
+                            <usageAttribution:UsageAttributionSection DataContext="{Binding UsageAttribution}" />
+
                             <dailyUsage:DailyUsageSection DataContext="{Binding DailyUsage}" />
+
+                            <needsAttention:NeedsAttentionSection DataContext="{Binding NeedsAttention}" />
                         </StackPanel>
                     </ScrollViewer>
                     </Grid>

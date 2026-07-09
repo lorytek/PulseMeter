@@ -74,12 +74,10 @@ public sealed class CodexResetCreditServiceTests
         var directory = Path.Combine(Path.GetTempPath(), "PulseMeter.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         var authPath = Path.Combine(directory, "auth.json");
-        var accessTokenPropertyName = string.Concat("access_", "token");
-        var testAccessToken = string.Concat("test-", "access-", "token");
-        await File.WriteAllTextAsync(authPath, $$"""
+        await File.WriteAllTextAsync(authPath, """
             {
               "tokens": {
-                "{{accessTokenPropertyName}}": "{{testAccessToken}}",
+                "access_token": "test-access-token",
                 "account_id": "acct-test"
               }
             }
@@ -106,7 +104,7 @@ public sealed class CodexResetCreditServiceTests
         Assert.NotNull(result);
         Assert.Equal(1, result.AvailableCount);
         Assert.Equal("Bearer", handler.Request?.Headers.Authorization?.Scheme);
-        Assert.Equal(testAccessToken, handler.Request?.Headers.Authorization?.Parameter);
+        Assert.Equal("test-access-token", handler.Request?.Headers.Authorization?.Parameter);
         Assert.NotNull(handler.Request);
         var hasAccountHeader = handler.Request.Headers.TryGetValues("ChatGPT-Account-ID", out var accountValues);
         Assert.True(hasAccountHeader);

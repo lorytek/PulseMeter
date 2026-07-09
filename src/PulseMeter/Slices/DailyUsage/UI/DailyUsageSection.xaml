@@ -24,10 +24,17 @@
                                                         <ContentPresenter />
                                                     </ControlTemplate>
                                                 </Button.Template>
-                                                <TextBlock Text="DAILY USAGE"
-                                                           Foreground="#111827"
-                                                           FontSize="20"
-                                                           FontWeight="Bold" />
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="DAILY USAGE"
+                                                               Foreground="#111827"
+                                                               FontSize="20"
+                                                               FontWeight="Bold" />
+                                                    <Border x:Name="DailyUsageEvidenceLabel"
+                                                            Style="{DynamicResource LightEvidencePillStyle}">
+                                                        <TextBlock Text="{Binding DataContext.SyncStatusText, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                   Style="{DynamicResource LightEvidencePillTextStyle}" />
+                                                    </Border>
+                                                </StackPanel>
                                             </Button>
                                              <TextBlock x:Name="MedianComparisonText"
                                                        Margin="0,8,0,0"

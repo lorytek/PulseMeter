@@ -9,6 +9,7 @@ public sealed class RateLimitsSectionViewModel : INotifyPropertyChanged
 {
     private readonly IRateLimitsPresenter _presenter;
     private RateLimitOption? _selectedLimitOption;
+    private UsageSignalsSnapshot _signals = UsageSignalsSnapshot.Empty;
 
     public RateLimitsSectionViewModel(IRateLimitsPresenter presenter)
     {
@@ -37,6 +38,7 @@ public sealed class RateLimitsSectionViewModel : INotifyPropertyChanged
 
             _selectedLimitOption = value;
             RefreshSelectedBuckets();
+            RefreshRunwayHintProperties();
             OnPropertyChanged();
         }
     }
@@ -48,6 +50,12 @@ public sealed class RateLimitsSectionViewModel : INotifyPropertyChanged
     public string ExpandedQuotaSummaryText => _presenter.BuildExpandedQuotaSummary(CompactQuotaRows);
 
     private IReadOnlyList<RateLimitBucket> _buckets = [];
+
+    public bool HasRunwayHint => SelectedRunwaySignal is not null;
+
+    public string RunwayHintText => SelectedRunwaySignal?.HintText ?? string.Empty;
+
+    public string RunwayEvidenceText => HasRunwayHint ? "Estimated" : string.Empty;
 
     public void ApplyBuckets(IEnumerable<RateLimitBucket> buckets, DateTimeOffset now)
     {
@@ -64,6 +72,13 @@ public sealed class RateLimitsSectionViewModel : INotifyPropertyChanged
         _selectedLimitOption = _presenter.SelectOption(options, selectedKey);
         OnPropertyChanged(nameof(SelectedLimitOption));
         RefreshSelectedBuckets(now);
+        RefreshRunwayHintProperties();
+    }
+
+    public void ApplyUsageSignals(UsageSignalsSnapshot signals)
+    {
+        _signals = signals;
+        RefreshRunwayHintProperties();
     }
 
     public void Refresh(DateTimeOffset now)
@@ -104,6 +119,28 @@ public sealed class RateLimitsSectionViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(CompactTitleText));
         OnPropertyChanged(nameof(CompactQuotaSummaryText));
         OnPropertyChanged(nameof(ExpandedQuotaSummaryText));
+    }
+
+    private LimitRunwaySignal? SelectedRunwaySignal
+    {
+        get
+        {
+            var selectedKey = SelectedLimitOption?.Key;
+            if (string.IsNullOrWhiteSpace(selectedKey))
+            {
+                return null;
+            }
+
+            return _signals.RunwaySignals.FirstOrDefault(signal =>
+                signal.LimitKey.Equals(selectedKey, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    private void RefreshRunwayHintProperties()
+    {
+        OnPropertyChanged(nameof(HasRunwayHint));
+        OnPropertyChanged(nameof(RunwayHintText));
+        OnPropertyChanged(nameof(RunwayEvidenceText));
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)

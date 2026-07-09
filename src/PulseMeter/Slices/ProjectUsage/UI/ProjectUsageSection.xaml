@@ -13,13 +13,26 @@
                                 <StackPanel>
                                     <Grid>
                                         <StackPanel>
-                                            <TextBlock Text="Project usage - last 30 days"
-                                                       Foreground="#111827"
-                                                       FontSize="20"
-                                                       FontWeight="Bold" />
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="Project usage - last 30 days"
+                                                           Foreground="#111827"
+                                                           FontSize="20"
+                                                           FontWeight="Bold" />
+                                                <Border x:Name="ProjectUsageEstimatedEvidenceLabel"
+                                                        Style="{DynamicResource LightEvidencePillStyle}">
+                                                    <TextBlock Text="Estimated"
+                                                               Style="{DynamicResource LightEvidencePillTextStyle}" />
+                                                </Border>
+                                                <Border x:Name="ProjectUsageLocalEvidenceLabel"
+                                                        Margin="6,2,0,0"
+                                                        Style="{DynamicResource LightEvidencePillStyle}">
+                                                    <TextBlock Text="Local"
+                                                               Style="{DynamicResource LightEvidencePillTextStyle}" />
+                                                </Border>
+                                            </StackPanel>
                                             <TextBlock Margin="0,8,0,0"
-                                                       Text="Estimated from local sessions, scaled to account usage"
-                                                       Foreground="#4B5563"
+                                                      Text="Estimated from local sessions, scaled to account usage"
+                                                      Foreground="#4B5563"
                                                        FontSize="14" />
                                         </StackPanel>
                                     </Grid>

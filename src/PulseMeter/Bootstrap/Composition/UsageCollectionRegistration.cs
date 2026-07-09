@@ -11,6 +11,7 @@ internal static class UsageCollectionRegistration
         services.AddSingleton<IUsageService, CodexUsageService>();
         services.AddSingleton<ICodexResetCreditService, CodexResetCreditService>();
         services.AddSingleton<IProjectUsageService, ProjectUsageService>();
+        services.AddSingleton<IUsageAttributionService, UsageAttributionService>();
         services.AddSingleton<IMockUsageService, MockCodexUsageService>();
         services.AddSingleton<IAppServerProcessFactory, AppServerProcessFactory>();
         services.AddSingleton<IJsonRpcClientFactory, JsonRpcClientFactory>();

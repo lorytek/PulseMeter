@@ -18,6 +18,8 @@ public sealed class UsageSnapshot
 
     public IReadOnlyList<ProjectUsageRow> ProjectUsageRows { get; init; } = Array.Empty<ProjectUsageRow>();
 
+    public UsageAttributionSnapshot UsageAttribution { get; init; } = UsageAttributionSnapshot.Empty;
+
     public int? ResetCreditsAvailable { get; init; }
 
     public DateTimeOffset? ResetCreditsExpiresAtUtc { get; init; }

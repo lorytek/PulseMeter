@@ -5,13 +5,16 @@ using PulseMeter.Slices.DataBar;
 using PulseMeter.Slices.DailyUsage;
 using PulseMeter.Slices.ExpandedHeader;
 using PulseMeter.Slices.NavigationRail;
+using PulseMeter.Slices.NeedsAttention;
 using PulseMeter.Slices.ProjectUsage;
 using PulseMeter.Slices.RateLimits;
 using PulseMeter.Slices.RateLimitsDaily;
 using PulseMeter.Slices.ResetCredits;
+using PulseMeter.Slices.UsageAttribution;
 using PulseMeter.Platform.Persistence;
 using PulseMeter.Platform.Windows;
 using PulseMeter.Slices.UsageCollection;
+using PulseMeter.Slices.UsageSignals;
 
 namespace PulseMeter.Bootstrap.Composition;
 
@@ -40,10 +43,14 @@ internal static class PulseMeterWindowRegistration
                 navigationRail: sp.GetRequiredService<NavigationRailViewModel>(),
                 rateLimits: sp.GetRequiredService<RateLimitsSectionViewModel>(),
                 rateLimitsDaily: sp.GetRequiredService<RateLimitsDailySectionViewModel>(),
+                needsAttention: sp.GetRequiredService<NeedsAttentionSectionViewModel>(),
                 accountUsage: sp.GetRequiredService<AccountUsageSectionViewModel>(),
                 resetCreditsSection: sp.GetRequiredService<ResetCreditsSectionViewModel>(),
                 projectUsage: sp.GetRequiredService<ProjectUsageSectionViewModel>(),
-                dailyUsage: sp.GetRequiredService<DailyUsageSectionViewModel>());
+                usageAttribution: sp.GetRequiredService<UsageAttributionSectionViewModel>(),
+                dailyUsage: sp.GetRequiredService<DailyUsageSectionViewModel>(),
+                usageSignalsTracker: sp.GetRequiredService<IUsageSignalsTracker>(),
+                budgetAlertTracker: sp.GetRequiredService<IBudgetAlertTracker>());
         });
 
         services.AddSingleton(sp => new PulseMeterWindow

@@ -54,22 +54,33 @@ internal static class RateLimitsDailyDisplayBuilder
         var sliceSize = 100.0 / DailyRateLimitSliceCount;
         if (TryGetWeeklyWindowTiming(weeklyBucket, now, out var elapsed, out var duration))
         {
-            var consumedTicks = (long)Math.Round(duration.Ticks * (clampedWeeklyUsed / 100));
-            var waitTicks = consumedTicks - elapsed.Ticks;
+            if (elapsed >= duration)
+            {
+                return string.Empty;
+            }
+
+            if (clampedWeeklyUsed >= 100)
+            {
+                var resetWait = duration - elapsed;
+                return $"Daily allowance exceeded; weekly allowance is fully consumed. Wait {FormatPaceWaitDuration(resetWait)} to get back on pace.";
+            }
+
+            var timedAllowanceDay = GetCalendarDayIndex(weeklyBucket, clampedWeeklyUsed, sliceSize, now) + 1;
+            if (clampedWeeklyUsed <= timedAllowanceDay * sliceSize)
+            {
+                return string.Empty;
+            }
+
+            var futureAllowanceDay = Math.Min(
+                DailyRateLimitSliceCount,
+                (int)Math.Floor(clampedWeeklyUsed / sliceSize) + 1);
+            var waitTicks = (duration.Ticks / DailyRateLimitSliceCount * (futureAllowanceDay - 1)) - elapsed.Ticks;
             if (waitTicks <= 0)
             {
                 return string.Empty;
             }
 
             var wait = TimeSpan.FromTicks(waitTicks);
-            if (clampedWeeklyUsed >= 100)
-            {
-                return $"Daily allowance exceeded; weekly allowance is fully consumed. Wait {FormatPaceWaitDuration(wait)} to get back on pace.";
-            }
-
-            var futureAllowanceDay = Math.Min(
-                DailyRateLimitSliceCount,
-                (int)Math.Floor(clampedWeeklyUsed / sliceSize) + 1);
             return $"Daily allowance exceeded; using Day {futureAllowanceDay} allowance early. Wait {FormatPaceWaitDuration(wait)} to get back on pace.";
         }
 

@@ -3,14 +3,17 @@
 public sealed class PublishScriptTests
 {
     [Fact]
-    public void LocalShortcut_UsesHiddenLauncherInsteadOfDotnetConsoleHost()
+    public void LocalShortcut_TargetsFixedPulseMeterExecutableWithoutWindowsScriptHost()
     {
         var script = File.ReadAllText(FindWorkspaceFile("scripts", "publish-local.ps1"));
 
-        Assert.Contains("launch-pulsemeter.vbs", script);
-        Assert.Contains("$shortcut.TargetPath = $wscript", script);
-        Assert.Contains("$shortcut.Arguments = \"`\"$launcher`\"\"", script);
-        Assert.DoesNotContain("$shortcut.TargetPath = $dotnet", script);
+        Assert.Contains("$appExe = Join-Path $output \"PulseMeter.exe\"", script);
+        Assert.Contains("$shortcut.TargetPath = $appExe", script);
+        Assert.Contains("$shortcut.Arguments = \"\"", script);
+        Assert.Contains("$shortcut.WorkingDirectory = $output", script);
+        Assert.DoesNotContain("launch-pulsemeter.vbs", script);
+        Assert.DoesNotContain("wscript.exe", script);
+        Assert.DoesNotContain("CreateObject(\"WScript.Shell\")", script);
     }
 
     [Fact]
@@ -20,8 +23,9 @@ public sealed class PublishScriptTests
 
         Assert.Contains("src\\PulseMeter\\PulseMeter.csproj", script);
         Assert.Contains("\"artifacts\"", script);
-        Assert.Contains("\"PulseMeter-win-x64\"", script);
+        Assert.Contains("PulseMeter-win-x64-$timestamp", script);
         Assert.Contains("PulseMeter.exe", script);
+        Assert.Contains("PulseMeter.ico", script);
         Assert.Contains("PulseMeter.lnk", script);
         Assert.Contains("GetFolderPath(\"Desktop\")", script);
         Assert.Contains("Save-PulseMeterShortcut $desktopShortcutPath", script);
@@ -30,25 +34,28 @@ public sealed class PublishScriptTests
     }
 
     [Fact]
-    public void LocalPublish_UsesSingleFileExecutableToAvoidSidecarDllPolicyBlocks()
+    public void LocalPublish_CreatesTimestampedSelfContainedArtifactForShortcut()
     {
         var script = File.ReadAllText(FindWorkspaceFile("scripts", "publish-local.ps1"));
 
+        Assert.Contains("$timestamp = Get-Date -Format \"yyyyMMdd-HHmmss\"", script);
         Assert.Contains("--self-contained true", script);
+        Assert.Contains("/p:UseAppHost=true", script);
+        Assert.Contains("$appExe = Join-Path $output \"PulseMeter.exe\"", script);
+        Assert.Contains("$icon = Join-Path $root \"src\\PulseMeter\\Assets\\PulseMeter.ico\"", script);
         Assert.Contains("/p:PublishSingleFile=true", script);
         Assert.Contains("/p:IncludeNativeLibrariesForSelfExtract=true", script);
         Assert.Contains("/p:EnableCompressionInSingleFile=true", script);
-        Assert.DoesNotContain("$dll = Join-Path", script);
-        Assert.DoesNotContain("Published framework-dependent app", script);
+        Assert.Contains("Published local self-contained app", script);
     }
 
     [Fact]
-    public void HiddenLauncher_StartsDotnetWithoutShowingAConsoleWindow()
+    public void PulseMeterProject_IsWindowsExeSoDirectShortcutDoesNotOpenConsole()
     {
-        var script = File.ReadAllText(FindWorkspaceFile("scripts", "publish-local.ps1"));
+        var project = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "PulseMeter.csproj"));
 
-        Assert.Contains("Set shell = CreateObject(\"WScript.Shell\")", script);
-        Assert.Contains("shell.Run commandLine, 0, False", script);
+        Assert.Contains("<OutputType>WinExe</OutputType>", project);
+        Assert.Contains("<UseWPF>true</UseWPF>", project);
     }
 
     [Fact]

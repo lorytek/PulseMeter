@@ -126,7 +126,8 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(PulseMeterWindowViewModel.AutoSyncSeconds) or nameof(PulseMeterWindowViewModel.IsAlwaysOnTop))
+        if (e.PropertyName is nameof(PulseMeterWindowViewModel.AutoSyncSeconds)
+            or nameof(PulseMeterWindowViewModel.IsAlwaysOnTop))
         {
             _appSettingsStore.Save(CaptureAppSettings(_viewModel));
         }
@@ -140,7 +141,9 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
 
     private static PulseMeterAppSettings CaptureAppSettings(PulseMeterWindowViewModel viewModel)
     {
-        return new PulseMeterAppSettings(viewModel.AutoSyncSeconds, viewModel.IsAlwaysOnTop);
+        return new PulseMeterAppSettings(
+            viewModel.AutoSyncSeconds,
+            viewModel.IsAlwaysOnTop);
     }
 
     private void UpdateForegroundVisibility()

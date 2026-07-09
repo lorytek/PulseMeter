@@ -3,7 +3,32 @@ using System.Text.Json;
 
 namespace PulseMeter.Platform.Persistence;
 
-public sealed record PulseMeterAppSettings(int AutoSyncSeconds = 90, bool IsAlwaysOnTop = false);
+public sealed record PulseMeterAppSettings(
+    int AutoSyncSeconds = 90,
+    bool IsAlwaysOnTop = false);
+
+public sealed record BudgetAlertSettings(
+    bool IsEnabled = true,
+    long? DailyTokenBudget = null,
+    int WarningPercent = 75,
+    int CriticalPercent = 90)
+{
+    public static BudgetAlertSettings Default { get; } = new();
+
+    public BudgetAlertSettings Sanitized()
+    {
+        var warning = Math.Clamp(WarningPercent, 1, 99);
+        var critical = Math.Clamp(CriticalPercent, warning + 1, 100);
+        long? dailyBudget = DailyTokenBudget is long value && value > 0 ? value : null;
+
+        return this with
+        {
+            DailyTokenBudget = dailyBudget,
+            WarningPercent = warning,
+            CriticalPercent = critical
+        };
+    }
+}
 
 public interface IPulseMeterAppSettingsStore
 {

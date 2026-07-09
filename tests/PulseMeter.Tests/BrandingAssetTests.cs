@@ -68,7 +68,7 @@ public sealed class BrandingAssetTests
     public void PulseMeterIcon_ArtworkFillsTaskbarCanvas(int size)
     {
         var entries = ReadIconEntries(FindWorkspaceFile("src", "PulseMeter", "Assets", "PulseMeter.ico"));
-        var entry = Assert.Single(entries, entry => entry.Width == size);
+        var entry = Assert.Single(entries.Where(entry => entry.Width == size));
 
         var coverage = MeasureVisibleBoundsCoverage(entry);
 

@@ -12,13 +12,33 @@
                                     Visibility="{Binding DataContext.IsAccountUsageVisible, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}"
                                     ToolTip="{Binding TodayUsageValueText}">
                                 <StackPanel>
-                                    <Grid x:Name="DashboardHeader">
-                                        <TextBlock Text="ACCOUNT USAGE"
-                                                   Foreground="#111827"
-                                                   FontSize="20"
-                                                   FontWeight="Bold" />
-                                        <StackPanel HorizontalAlignment="Right"
-                                                    Orientation="Horizontal">
+                                    <Grid x:Name="DashboardHeader"
+                                          MinHeight="36">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel x:Name="AccountUsageHeaderTitleGroup"
+                                                    Orientation="Horizontal"
+                                                    VerticalAlignment="Center">
+                                            <TextBlock Text="ACCOUNT USAGE"
+                                                       Foreground="#111827"
+                                                       FontSize="20"
+                                                       FontWeight="Bold"
+                                                       VerticalAlignment="Center" />
+                                            <Border x:Name="AccountUsageEvidenceLabel"
+                                                    Margin="10,0,0,0"
+                                                    Style="{DynamicResource LightEvidencePillStyle}">
+                                                <TextBlock Text="{Binding DataContext.SyncStatusText, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                           Style="{DynamicResource LightEvidencePillTextStyle}" />
+                                            </Border>
+                                        </StackPanel>
+                                        <StackPanel x:Name="AccountUsageRefreshControls"
+                                                    Grid.Column="1"
+                                                    HorizontalAlignment="Right"
+                                                    Orientation="Horizontal"
+                                                    VerticalAlignment="Center">
                                             <TextBlock Text="Auto refresh every"
                                                        Foreground="#4B5563"
                                                        FontSize="13"

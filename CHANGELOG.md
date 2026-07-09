@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0
+
+- Added Burn Analysis for top local chats by estimated token burn and largest token-burn events.
+- Added Needs Attention signals for local usage, rate-limit risk, and sync issues.
+- Added Limit Runway and Idle Drain diagnostics to make usage risk clearer.
+- Expanded Mock Mode showcase data so demo mode includes representative alerts and attention states.
+- Improved Burn Analysis layout and labels, including responsive stacking at narrow widths.
+- Clarified privacy notes for local token attribution: estimated, local, and never rendering prompt/message bodies.
+
 ## 0.1.1
 
 - Re-licensed PulseMeter under the Apache License 2.0.

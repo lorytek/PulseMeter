@@ -371,6 +371,75 @@ public sealed class PulseMeterWindowViewModelSyncTests
     }
 
     [Fact]
+    public void UsageAttributionVisibility_FollowsSidebarToggleAndAvailableRows()
+    {
+        var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
+        var now = DateTimeOffset.UtcNow;
+
+        Assert.False(viewModel.HasUsageAttribution);
+        Assert.True(viewModel.IsUsageAttributionVisible);
+        Assert.True(viewModel.ShouldShowUsageAttribution);
+
+        viewModel.ApplySnapshot(new UsageSnapshot
+        {
+            UsageAttribution = new UsageAttributionSnapshot
+            {
+                AccountWindowTokens = 2_950_000,
+                RawLocalTokens = 900_000,
+                EstimatedAttributedTokens = 1_250_000,
+                LastUpdatedUtc = now,
+                Sessions =
+                [
+                    new UsageAttributionSessionRow(
+                        "PulseMeter budget polish",
+                        "thread-123",
+                        "PulseMeter",
+                        @"C:\Projects\PulseMeter",
+                        900_000,
+                        1_250_000,
+                        42.3,
+                        500_000,
+                        200_000,
+                        100_000,
+                        50_000,
+                        now.AddMinutes(-20),
+                        now.AddMinutes(-12))
+                ],
+                BurnEvents =
+                [
+                    new UsageAttributionBurnEvent(
+                        "PulseMeter budget polish",
+                        "thread-123",
+                        "PulseMeter",
+                        @"C:\Projects\PulseMeter",
+                        now.AddMinutes(-12),
+                        600_000,
+                        830_000,
+                        300_000,
+                        120_000,
+                        90_000,
+                        40_000)
+                ]
+            }
+        });
+
+        Assert.True(viewModel.HasUsageAttribution);
+        Assert.True(viewModel.IsUsageAttributionVisible);
+        Assert.True(viewModel.ShouldShowUsageAttribution);
+        Assert.Equal("1.3M attributed across 1 local chat", viewModel.UsageAttribution.SummaryText);
+        Assert.Equal("Estimated from local chats, scaled to account usage", viewModel.UsageAttribution.EvidenceText);
+        var session = Assert.Single(viewModel.UsageAttributionSessionRows);
+        Assert.Equal("PulseMeter budget polish", session.DisplayName);
+        Assert.Equal("1.3M", session.EstimatedTokensText);
+        Assert.Equal("42.3%", session.ShareText);
+        Assert.NotEmpty(viewModel.UsageAttributionBurnEventRows);
+
+        viewModel.IsUsageAttributionVisible = false;
+
+        Assert.False(viewModel.ShouldShowUsageAttribution);
+    }
+
+    [Fact]
     public void ResetCreditsVisibility_FollowsSidebarToggle()
     {
         var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
@@ -481,6 +550,76 @@ public sealed class PulseMeterWindowViewModelSyncTests
 
         Assert.Equal(120, viewModel.WindowLeft);
         Assert.Equal(80, viewModel.WindowTop);
+    }
+
+    [Fact]
+    public void ApplySnapshot_UpdatesNeedsAttentionSection()
+    {
+        var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
+
+        viewModel.ApplySnapshot(new UsageSnapshot
+        {
+            SyncStatus = SyncStatus.Stale,
+            StatusMessage = "Using cached usage."
+        });
+
+        Assert.True(viewModel.NeedsAttention.HasNeedsAttention);
+        var item = Assert.Single(viewModel.NeedsAttention.NeedsAttentionItems);
+        Assert.Equal("Live data is stale", item.Title);
+    }
+
+    [Fact]
+    public void ApplySnapshot_AddsAutomaticBudgetSignalsToNeedsAttention()
+    {
+        var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
+
+        viewModel.ApplySnapshot(new UsageSnapshot
+        {
+            SyncStatus = SyncStatus.Live,
+            Source = "AppServer",
+            LastUpdatedUtc = DateTimeOffset.UtcNow,
+            Buckets =
+            [
+                new RateLimitBucket
+                {
+                    LimitId = "codex",
+                    GroupLabel = "General",
+                    Label = "5h Window",
+                    WindowLabel = "5h",
+                    WindowDurationMins = 300,
+                    UsedPercent = 96,
+                    ResetsAtUtc = DateTimeOffset.UtcNow.AddHours(2),
+                    ResetsAtUnixSeconds = DateTimeOffset.UtcNow.AddHours(2).ToUnixTimeSeconds()
+                }
+            ]
+        });
+
+        Assert.Contains(viewModel.NeedsAttention.NeedsAttentionItems, item => item.Title == "Rate limit budget is critical");
+    }
+
+    [Fact]
+    public async Task MockSnapshot_ShowcasesAlertsWithoutChangingMockBadge()
+    {
+        var service = new MockCodexUsageService();
+        var viewModel = new PulseMeterWindowViewModel(service);
+
+        viewModel.ApplySnapshot(await service.GetSnapshotAsync());
+
+        Assert.Equal("MOCK DATA", viewModel.StatusBadgeText);
+        Assert.True(viewModel.RateLimits.HasRunwayHint);
+        Assert.True(viewModel.NeedsAttention.HasNeedsAttention);
+        var badges = viewModel.NeedsAttention.NeedsAttentionItems
+            .Select(item => item.BadgeText)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        Assert.Contains("BUDGET", badges);
+        Assert.Contains("IDLE", badges);
+        Assert.Contains("RUNWAY", badges);
+        Assert.Contains("LIMIT", badges);
+        Assert.Contains("CREDIT", badges);
+        Assert.Contains("TODAY", badges);
+        Assert.Contains("PROJECT", badges);
+        Assert.True(viewModel.NeedsAttention.NeedsAttentionItems.Count >= 7);
     }
 
     private sealed class StubUsageService : IUsageService

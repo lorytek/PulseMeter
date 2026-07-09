@@ -6,21 +6,31 @@ using PulseMeter.Slices.DataBar;
 using PulseMeter.Slices.DailyUsage;
 using PulseMeter.Slices.ExpandedHeader;
 using PulseMeter.Slices.NavigationRail;
+using PulseMeter.Slices.NeedsAttention;
 using PulseMeter.Slices.ProjectUsage;
 using PulseMeter.Slices.RateLimits;
 using PulseMeter.Slices.RateLimitsDaily;
 using PulseMeter.Slices.ResetCredits;
 using PulseMeter.Slices.PulseMeterWindow;
 using PulseMeter.Platform.Persistence;
+using PulseMeter.Platform.Windows;
 using PulseMeter.Shared.Commands;
 using PulseMeter.Shared.Formatting;
 using PulseMeter.Slices.UsageCollection;
+using PulseMeter.Slices.UsageSignals;
 
 namespace PulseMeter.Slices.PulseMeterWindow.UI;
 
 public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
 {
+    private static readonly BudgetAlertSettings AutomaticBudgetSignalSettings = BudgetAlertSettings.Default with
+    {
+        DailyTokenBudget = null
+    };
+
     private readonly IUsageService _usageService;
+    private readonly IUsageSignalsTracker _usageSignalsTracker;
+    private readonly IBudgetAlertTracker _budgetAlertTracker;
     private bool _autoHideWhenFocusLeaves;
     private bool _autoShowWhenCodexFocused = true;
     private int _autoSyncSeconds;
@@ -41,6 +51,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         Source = "Starting",
         StatusMessage = "Starting PulseMeter."
     };
+    private UsageSignalsSnapshot _usageSignals = UsageSignalsSnapshot.Empty;
 
     public PulseMeterWindowViewModel(
         IUsageService usageService,
@@ -53,12 +64,18 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         NavigationRailViewModel? navigationRail = null,
         RateLimitsSectionViewModel? rateLimits = null,
         RateLimitsDailySectionViewModel? rateLimitsDaily = null,
+        NeedsAttentionSectionViewModel? needsAttention = null,
         AccountUsageSectionViewModel? accountUsage = null,
         DailyUsageSectionViewModel? dailyUsage = null,
         ResetCreditsSectionViewModel? resetCreditsSection = null,
-        ProjectUsageSectionViewModel? projectUsage = null)
+        ProjectUsageSectionViewModel? projectUsage = null,
+        UsageAttributionSectionViewModel? usageAttribution = null,
+        IUsageSignalsTracker? usageSignalsTracker = null,
+        IBudgetAlertTracker? budgetAlertTracker = null)
     {
         _usageService = usageService;
+        _usageSignalsTracker = usageSignalsTracker ?? new UsageSignalsTracker(new ZeroUserIdleTimeProvider());
+        _budgetAlertTracker = budgetAlertTracker ?? new BudgetAlertTracker();
         _autoSyncSeconds = SecondsFrom(autoSyncInterval ?? TimeSpan.FromSeconds(90));
         _isAlwaysOnTop = isAlwaysOnTop;
         DataBar = dataBar ?? new DataBarViewModel();
@@ -66,13 +83,16 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         NavigationRail = navigationRail ?? new NavigationRailViewModel();
         RateLimits = rateLimits ?? new RateLimitsSectionViewModel(new RateLimitsPresenter());
         RateLimitsDaily = rateLimitsDaily ?? new RateLimitsDailySectionViewModel(new RateLimitsDailyPresenter());
+        NeedsAttention = needsAttention ?? new NeedsAttentionSectionViewModel(new NeedsAttentionPresenter());
         ResetCreditsSection = resetCreditsSection ?? new ResetCreditsSectionViewModel(new ResetCreditsPresenter(resetCreditStateStore));
         AccountUsage = accountUsage ?? new AccountUsageSectionViewModel(new AccountUsagePresenter());
         ProjectUsage = projectUsage ?? new ProjectUsageSectionViewModel(new ProjectUsagePresenter());
+        UsageAttribution = usageAttribution ?? new UsageAttributionSectionViewModel(new UsageAttributionPresenter());
         DailyUsage = dailyUsage ?? new DailyUsageSectionViewModel(new DailyUsagePresenter());
         NavigationRail.PropertyChanged += OnNavigationRailPropertyChanged;
         RateLimits.PropertyChanged += OnRateLimitsPropertyChanged;
         DailyUsage.PropertyChanged += OnDailyUsagePropertyChanged;
+        UsageAttribution.PropertyChanged += OnUsageAttributionPropertyChanged;
         _useMockMode = usageService.UseMockMode;
         if (windowState is not null)
         {
@@ -96,11 +116,15 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
 
     public RateLimitsDailySectionViewModel RateLimitsDaily { get; }
 
+    public NeedsAttentionSectionViewModel NeedsAttention { get; }
+
     public ResetCreditsSectionViewModel ResetCreditsSection { get; }
 
     public AccountUsageSectionViewModel AccountUsage { get; }
 
     public ProjectUsageSectionViewModel ProjectUsage { get; }
+
+    public UsageAttributionSectionViewModel UsageAttribution { get; }
 
     public DailyUsageSectionViewModel DailyUsage { get; }
 
@@ -117,6 +141,10 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     public ObservableCollection<DailyUsageDisplayRow> DailyUsageRows => DailyUsage.DailyUsageRows;
 
     public ObservableCollection<ProjectUsageDisplayRow> ProjectUsageRows => ProjectUsage.ProjectUsageRows;
+
+    public ObservableCollection<UsageAttributionSessionDisplayRow> UsageAttributionSessionRows => UsageAttribution.SessionRows;
+
+    public ObservableCollection<UsageAttributionBurnEventDisplayRow> UsageAttributionBurnEventRows => UsageAttribution.BurnEventRows;
 
     public ObservableCollection<RateLimitBucket> SelectedBuckets => RateLimits.SelectedBuckets;
 
@@ -162,6 +190,8 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
 
     public bool HasProjectUsage => ProjectUsage.HasProjectUsage;
 
+    public bool HasUsageAttribution => UsageAttribution.HasAttribution;
+
     public bool HasDailyRateLimitRows => RateLimitsDaily.HasDailyRateLimitRows;
 
     public string RateLimitsDailySummaryText => RateLimitsDaily.RateLimitsDailySummaryText;
@@ -171,6 +201,8 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     public string RateLimitsDailyWarningText => RateLimitsDaily.RateLimitsDailyWarningText;
 
     public bool ShouldShowProjectUsage => HasProjectUsage && IsProjectUsageVisible;
+
+    public bool ShouldShowUsageAttribution => IsUsageAttributionVisible;
 
     public bool IsDailyUsageExpanded => DailyUsage.IsDailyUsageExpanded;
 
@@ -228,6 +260,12 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     {
         get => NavigationRail.IsProjectUsageVisible;
         set => NavigationRail.IsProjectUsageVisible = value;
+    }
+
+    public bool IsUsageAttributionVisible
+    {
+        get => NavigationRail.IsUsageAttributionVisible;
+        set => NavigationRail.IsUsageAttributionVisible = value;
     }
 
     public bool IsDailyUsageVisible
@@ -498,8 +536,12 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
 
     public void ApplySnapshot(UsageSnapshot snapshot)
     {
+        var nowUtc = DateTimeOffset.UtcNow;
         UpdateAccountUsageFreshnessWarnings(snapshot);
         _snapshot = snapshot;
+        var usageSignals = _usageSignalsTracker.Observe(snapshot, nowUtc);
+        var budgetSignals = _budgetAlertTracker.Observe(snapshot, AutomaticBudgetSignalSettings, nowUtc);
+        _usageSignals = MergeSignals(usageSignals, budgetSignals.AttentionSignals);
 
         Buckets.Clear();
         foreach (var bucket in snapshot.Buckets)
@@ -508,6 +550,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         }
 
         RebuildLimitOptions();
+        RateLimits.ApplyUsageSignals(_usageSignals);
         RefreshResetCredits(DateTimeOffset.UtcNow, updateFromSnapshot: true);
 
         DailyBuckets.Clear();
@@ -517,6 +560,8 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         }
         RebuildDailyUsageRows();
         RebuildProjectUsageRows();
+        RebuildUsageAttributionRows(nowUtc);
+        NeedsAttention.ApplySignals(_usageSignals);
 
         RefreshComputedProperties();
     }
@@ -533,6 +578,8 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ThreadContextText));
         OnPropertyChanged(nameof(ThreadTokenText));
         RebuildDailyUsageRows();
+        RefreshUsageAttributionRows(DateTimeOffset.UtcNow);
+        NeedsAttention.Refresh(DateTimeOffset.UtcNow);
         RefreshAccountDashboardProperties();
         OnPropertyChanged(nameof(TodayUsageText));
         OnPropertyChanged(nameof(TodayUsageValueText));
@@ -779,6 +826,11 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         {
             OnPropertyChanged(nameof(ShouldShowProjectUsage));
         }
+
+        if (e.PropertyName == nameof(NavigationRailViewModel.IsUsageAttributionVisible))
+        {
+            OnPropertyChanged(nameof(ShouldShowUsageAttribution));
+        }
     }
 
     private void OnDailyUsagePropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -788,6 +840,17 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
             or nameof(DailyUsageSectionViewModel.DailyUsageExpandCollapseTooltip))
         {
             OnPropertyChanged(e.PropertyName);
+        }
+    }
+
+    private void OnUsageAttributionPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(UsageAttributionSectionViewModel.HasAttribution)
+            or nameof(UsageAttributionSectionViewModel.SummaryText)
+            or nameof(UsageAttributionSectionViewModel.EvidenceText))
+        {
+            OnPropertyChanged(nameof(HasUsageAttribution));
+            OnPropertyChanged(nameof(ShouldShowUsageAttribution));
         }
     }
 
@@ -839,6 +902,24 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ProjectUsageEstimateText));
     }
 
+    private void RebuildUsageAttributionRows(DateTimeOffset nowUtc)
+    {
+        UsageAttribution.ApplySnapshot(_snapshot.UsageAttribution, nowUtc);
+
+        OnPropertyChanged(nameof(HasUsageAttribution));
+        OnPropertyChanged(nameof(ShouldShowUsageAttribution));
+        OnPropertyChanged(nameof(UsageAttributionSessionRows));
+        OnPropertyChanged(nameof(UsageAttributionBurnEventRows));
+    }
+
+    private void RefreshUsageAttributionRows(DateTimeOffset nowUtc)
+    {
+        UsageAttribution.Refresh(nowUtc);
+
+        OnPropertyChanged(nameof(HasUsageAttribution));
+        OnPropertyChanged(nameof(ShouldShowUsageAttribution));
+    }
+
     private void UpdateAccountUsageFreshnessWarnings(UsageSnapshot nextSnapshot)
     {
         AccountUsage.EvaluateFreshness(
@@ -887,6 +968,14 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ResetCreditsAvailableText));
     }
 
+    private sealed class ZeroUserIdleTimeProvider : IUserIdleTimeProvider
+    {
+        public TimeSpan GetIdleTime()
+        {
+            return TimeSpan.Zero;
+        }
+    }
+
     private bool ShouldPersistResetCreditState()
     {
         return _snapshot.ResetCreditsAvailable is not null
@@ -921,10 +1010,33 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(HasProjectUsage));
         OnPropertyChanged(nameof(ShouldShowProjectUsage));
         OnPropertyChanged(nameof(ProjectUsageEstimateText));
+        OnPropertyChanged(nameof(HasUsageAttribution));
+        OnPropertyChanged(nameof(ShouldShowUsageAttribution));
         RefreshTopChromeViewModels();
         RefreshAccountDashboardProperties();
         OnPropertyChanged(nameof(TodayUsageText));
         OnPropertyChanged(nameof(TodayUsageValueText));
+    }
+
+    private static UsageSignalsSnapshot MergeSignals(
+        UsageSignalsSnapshot usageSignals,
+        IReadOnlyList<UsageAttentionSignal> budgetSignals)
+    {
+        if (budgetSignals.Count == 0)
+        {
+            return usageSignals;
+        }
+
+        return new UsageSignalsSnapshot
+        {
+            RunwaySignals = usageSignals.RunwaySignals,
+            IdleDrainIncident = usageSignals.IdleDrainIncident,
+            ShowAllAttentionSignals = usageSignals.ShowAllAttentionSignals,
+            AttentionSignals = usageSignals.AttentionSignals
+                .Concat(budgetSignals)
+                .OrderBy(signal => signal.Priority)
+                .ToList()
+        };
     }
 
     private void RefreshAccountDashboardProperties()

@@ -14,7 +14,6 @@ public interface ICodexResetCreditService
 public sealed class CodexResetCreditService : ICodexResetCreditService
 {
     private const string ResetCreditsUrl = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits";
-    private static readonly string AccessTokenPropertyName = string.Concat("access_", "token");
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(8);
 
     private readonly string _authPath;
@@ -106,7 +105,7 @@ public sealed class CodexResetCreditService : ICodexResetCreditService
                 ? tokensProperty
                 : root;
 
-        var accessToken = ReadString(tokens, AccessTokenPropertyName) ?? ReadString(tokens, "accessToken");
+        var accessToken = ReadString(tokens, "access_token") ?? ReadString(tokens, "accessToken");
         if (string.IsNullOrWhiteSpace(accessToken))
         {
             throw new InvalidOperationException("Auth session does not contain an access token.");

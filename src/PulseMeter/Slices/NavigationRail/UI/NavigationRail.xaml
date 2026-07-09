@@ -453,6 +453,42 @@
                     </StackPanel>
                 </ToggleButton>
                 <ToggleButton Margin="0,18,0,0"
+                              IsChecked="{Binding IsUsageAttributionVisible, Mode=TwoWay}"
+                              Style="{StaticResource NavigationSectionToggleStyle}"
+                              ToolTip="Show or hide burn analysis">
+                    <StackPanel Style="{StaticResource NavigationItemContentStyle}">
+                        <Grid Style="{StaticResource NavigationIconCellStyle}">
+                            <Border Width="16"
+                                    Height="2"
+                                    Margin="3,15,0,0"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Top"
+                                    Background="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                                    CornerRadius="1" />
+                            <Border Width="12"
+                                    Height="2"
+                                    Margin="7,10,0,0"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Top"
+                                    Background="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                                    CornerRadius="1" />
+                            <Border Width="7"
+                                    Height="2"
+                                    Margin="12,5,0,0"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Top"
+                                    Background="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                                    CornerRadius="1" />
+                        </Grid>
+                        <TextBlock Margin="6,0,0,0"
+                                   Text="Burn analysis"
+                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                                   FontSize="13.5"
+                                   VerticalAlignment="Center"
+                                   Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </StackPanel>
+                </ToggleButton>
+                <ToggleButton Margin="0,18,0,0"
                               IsChecked="{Binding IsDailyUsageVisible, Mode=TwoWay}"
                               Style="{StaticResource NavigationSectionToggleStyle}"
                               ToolTip="Show or hide daily usage">
