@@ -1,0 +1,99 @@
+<UserControl x:Class="PulseMeter.Slices.NeedsAttention.UI.NeedsAttentionSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </UserControl.Resources>
+
+    <Border x:Name="NeedsAttentionPanel"
+            Margin="0,12,0,0"
+            Padding="16"
+            Style="{DynamicResource LightCardStyle}"
+            Visibility="{Binding HasNeedsAttention, Converter={StaticResource BooleanToVisibilityConverter}}">
+        <StackPanel>
+            <Grid>
+                <TextBlock Text="NEEDS ATTENTION"
+                           Foreground="#111827"
+                           FontSize="20"
+                           FontWeight="Bold" />
+                <TextBlock HorizontalAlignment="Right"
+                           Text="{Binding NeedsAttentionSummaryText}"
+                           Foreground="#4B5563"
+                           FontSize="13" />
+            </Grid>
+
+            <ItemsControl Margin="0,14,0,0"
+                          ItemsSource="{Binding NeedsAttentionItems}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Grid MinHeight="48">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="76" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="1" />
+                            </Grid.RowDefinitions>
+
+                            <Border Width="62"
+                                    Height="24"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center"
+                                    Background="#F9FAFB"
+                                    BorderBrush="{Binding AccentBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6">
+                                <TextBlock Text="{Binding BadgeText}"
+                                           Foreground="#111827"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center" />
+                            </Border>
+
+                            <StackPanel Grid.Column="1"
+                                        Margin="0,6,0,6"
+                                        VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Title}"
+                                           Foreground="#111827"
+                                           FontSize="14"
+                                           FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock Margin="0,3,0,0"
+                                           Text="{Binding Detail}"
+                                           Foreground="#4B5563"
+                                           FontSize="13"
+                                           TextWrapping="Wrap"
+                                           Visibility="{Binding HasDetail, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <StackPanel Margin="0,8,0,0"
+                                            Orientation="Horizontal"
+                                            Visibility="{Binding HasActions, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <Button Padding="10,5"
+                                            Content="Copy"
+                                            Command="{Binding DataContext.CopyDiagnosticCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}"
+                                            FontSize="12"
+                                            Style="{DynamicResource LightButtonStyle}"
+                                            Visibility="{Binding CanCopyDiagnostic, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                    <Button Margin="6,0,0,0"
+                                            Padding="10,5"
+                                            Content="Dismiss"
+                                            Command="{Binding DataContext.DismissSignalCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}"
+                                            FontSize="12"
+                                            Style="{DynamicResource LightButtonStyle}"
+                                            Visibility="{Binding CanDismiss, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <Border Grid.Row="1"
+                                    Grid.ColumnSpan="2"
+                                    Background="#E5E7EB" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </Border>
+</UserControl>

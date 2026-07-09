@@ -84,6 +84,51 @@ public sealed class PulseMeterWindowLifecycleCoordinatorTests
         Assert.All(timerFactory.Timers, timer => Assert.False(timer.Started));
     }
 
+    [Fact]
+    public async Task SnapshotUpdated_DoesNotShowTrayNotificationForAutomaticBudgetSignal()
+    {
+        var now = DateTimeOffset.Now;
+        var usageService = new StubUsageService();
+        var viewModel = new PulseMeterWindowViewModel(
+            usageService,
+            TimeSpan.FromSeconds(90));
+        var tray = new StubTrayIconService();
+        var coordinator = new PulseMeterWindowLifecycleCoordinator(
+            usageService,
+            viewModel,
+            new StubPulseMeterWindow(),
+            tray,
+            new StubForegroundWindowService(),
+            new StubAppSettingsStore(),
+            new StubWindowStateStore(),
+            new StubPulseMeterTimerFactory(),
+            new ImmediateUiDispatcher());
+
+        await coordinator.StartAsync();
+        usageService.RaiseSnapshot(new UsageSnapshot
+        {
+            SyncStatus = SyncStatus.Live,
+            Source = "AppServer",
+            LastUpdatedUtc = now,
+            Buckets =
+            [
+                new RateLimitBucket
+                {
+                    LimitId = "codex",
+                    Label = "5h Window",
+                    WindowLabel = "5h",
+                    WindowDurationMins = 300,
+                    UsedPercent = 96,
+                    ResetsAtUtc = now.AddHours(2),
+                    ResetsAtUnixSeconds = now.AddHours(2).ToUnixTimeSeconds()
+                }
+            ]
+        });
+
+        Assert.Empty(tray.Notifications);
+        Assert.Contains(viewModel.NeedsAttention.NeedsAttentionItems, item => item.Title == "Rate limit budget is critical");
+    }
+
     private sealed class StubUsageService : IUsageService
     {
         public event EventHandler<UsageSnapshot>? SnapshotUpdated;
@@ -152,6 +197,8 @@ public sealed class PulseMeterWindowLifecycleCoordinatorTests
 
     private sealed class StubTrayIconService : ITrayIconService
     {
+        public List<(string Title, string Message, BudgetAlertLevel Level)> Notifications { get; } = [];
+
         public bool IsDisposed { get; private set; }
 
         public void Dispose()

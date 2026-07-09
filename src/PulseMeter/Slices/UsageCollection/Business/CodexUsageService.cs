@@ -7,9 +7,14 @@ namespace PulseMeter.Slices.UsageCollection.Business;
 
 public sealed class CodexUsageService : IUsageService, IAsyncDisposable
 {
+    private static readonly TimeSpan LiveRequestTimeout = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan ResetCreditMergeTimeout = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan ThreadObservationTimeout = TimeSpan.FromSeconds(2);
+
     private readonly IMockUsageService _mockUsageService;
     private readonly ICodexResetCreditService _resetCreditService;
     private readonly IProjectUsageService _projectUsageService;
+    private readonly IUsageAttributionService _usageAttributionService;
     private readonly IAppServerProcessFactory _processFactory;
     private readonly IJsonRpcClientFactory _jsonRpcClientFactory;
     private readonly SemaphoreSlim _connectLock = new(1, 1);
@@ -24,12 +29,14 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
         IMockUsageService mockUsageService,
         ICodexResetCreditService resetCreditService,
         IProjectUsageService projectUsageService,
+        IUsageAttributionService usageAttributionService,
         IAppServerProcessFactory processFactory,
         IJsonRpcClientFactory jsonRpcClientFactory)
     {
         _mockUsageService = mockUsageService;
         _resetCreditService = resetCreditService;
         _projectUsageService = projectUsageService;
+        _usageAttributionService = usageAttributionService;
         _processFactory = processFactory;
         _jsonRpcClientFactory = jsonRpcClientFactory;
     }
@@ -98,19 +105,20 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
         var client = await EnsureClientAsync(cancellationToken).ConfigureAwait(false);
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(8));
+        timeout.CancelAfter(LiveRequestTimeout);
 
         var now = DateTimeOffset.UtcNow;
         var rateLimits = await client.SendRequestAsync("account/rateLimits/read", null, timeout.Token).ConfigureAwait(false);
         Debug.WriteLine("[pulsemeter] account/rateLimits/read raw result: " + rateLimits.GetRawText());
         var snapshot = CodexUsageParser.ParseRateLimits(rateLimits, now, "AppServer");
-        snapshot = await TryMergeResetCreditExpiryAsync(snapshot, timeout.Token).ConfigureAwait(false);
+        snapshot = await TryMergeResetCreditExpiryAsync(snapshot, cancellationToken).ConfigureAwait(false);
 
         try
         {
             var usage = await client.SendRequestAsync("account/usage/read", null, timeout.Token).ConfigureAwait(false);
             snapshot = CodexUsageParser.MergeUsageSummary(snapshot, usage);
-            snapshot = await TryMergeProjectUsageAsync(snapshot, now, timeout.Token).ConfigureAwait(false);
+            snapshot = await TryMergeProjectUsageAsync(snapshot, now, cancellationToken).ConfigureAwait(false);
+            snapshot = await TryMergeUsageAttributionAsync(snapshot, now, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is JsonRpcException or JsonException or InvalidOperationException)
         {
@@ -123,7 +131,9 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
         }
         else
         {
-            await TryObserveLoadedThreadsAsync(client, timeout.Token).ConfigureAwait(false);
+            using var threadTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            threadTimeout.CancelAfter(ThreadObservationTimeout);
+            await TryObserveLoadedThreadsAsync(client, threadTimeout.Token).ConfigureAwait(false);
             if (_recentThread is not null)
             {
                 snapshot = CodexUsageParser.WithThreadUsage(snapshot, _recentThread);
@@ -137,10 +147,20 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
 
     private async Task<UsageSnapshot> TryMergeResetCreditExpiryAsync(UsageSnapshot snapshot, CancellationToken cancellationToken)
     {
-        var resetCredits = await _resetCreditService.TryFetchAsync(cancellationToken).ConfigureAwait(false);
-        return resetCredits is null
-            ? snapshot
-            : CodexUsageParser.WithResetCredits(snapshot, resetCredits);
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(ResetCreditMergeTimeout);
+
+            var resetCredits = await _resetCreditService.TryFetchAsync(timeout.Token).ConfigureAwait(false);
+            return resetCredits is null
+                ? snapshot
+                : CodexUsageParser.WithResetCredits(snapshot, resetCredits);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return snapshot;
+        }
     }
 
     private async Task<UsageSnapshot> TryMergeProjectUsageAsync(
@@ -153,6 +173,23 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
             var rows = await _projectUsageService.GetProjectUsageAsync(snapshot.DailyBuckets, now, cancellationToken)
                 .ConfigureAwait(false);
             return rows.Count == 0 ? snapshot : CodexUsageParser.WithProjectUsage(snapshot, rows);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            return snapshot;
+        }
+    }
+
+    private async Task<UsageSnapshot> TryMergeUsageAttributionAsync(
+        UsageSnapshot snapshot,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var attribution = await _usageAttributionService.GetUsageAttributionAsync(snapshot.DailyBuckets, now, cancellationToken)
+                .ConfigureAwait(false);
+            return attribution.HasAttribution ? CodexUsageParser.WithUsageAttribution(snapshot, attribution) : snapshot;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
@@ -189,17 +226,23 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(8));
 
-            await _client.SendRequestAsync("initialize", new
+            var initialize = _client.SendRequestAsync("initialize", new
             {
                 clientInfo = new
                 {
                     name = "pulsemeter",
                     title = "PulseMeter",
                     version = "0.1.0"
+                },
+                capabilities = new
+                {
+                    experimentalApi = false,
+                    requestAttestation = false
                 }
-            }, timeout.Token).ConfigureAwait(false);
+            }, timeout.Token);
 
             await _client.SendNotificationAsync("initialized", new { }, timeout.Token).ConfigureAwait(false);
+            await initialize.ConfigureAwait(false);
             return _client;
         }
         finally
@@ -241,7 +284,7 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
                 }
             }
         }
-        catch (Exception ex) when (ex is JsonRpcException or JsonException or InvalidOperationException)
+        catch (Exception ex) when (ex is JsonRpcException or JsonException or InvalidOperationException or OperationCanceledException)
         {
         }
     }

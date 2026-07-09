@@ -10,9 +10,11 @@ In live mode, PulseMeter may read:
 
 - Codex CLI/app-server output over stdio.
 - `%USERPROFILE%\.codex\auth.json` only to request reset-credit expiry metadata from OpenAI.
-- `%USERPROFILE%\.codex\state_5.sqlite` and `%USERPROFILE%\.codex\sessions` to estimate local project usage shares.
+- `%USERPROFILE%\.codex\state_5.sqlite`, `%USERPROFILE%\.codex\sessions`, and local rollout `token_count` records to estimate local project usage and Burn Analysis shares.
 
-PulseMeter does not parse or display Codex message text for project usage estimates.
+PulseMeter does not parse or display Codex message text for project usage or Burn Analysis estimates. Burn Analysis displays project paths, thread titles/IDs, timestamps, and token counts only. Historical attribution is labeled local and estimated, and is scaled against account-level daily usage rather than treated as billing-exact.
+
+Automatic alert signals use local usage and rate-limit numbers. They do not require prompt text or Codex message content.
 
 ## Network Requests
 

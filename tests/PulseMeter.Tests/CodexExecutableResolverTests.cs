@@ -1,5 +1,6 @@
 using PulseMeter.Platform.Codex;
 using PulseMeter.Slices.UsageCollection;
+using System.Text;
 
 namespace PulseMeter.Tests;
 
@@ -60,7 +61,7 @@ public sealed class CodexExecutableResolverTests
     [Fact]
     public void BuildStartInfo_RunsCmdFilesThroughCommandProcessor()
     {
-        var startInfo = AppServerProcess.BuildStartInfo("C:\\Users\\example\\.codex\\bin\\codex.cmd");
+        var startInfo = AppServerProcess.BuildStartInfo("C:\\Users\\ilina\\.codex\\bin\\codex.cmd");
 
         Assert.EndsWith("cmd.exe", startInfo.FileName, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("codex.cmd", startInfo.Arguments, StringComparison.OrdinalIgnoreCase);
@@ -68,5 +69,17 @@ public sealed class CodexExecutableResolverTests
         Assert.False(startInfo.UseShellExecute);
         Assert.True(startInfo.RedirectStandardInput);
         Assert.True(startInfo.RedirectStandardOutput);
+    }
+
+    [Fact]
+    public void BuildStartInfo_UsesBomlessUtf8ForJsonLineTransport()
+    {
+        var startInfo = AppServerProcess.BuildStartInfo("C:\\Users\\ilina\\AppData\\Local\\OpenAI\\Codex\\bin\\codex.exe");
+
+        Assert.NotNull(startInfo.StandardInputEncoding);
+        Assert.Equal("utf-8", startInfo.StandardInputEncoding.WebName);
+        Assert.Empty(startInfo.StandardInputEncoding.GetPreamble());
+        Assert.Equal(Encoding.UTF8.WebName, startInfo.StandardOutputEncoding?.WebName);
+        Assert.Equal(Encoding.UTF8.WebName, startInfo.StandardErrorEncoding?.WebName);
     }
 }

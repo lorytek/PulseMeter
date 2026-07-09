@@ -35,6 +35,7 @@ public static class CodexUsageParser
             LongestStreakDays = ReadInt(summary, "longestStreakDays"),
             DailyBuckets = ParseDailyBuckets(usageResult).ToList(),
             ProjectUsageRows = snapshot.ProjectUsageRows,
+            UsageAttribution = snapshot.UsageAttribution,
             ResetCreditsAvailable = snapshot.ResetCreditsAvailable,
             ResetCreditsExpiresAtUtc = snapshot.ResetCreditsExpiresAtUtc,
             ResetCredits = snapshot.ResetCredits,
@@ -102,6 +103,7 @@ public static class CodexUsageParser
             LongestStreakDays = snapshot.LongestStreakDays,
             DailyBuckets = snapshot.DailyBuckets,
             ProjectUsageRows = snapshot.ProjectUsageRows,
+            UsageAttribution = snapshot.UsageAttribution,
             ResetCreditsAvailable = snapshot.ResetCreditsAvailable,
             ResetCreditsExpiresAtUtc = snapshot.ResetCreditsExpiresAtUtc,
             ResetCredits = snapshot.ResetCredits,
@@ -126,6 +128,7 @@ public static class CodexUsageParser
             LongestStreakDays = snapshot.LongestStreakDays,
             DailyBuckets = snapshot.DailyBuckets,
             ProjectUsageRows = snapshot.ProjectUsageRows,
+            UsageAttribution = snapshot.UsageAttribution,
             ResetCreditsAvailable = snapshot.ResetCreditsAvailable,
             ResetCreditsExpiresAtUtc = snapshot.ResetCreditsExpiresAtUtc,
             ResetCredits = snapshot.ResetCredits,
@@ -150,6 +153,7 @@ public static class CodexUsageParser
             LongestStreakDays = snapshot.LongestStreakDays,
             DailyBuckets = snapshot.DailyBuckets,
             ProjectUsageRows = snapshot.ProjectUsageRows,
+            UsageAttribution = snapshot.UsageAttribution,
             ResetCreditsAvailable = resetCredits.AvailableCount,
             ResetCreditsExpiresAtUtc = resetCredits.Credits
                 .Select(credit => credit.ExpiresAtUtc)
@@ -177,6 +181,32 @@ public static class CodexUsageParser
             LongestStreakDays = snapshot.LongestStreakDays,
             DailyBuckets = snapshot.DailyBuckets,
             ProjectUsageRows = projectUsageRows,
+            UsageAttribution = snapshot.UsageAttribution,
+            ResetCreditsAvailable = snapshot.ResetCreditsAvailable,
+            ResetCreditsExpiresAtUtc = snapshot.ResetCreditsExpiresAtUtc,
+            ResetCredits = snapshot.ResetCredits,
+            RecentActiveThread = snapshot.RecentActiveThread,
+            SyncStatus = snapshot.SyncStatus,
+            LastUpdatedUtc = snapshot.LastUpdatedUtc,
+            Source = snapshot.Source,
+            StatusMessage = snapshot.StatusMessage,
+            RawRateLimitsJson = snapshot.RawRateLimitsJson
+        };
+    }
+
+    public static UsageSnapshot WithUsageAttribution(UsageSnapshot snapshot, UsageAttributionSnapshot usageAttribution)
+    {
+        return new UsageSnapshot
+        {
+            Buckets = snapshot.Buckets,
+            LifetimeTokens = snapshot.LifetimeTokens,
+            PeakDailyTokens = snapshot.PeakDailyTokens,
+            LongestRunningTurnSec = snapshot.LongestRunningTurnSec,
+            CurrentStreakDays = snapshot.CurrentStreakDays,
+            LongestStreakDays = snapshot.LongestStreakDays,
+            DailyBuckets = snapshot.DailyBuckets,
+            ProjectUsageRows = snapshot.ProjectUsageRows,
+            UsageAttribution = usageAttribution,
             ResetCreditsAvailable = snapshot.ResetCreditsAvailable,
             ResetCreditsExpiresAtUtc = snapshot.ResetCreditsExpiresAtUtc,
             ResetCredits = snapshot.ResetCredits,

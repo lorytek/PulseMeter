@@ -10,15 +10,21 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("xmlns:rateLimits=\"clr-namespace:PulseMeter.Slices.RateLimits.UI\"", windowXaml);
         Assert.Contains("xmlns:rateLimitsDaily=\"clr-namespace:PulseMeter.Slices.RateLimitsDaily.UI\"", windowXaml);
         Assert.Contains("xmlns:resetCredits=\"clr-namespace:PulseMeter.Slices.ResetCredits.UI\"", windowXaml);
+        Assert.Contains("xmlns:needsAttention=\"clr-namespace:PulseMeter.Slices.NeedsAttention.UI\"", windowXaml);
         Assert.Contains("xmlns:accountUsage=\"clr-namespace:PulseMeter.Slices.AccountUsage.UI\"", windowXaml);
         Assert.Contains("xmlns:projectUsage=\"clr-namespace:PulseMeter.Slices.ProjectUsage.UI\"", windowXaml);
+        Assert.Contains("xmlns:usageAttribution=\"clr-namespace:PulseMeter.Slices.UsageAttribution.UI\"", windowXaml);
         Assert.Contains("xmlns:dailyUsage=\"clr-namespace:PulseMeter.Slices.DailyUsage.UI\"", windowXaml);
         Assert.Contains("<rateLimits:RateLimitsSection", windowXaml);
         Assert.Contains("<rateLimitsDaily:RateLimitsDailySection", windowXaml);
         Assert.Contains("<resetCredits:ResetCreditsSection", windowXaml);
+        Assert.Contains("<needsAttention:NeedsAttentionSection", windowXaml);
         Assert.Contains("<accountUsage:AccountUsageSection", windowXaml);
         Assert.Contains("<projectUsage:ProjectUsageSection", windowXaml);
+        Assert.Contains("<usageAttribution:UsageAttributionSection", windowXaml);
         Assert.Contains("<dailyUsage:DailyUsageSection", windowXaml);
+        Assert.DoesNotContain("xmlns:budgetAlerts", windowXaml);
+        Assert.DoesNotContain("<budgetAlerts:BudgetAlertsSection", windowXaml);
         Assert.DoesNotContain("x:Name=\"RateLimitsPanel\"", windowXaml);
         Assert.DoesNotContain("x:Name=\"DailyUsagePanel\"", windowXaml);
     }
@@ -131,6 +137,69 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("x:Key=\"LightCardStyle\"", stylesXaml);
         Assert.Contains("x:Key=\"CompactIconButtonStyle\"", stylesXaml);
         Assert.Contains("x:Key=\"LightTextBoxStyle\"", stylesXaml);
+        Assert.Contains("x:Key=\"LightEvidencePillStyle\"", stylesXaml);
+        Assert.Contains("x:Key=\"LightEvidencePillTextStyle\"", stylesXaml);
+    }
+
+    [Fact]
+    public void UsageSections_ShowCompactEvidenceLabels()
+    {
+        var accountUsageSection = ReadXamlFile("src", "PulseMeter", "Slices", "AccountUsage", "AccountUsageSection.xaml");
+        var projectUsageSection = ReadXamlFile("src", "PulseMeter", "Slices", "ProjectUsage", "ProjectUsageSection.xaml");
+        var usageAttributionSection = ReadXamlFile("src", "PulseMeter", "Slices", "UsageAttribution", "UsageAttributionSection.xaml");
+        var dailyUsageSection = ReadXamlFile("src", "PulseMeter", "Slices", "DailyUsage", "DailyUsageSection.xaml");
+
+        Assert.Contains("x:Name=\"AccountUsageEvidenceLabel\"", accountUsageSection);
+        Assert.Contains("Text=\"{Binding DataContext.SyncStatusText, RelativeSource={RelativeSource AncestorType=Window}}\"", accountUsageSection);
+        Assert.Contains("Style=\"{DynamicResource LightEvidencePillStyle}\"", accountUsageSection);
+        Assert.Contains("Style=\"{DynamicResource LightEvidencePillTextStyle}\"", accountUsageSection);
+
+        Assert.Contains("x:Name=\"ProjectUsageEstimatedEvidenceLabel\"", projectUsageSection);
+        Assert.Contains("Text=\"Estimated\"", projectUsageSection);
+        Assert.Contains("x:Name=\"ProjectUsageLocalEvidenceLabel\"", projectUsageSection);
+        Assert.Contains("Text=\"Local\"", projectUsageSection);
+
+        Assert.Contains("x:Name=\"BurnAnalysisEstimatedEvidenceLabel\"", usageAttributionSection);
+        Assert.Contains("Text=\"Estimated\"", usageAttributionSection);
+        Assert.Contains("x:Name=\"BurnAnalysisLocalEvidenceLabel\"", usageAttributionSection);
+        Assert.Contains("Text=\"Local\"", usageAttributionSection);
+
+        Assert.Contains("x:Name=\"DailyUsageEvidenceLabel\"", dailyUsageSection);
+        Assert.Contains("Text=\"{Binding DataContext.SyncStatusText, RelativeSource={RelativeSource AncestorType=Window}}\"", dailyUsageSection);
+    }
+
+    [Fact]
+    public void AccountUsageHeader_CentersTitleLabelAndRefreshControls()
+    {
+        var accountUsageSection = ReadXamlFile("src", "PulseMeter", "Slices", "AccountUsage", "AccountUsageSection.xaml");
+        var headerStart = accountUsageSection.IndexOf("x:Name=\"DashboardHeader\"", StringComparison.Ordinal);
+        var metricCardsStart = accountUsageSection.IndexOf("x:Name=\"DashboardMetricCards\"", StringComparison.Ordinal);
+
+        Assert.NotEqual(-1, headerStart);
+        Assert.NotEqual(-1, metricCardsStart);
+        Assert.True(headerStart < metricCardsStart);
+
+        var header = accountUsageSection[headerStart..metricCardsStart];
+        Assert.Contains("MinHeight=\"36\"", header);
+        Assert.Contains("x:Name=\"AccountUsageHeaderTitleGroup\"", header);
+        Assert.Contains("x:Name=\"AccountUsageRefreshControls\"", header);
+
+        var titleGroupStart = header.IndexOf("x:Name=\"AccountUsageHeaderTitleGroup\"", StringComparison.Ordinal);
+        var refreshControlsStart = header.IndexOf("x:Name=\"AccountUsageRefreshControls\"", StringComparison.Ordinal);
+        Assert.NotEqual(-1, titleGroupStart);
+        Assert.NotEqual(-1, refreshControlsStart);
+        Assert.True(titleGroupStart < refreshControlsStart);
+
+        var titleGroup = header[titleGroupStart..refreshControlsStart];
+        Assert.Contains("VerticalAlignment=\"Center\"", titleGroup);
+        Assert.Contains("Text=\"ACCOUNT USAGE\"", titleGroup);
+        Assert.Contains("Margin=\"10,0,0,0\"", titleGroup);
+
+        var refreshControls = header[refreshControlsStart..];
+        Assert.Contains("Grid.Column=\"1\"", refreshControls);
+        Assert.Contains("VerticalAlignment=\"Center\"", refreshControls);
+        Assert.Contains("Text=\"Auto refresh every\"", refreshControls);
+        Assert.Contains("Text=\"seconds\"", refreshControls);
     }
 
     [Fact]
@@ -144,9 +213,12 @@ public sealed class PulseMeterWindowLayoutTests
             ("RateLimits", "RateLimitsSection.xaml", "RateLimitsPresenter.cs", "RateLimitsRegistration.cs"),
             ("RateLimitsDaily", "RateLimitsDailySection.xaml", "RateLimitsDailyPresenter.cs", "RateLimitsDailyRegistration.cs"),
             ("ResetCredits", "ResetCreditsSection.xaml", "ResetCreditsPresenter.cs", "ResetCreditsRegistration.cs"),
+            ("NeedsAttention", "NeedsAttentionSection.xaml", "NeedsAttentionPresenter.cs", "NeedsAttentionRegistration.cs"),
             ("AccountUsage", "AccountUsageSection.xaml", "AccountUsagePresenter.cs", "AccountUsageRegistration.cs"),
             ("ProjectUsage", "ProjectUsageSection.xaml", "ProjectUsagePresenter.cs", "ProjectUsageRegistration.cs"),
-            ("DailyUsage", "DailyUsageSection.xaml", "DailyUsagePresenter.cs", "DailyUsageRegistration.cs")
+            ("UsageAttribution", "UsageAttributionSection.xaml", "UsageAttributionPresenter.cs", "UsageAttributionRegistration.cs"),
+            ("DailyUsage", "DailyUsageSection.xaml", "DailyUsagePresenter.cs", "DailyUsageRegistration.cs"),
+            ("UsageSignals", "UsageSignalsTracker.cs", "UsageSignalsRegistration.cs", "UsageSignalsSnapshot.cs")
         };
 
         foreach (var (module, control, logic, registration) in modules)
@@ -171,23 +243,29 @@ public sealed class PulseMeterWindowLayoutTests
             ("RateLimits", "IRateLimitsPresenter", "RateLimitsPresenter", "RateLimitsSectionViewModel", "RateLimitsRegistration.cs", "AddRateLimitsSlice"),
             ("RateLimitsDaily", "IRateLimitsDailyPresenter", "RateLimitsDailyPresenter", "RateLimitsDailySectionViewModel", "RateLimitsDailyRegistration.cs", "AddRateLimitsDailySlice"),
             ("ResetCredits", "IResetCreditsPresenter", "ResetCreditsPresenter", "ResetCreditsSectionViewModel", "ResetCreditsRegistration.cs", "AddResetCreditsSlice"),
+            ("NeedsAttention", "INeedsAttentionPresenter", "NeedsAttentionPresenter", "NeedsAttentionSectionViewModel", "NeedsAttentionRegistration.cs", "AddNeedsAttentionSlice"),
             ("AccountUsage", "IAccountUsagePresenter", "AccountUsagePresenter", "AccountUsageSectionViewModel", "AccountUsageRegistration.cs", "AddAccountUsageSlice"),
             ("ProjectUsage", "IProjectUsagePresenter", "ProjectUsagePresenter", "ProjectUsageSectionViewModel", "ProjectUsageRegistration.cs", "AddProjectUsageSlice"),
-            ("DailyUsage", "IDailyUsagePresenter", "DailyUsagePresenter", "DailyUsageSectionViewModel", "DailyUsageRegistration.cs", "AddDailyUsageSlice")
+            ("UsageAttribution", "IUsageAttributionPresenter", "UsageAttributionPresenter", "UsageAttributionSectionViewModel", "UsageAttributionRegistration.cs", "AddUsageAttributionSlice"),
+            ("DailyUsage", "IDailyUsagePresenter", "DailyUsagePresenter", "DailyUsageSectionViewModel", "DailyUsageRegistration.cs", "AddDailyUsageSlice"),
+            ("UsageSignals", "IUsageSignalsTracker", "UsageSignalsTracker", null, "UsageSignalsRegistration.cs", "AddUsageSignalsSlice")
         };
 
         foreach (var (module, contractName, implementationName, viewModelName, registrationFileName, registrationMethodName) in modules)
         {
             var presenter = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", module, $"{implementationName}.cs"));
-            var owner = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", module, $"{viewModelName}.cs"));
             var registration = ReadSliceRegistration(module, registrationFileName);
 
             Assert.Contains($"public interface {contractName}", presenter);
             Assert.Contains($"public sealed class {implementationName} : {contractName}", presenter);
             Assert.Contains($"internal static IServiceCollection {registrationMethodName}", registration);
             Assert.Contains($"AddSingleton<{contractName}, {implementationName}>", registration);
-            Assert.Contains($"AddSingleton<{viewModelName}>", registration);
-            Assert.Contains(contractName, owner);
+            if (viewModelName is not null)
+            {
+                var owner = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", module, $"{viewModelName}.cs"));
+                Assert.Contains($"AddSingleton<{viewModelName}>", registration);
+                Assert.Contains(contractName, owner);
+            }
         }
     }
 
@@ -229,10 +307,14 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("services.AddNavigationRailSlice();", pulseMeterSlicesRegistration);
         Assert.Contains("services.AddRateLimitsSlice();", pulseMeterSlicesRegistration);
         Assert.Contains("services.AddRateLimitsDailySlice();", pulseMeterSlicesRegistration);
+        Assert.Contains("services.AddNeedsAttentionSlice();", pulseMeterSlicesRegistration);
+        Assert.Contains("services.AddBudgetAlertsSlice();", pulseMeterSlicesRegistration);
         Assert.Contains("services.AddResetCreditsSlice();", pulseMeterSlicesRegistration);
         Assert.Contains("services.AddAccountUsageSlice();", pulseMeterSlicesRegistration);
         Assert.Contains("services.AddProjectUsageSlice();", pulseMeterSlicesRegistration);
+        Assert.Contains("services.AddUsageAttributionSlice();", pulseMeterSlicesRegistration);
         Assert.Contains("services.AddDailyUsageSlice();", pulseMeterSlicesRegistration);
+        Assert.Contains("services.AddUsageSignalsSlice();", pulseMeterSlicesRegistration);
     }
 
     [Fact]
@@ -245,6 +327,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("internal static class UsageCollectionRegistration", coreRegistration);
         Assert.Contains("internal static IServiceCollection AddUsageCollection", coreRegistration);
         Assert.Contains("AddSingleton<IUsageService, CodexUsageService>", coreRegistration);
+        Assert.Contains("AddSingleton<IUsageAttributionService, UsageAttributionService>", coreRegistration);
         Assert.Contains("AddSingleton<IJsonRpcClientFactory, JsonRpcClientFactory>", coreRegistration);
         Assert.Contains("internal static class PlatformRegistration", infrastructureRegistration);
         Assert.Contains("internal static IServiceCollection AddPulseMeterPlatform", infrastructureRegistration);
@@ -256,6 +339,108 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("new PulseMeterWindowViewModel(", shellRegistration);
         Assert.Contains("AddSingleton<IPulseMeterWindow>", shellRegistration);
         Assert.Contains("AddSingleton<ITrayIconService, TrayIconService>", shellRegistration);
+    }
+
+    [Fact]
+    public void BurnAnalysisSection_IsRegisteredInNavigationAndBetweenProjectAndDailyUsage()
+    {
+        var windowXaml = ReadXamlFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml");
+        var navigationXaml = ReadXamlFile("src", "PulseMeter", "Slices", "NavigationRail", "NavigationRail.xaml");
+        var usageAttributionSection = ReadXamlFile("src", "PulseMeter", "Slices", "UsageAttribution", "UsageAttributionSection.xaml");
+        var usageAttributionSectionCode = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "UsageAttribution", "UsageAttributionSection.xaml.cs"));
+        var pulseMeterWindowViewModel = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindowViewModel.cs"));
+
+        Assert.Contains("<usageAttribution:UsageAttributionSection DataContext=\"{Binding UsageAttribution}\"", windowXaml);
+        Assert.True(
+            windowXaml.IndexOf("<projectUsage:ProjectUsageSection", StringComparison.Ordinal) <
+            windowXaml.IndexOf("<usageAttribution:UsageAttributionSection", StringComparison.Ordinal));
+        Assert.True(
+            windowXaml.IndexOf("<usageAttribution:UsageAttributionSection", StringComparison.Ordinal) <
+            windowXaml.IndexOf("<dailyUsage:DailyUsageSection", StringComparison.Ordinal));
+        Assert.Contains("IsUsageAttributionVisible", navigationXaml);
+        Assert.Contains("Text=\"Burn analysis\"", navigationXaml);
+        Assert.Contains("ToolTip=\"Show or hide burn analysis\"", navigationXaml);
+        Assert.Contains("public UsageAttributionSectionViewModel UsageAttribution { get; }", pulseMeterWindowViewModel);
+        Assert.Contains("public bool ShouldShowUsageAttribution", pulseMeterWindowViewModel);
+        Assert.Contains("Visibility=\"{Binding DataContext.ShouldShowUsageAttribution, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}\"", usageAttributionSection);
+        Assert.Contains("Text=\"{Binding EmptyStateText}\"", usageAttributionSection);
+        Assert.Contains("Binding=\"{Binding HasAttribution}\" Value=\"False\"", usageAttributionSection);
+        Assert.Contains("Text=\"BURN ANALYSIS\"", usageAttributionSection);
+        Assert.Contains("Text=\"Top chats by token burn\"", usageAttributionSection);
+        Assert.Contains("Text=\"Chat\"", usageAttributionSection);
+        Assert.Contains("Text=\"Share\"", usageAttributionSection);
+        Assert.Contains("x:Name=\"ShareInfoIcon\"", usageAttributionSection);
+        Assert.Contains("FontFamily=\"Segoe MDL2 Assets\"", usageAttributionSection);
+        Assert.Contains("Text=\"&#xE946;\"", usageAttributionSection);
+        Assert.Contains("ToolTip=\"Share is of total burned tokens in the last 30 days.\"", usageAttributionSection);
+        Assert.Contains("Text=\"Tokens\"", usageAttributionSection);
+        Assert.Contains("Text=\"Event\"", usageAttributionSection);
+        Assert.Contains("x:Name=\"BurnAnalysisTablesGrid\"", usageAttributionSection);
+        Assert.Contains("SizeChanged=\"BurnAnalysisTablesGrid_SizeChanged\"", usageAttributionSection);
+        Assert.Contains("x:Name=\"BurnAnalysisChatsColumn\"", usageAttributionSection);
+        Assert.Contains("x:Name=\"BurnAnalysisGapColumn\"", usageAttributionSection);
+        Assert.Contains("x:Name=\"BurnAnalysisEventsColumn\"", usageAttributionSection);
+        Assert.Contains("x:Name=\"BurnAnalysisStackedGapRow\"", usageAttributionSection);
+        Assert.Contains("x:Name=\"BurnAnalysisEventsPanel\"", usageAttributionSection);
+        var chatsColumnStart = usageAttributionSection.IndexOf("x:Name=\"BurnAnalysisChatsColumn\"", StringComparison.Ordinal);
+        var gapColumnStart = usageAttributionSection.IndexOf("x:Name=\"BurnAnalysisGapColumn\"", StringComparison.Ordinal);
+        var eventsColumnStart = usageAttributionSection.IndexOf("x:Name=\"BurnAnalysisEventsColumn\"", StringComparison.Ordinal);
+        Assert.NotEqual(-1, chatsColumnStart);
+        Assert.NotEqual(-1, gapColumnStart);
+        Assert.NotEqual(-1, eventsColumnStart);
+        Assert.Contains("Width=\"6*\"", usageAttributionSection[chatsColumnStart..gapColumnStart]);
+        Assert.Contains("MinWidth=\"440\"", usageAttributionSection[chatsColumnStart..gapColumnStart]);
+        Assert.Contains("Width=\"5*\"", usageAttributionSection[eventsColumnStart..]);
+        Assert.Contains("MinWidth=\"400\"", usageAttributionSection[eventsColumnStart..]);
+        Assert.Contains("Width=\"28\"", usageAttributionSection[gapColumnStart..eventsColumnStart]);
+        Assert.DoesNotContain("<ColumnDefinition Width=\"5*\" MinWidth=\"360\" />", usageAttributionSection);
+        Assert.DoesNotContain("<ColumnDefinition Width=\"480\" />", usageAttributionSection);
+        Assert.DoesNotContain("<ColumnDefinition Width=\"380\" />", usageAttributionSection);
+        Assert.DoesNotContain("<ColumnDefinition Width=\"280\" />", usageAttributionSection);
+        Assert.Contains("BurnAnalysisStackedLayoutThreshold", usageAttributionSectionCode);
+        Assert.Contains("BurnAnalysisTablesGrid_SizeChanged", usageAttributionSectionCode);
+        Assert.Contains("ApplyBurnAnalysisLayout", usageAttributionSectionCode);
+        Assert.Contains("Grid.SetRow(BurnAnalysisEventsPanel, 2)", usageAttributionSectionCode);
+        Assert.Contains("Grid.SetColumn(BurnAnalysisEventsPanel, 0)", usageAttributionSectionCode);
+        Assert.Contains("Grid.SetColumnSpan(BurnAnalysisEventsPanel, 3)", usageAttributionSectionCode);
+        Assert.Contains("BurnAnalysisGapColumn.Width = new GridLength(0)", usageAttributionSectionCode);
+        Assert.Contains("BurnAnalysisEventsColumn.Width = new GridLength(0)", usageAttributionSectionCode);
+        Assert.DoesNotContain("Text=\"Share is of total burned tokens in the last 30 days.\"", usageAttributionSection);
+        Assert.DoesNotContain("Text=\"Share of total burned tokens in last 30 days\"", usageAttributionSection);
+        Assert.DoesNotContain("Text=\"{Binding SummaryText}\"", usageAttributionSection);
+        Assert.Contains("ToolTip=\"{Binding TooltipText}\"", usageAttributionSection);
+        var shareHeaderStart = usageAttributionSection.IndexOf("Text=\"Share\"", StringComparison.Ordinal);
+        var shareInfoIconStart = usageAttributionSection.IndexOf("x:Name=\"ShareInfoIcon\"", StringComparison.Ordinal);
+        Assert.True(shareHeaderStart < shareInfoIconStart);
+        Assert.DoesNotContain("ToolTip=\"Share is of total burned tokens in the last 30 days.\"", usageAttributionSection[shareHeaderStart..shareInfoIconStart]);
+        var topChatsStart = usageAttributionSection.IndexOf("Text=\"Top chats by token burn\"", StringComparison.Ordinal);
+        var burnEventsStart = usageAttributionSection.IndexOf("Text=\"Largest burn events\"", StringComparison.Ordinal);
+        var topChatsSection = usageAttributionSection[topChatsStart..burnEventsStart];
+        var burnEventsSection = usageAttributionSection[burnEventsStart..];
+        Assert.DoesNotContain("Text=\"Burn\"", topChatsSection);
+        Assert.DoesNotContain("<ProgressBar", topChatsSection);
+        Assert.DoesNotContain("SharePercentValue", topChatsSection);
+        Assert.DoesNotContain("Text=\"{Binding BreakdownText}\"", topChatsSection);
+        Assert.DoesNotContain("Text=\"{Binding RawLocalTokensText}\"", topChatsSection);
+        Assert.Equal(2, CountOccurrences(burnEventsSection, "<ColumnDefinition Width=\"96\" />"));
+        Assert.DoesNotContain("<ColumnDefinition Width=\"76\" />", burnEventsSection);
+        var topChatsShareHeaderStart = topChatsSection.IndexOf("Text=\"Share\"", StringComparison.Ordinal);
+        var topChatsTokensHeaderStart = topChatsSection.IndexOf("Text=\"Tokens\"", topChatsShareHeaderStart, StringComparison.Ordinal);
+        var topChatsShareHeaderStackStart = topChatsSection.LastIndexOf("<StackPanel Grid.Column=\"1\"", topChatsShareHeaderStart, StringComparison.Ordinal);
+        Assert.NotEqual(-1, topChatsShareHeaderStart);
+        Assert.NotEqual(-1, topChatsTokensHeaderStart);
+        Assert.NotEqual(-1, topChatsShareHeaderStackStart);
+        Assert.Contains("HorizontalAlignment=\"Center\"", topChatsSection[topChatsShareHeaderStackStart..topChatsTokensHeaderStart]);
+        var topChatsShareValueStart = topChatsSection.IndexOf("Text=\"{Binding ShareText}\"", StringComparison.Ordinal);
+        var topChatsTokensValueStart = topChatsSection.IndexOf("Text=\"{Binding EstimatedTokensText}\"", topChatsShareValueStart, StringComparison.Ordinal);
+        var topChatsShareValueStackStart = topChatsSection.LastIndexOf("<StackPanel Grid.Column=\"1\"", topChatsShareValueStart, StringComparison.Ordinal);
+        Assert.NotEqual(-1, topChatsShareValueStart);
+        Assert.NotEqual(-1, topChatsTokensValueStart);
+        Assert.NotEqual(-1, topChatsShareValueStackStart);
+        Assert.Contains("HorizontalAlignment=\"Center\"", topChatsSection[topChatsShareValueStackStart..topChatsTokensValueStart]);
+        Assert.DoesNotContain("Prompt", usageAttributionSection);
+        Assert.DoesNotContain("MessageBody", usageAttributionSection);
+        Assert.DoesNotContain("Transcript", usageAttributionSection);
     }
 
     [Fact]
@@ -334,6 +519,82 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("ItemsSource=\"{Binding ResetCredits}\"", resetCreditsSection);
         Assert.Contains("Visibility=\"{Binding DataContext.ShouldShowProjectUsage, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}\"", projectUsageSection);
         Assert.Contains("ItemsSource=\"{Binding ProjectUsageRows}\"", projectUsageSection);
+    }
+
+    [Fact]
+    public void NeedsAttentionModule_UsesChildSectionViewModelAndSelfHidingSection()
+    {
+        var windowXaml = ReadXamlFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml");
+        var needsAttentionRegistration = ReadSliceRegistration("NeedsAttention", "NeedsAttentionRegistration.cs");
+        var pulseMeterWindowViewModel = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindowViewModel.cs"));
+        var needsAttentionSection = ReadXamlFile("src", "PulseMeter", "Slices", "NeedsAttention", "NeedsAttentionSection.xaml");
+
+        Assert.True(File.Exists(FindWorkspaceFile("src", "PulseMeter", "Slices", "NeedsAttention", "NeedsAttentionSectionViewModel.cs")));
+        Assert.Contains("<needsAttention:NeedsAttentionSection DataContext=\"{Binding NeedsAttention}\"", windowXaml);
+        Assert.Contains("public NeedsAttentionSectionViewModel NeedsAttention { get; }", pulseMeterWindowViewModel);
+        Assert.DoesNotContain("INeedsAttentionPresenter?", pulseMeterWindowViewModel);
+        Assert.Contains("AddSingleton<NeedsAttentionSectionViewModel>", needsAttentionRegistration);
+        Assert.Contains("Visibility=\"{Binding HasNeedsAttention, Converter={StaticResource BooleanToVisibilityConverter}}\"", needsAttentionSection);
+        Assert.Contains("ItemsSource=\"{Binding NeedsAttentionItems}\"", needsAttentionSection);
+        Assert.Contains("Command=\"{Binding DataContext.CopyDiagnosticCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}\"", needsAttentionSection);
+        Assert.Contains("Command=\"{Binding DataContext.DismissSignalCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}\"", needsAttentionSection);
+        Assert.Contains("Text=\"NEEDS ATTENTION\"", needsAttentionSection);
+        Assert.True(
+            windowXaml.IndexOf("<dailyUsage:DailyUsageSection", StringComparison.Ordinal) <
+            windowXaml.IndexOf("<needsAttention:NeedsAttentionSection", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void BudgetAlertSignals_AreInternalNeedsAttentionSignalsWithoutSeparatePanel()
+    {
+        var windowXaml = ReadXamlFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml");
+        var navigationXaml = ReadXamlFile("src", "PulseMeter", "Slices", "NavigationRail", "NavigationRail.xaml");
+        var budgetAlertsRegistration = ReadSliceRegistration("BudgetAlerts", "BudgetAlertsRegistration.cs");
+        var pulseMeterWindowViewModel = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindowViewModel.cs"));
+        var root = TestWorkspace.FindRoot();
+
+        Assert.False(File.Exists(Path.Combine(root, "src", "PulseMeter", "Slices", "BudgetAlerts", "UI", "BudgetAlertsSection.xaml")));
+        Assert.False(File.Exists(Path.Combine(root, "src", "PulseMeter", "Slices", "BudgetAlerts", "UI", "BudgetAlertsSectionViewModel.cs")));
+        Assert.DoesNotContain("<budgetAlerts:BudgetAlertsSection", windowXaml);
+        Assert.DoesNotContain("BudgetAlertsSectionViewModel", pulseMeterWindowViewModel);
+        Assert.DoesNotContain("public BudgetAlerts", pulseMeterWindowViewModel);
+        Assert.DoesNotContain("IsBudgetAlertsVisible", navigationXaml);
+        Assert.DoesNotContain("Text=\"Budget alerts\"", navigationXaml);
+        Assert.Contains("AddSingleton<IBudgetAlertTracker, BudgetAlertTracker>", budgetAlertsRegistration);
+    }
+
+    [Fact]
+    public void UsageSignalsSlice_OwnsTemporalSignalDetection()
+    {
+        var pulseMeterWindowViewModel = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindowViewModel.cs"));
+        var usageSignalsTracker = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "UsageSignals", "Business", "UsageSignalsTracker.cs"));
+        var needsAttentionPresenter = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "NeedsAttention", "Business", "NeedsAttentionPresenter.cs"));
+        var platformRegistration = ReadCompositionFile("PlatformRegistration.cs");
+
+        Assert.Contains("IUsageSignalsTracker", pulseMeterWindowViewModel);
+        Assert.Contains("_usageSignalsTracker.Observe(snapshot, nowUtc)", pulseMeterWindowViewModel);
+        Assert.DoesNotContain("MinimumIdleDrainPercentDelta", pulseMeterWindowViewModel);
+        Assert.DoesNotContain("MinimumRunwayObservation", pulseMeterWindowViewModel);
+        Assert.Contains("MinimumIdleDrainPercentDelta", usageSignalsTracker);
+        Assert.Contains("MinimumRunwayObservation", usageSignalsTracker);
+        Assert.Contains("AddWeeklyLimitSignal", usageSignalsTracker);
+        Assert.Contains("AddProjectUsageSignal", usageSignalsTracker);
+        Assert.DoesNotContain("UsageSnapshot", needsAttentionPresenter);
+        Assert.DoesNotContain("AddWeeklyLimitSignal", needsAttentionPresenter);
+        Assert.DoesNotContain("AddProjectUsageSignal", needsAttentionPresenter);
+        Assert.Contains("AddSingleton<IUserIdleTimeProvider, UserIdleTimeProvider>", platformRegistration);
+    }
+
+    [Fact]
+    public void RateLimitsSection_ShowsCompactRunwayHintWithEvidenceLabel()
+    {
+        var rateLimitsSection = ReadXamlFile("src", "PulseMeter", "Slices", "RateLimits", "RateLimitsSection.xaml");
+
+        Assert.Contains("x:Name=\"RunwayHintPanel\"", rateLimitsSection);
+        Assert.Contains("Visibility=\"{Binding HasRunwayHint, Converter={StaticResource BooleanToVisibilityConverter}}\"", rateLimitsSection);
+        Assert.Contains("Text=\"{Binding RunwayHintText}\"", rateLimitsSection);
+        Assert.Contains("Text=\"{Binding RunwayEvidenceText}\"", rateLimitsSection);
+        Assert.Contains("Style=\"{DynamicResource LightEvidencePillStyle}\"", rateLimitsSection);
     }
 
     [Fact]
@@ -701,8 +962,8 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("Setter Property=\"TextAlignment\" Value=\"Center\"", glyphStyle);
         var directContentStyleUses = CountOccurrences(xaml, "Style=\"{StaticResource NavigationItemContentStyle}\"");
         var basedOnContentStyleUses = CountOccurrences(xaml, "BasedOn=\"{StaticResource NavigationItemContentStyle}\"");
-        Assert.Equal(7, directContentStyleUses + basedOnContentStyleUses);
-        Assert.Equal(7, CountOccurrences(xaml, "Style=\"{StaticResource NavigationIconCellStyle}\""));
+        Assert.Equal(8, directContentStyleUses + basedOnContentStyleUses);
+        Assert.Equal(8, CountOccurrences(xaml, "Style=\"{StaticResource NavigationIconCellStyle}\""));
     }
 
     [Fact]
@@ -1052,15 +1313,16 @@ public sealed class PulseMeterWindowLayoutTests
     public void ExpandedPulseMeter_ShowsEstimatedProjectUsageSection()
     {
         var xaml = ReadPulseMeterMarkup();
+        var projectUsageXaml = ReadXamlFile("src", "PulseMeter", "Slices", "ProjectUsage", "ProjectUsageSection.xaml");
 
         Assert.Contains("Text=\"Project usage\"", xaml);
         Assert.Contains("IsProjectUsageVisible", xaml);
         Assert.Contains("ShouldShowProjectUsage", xaml);
-        Assert.Contains("Project usage - last 30 days", xaml);
-        Assert.Contains("ProjectUsageRows", xaml);
-        Assert.Contains("Estimated from local sessions, scaled to account usage", xaml);
-        Assert.DoesNotContain("ThreadCountText", xaml);
-        Assert.DoesNotContain("RawLocalTokens", xaml);
+        Assert.Contains("Project usage - last 30 days", projectUsageXaml);
+        Assert.Contains("ProjectUsageRows", projectUsageXaml);
+        Assert.Contains("Estimated from local sessions, scaled to account usage", projectUsageXaml);
+        Assert.DoesNotContain("ThreadCountText", projectUsageXaml);
+        Assert.DoesNotContain("RawLocalTokens", projectUsageXaml);
     }
 
     [Fact]
@@ -1123,8 +1385,10 @@ public sealed class PulseMeterWindowLayoutTests
             new[] { "src", "PulseMeter", "Slices", "RateLimits", "RateLimitsSection.xaml" },
             new[] { "src", "PulseMeter", "Slices", "RateLimitsDaily", "RateLimitsDailySection.xaml" },
             new[] { "src", "PulseMeter", "Slices", "ResetCredits", "ResetCreditsSection.xaml" },
+            new[] { "src", "PulseMeter", "Slices", "NeedsAttention", "NeedsAttentionSection.xaml" },
             new[] { "src", "PulseMeter", "Slices", "AccountUsage", "AccountUsageSection.xaml" },
             new[] { "src", "PulseMeter", "Slices", "ProjectUsage", "ProjectUsageSection.xaml" },
+            new[] { "src", "PulseMeter", "Slices", "UsageAttribution", "UsageAttributionSection.xaml" },
             new[] { "src", "PulseMeter", "Slices", "DailyUsage", "DailyUsageSection.xaml" }
         };
 

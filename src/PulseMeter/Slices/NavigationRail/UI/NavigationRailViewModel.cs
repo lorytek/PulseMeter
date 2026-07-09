@@ -14,6 +14,7 @@ public sealed class NavigationRailViewModel : INotifyPropertyChanged
     private bool _isResetCreditsVisible = true;
     private bool _isAccountUsageVisible = true;
     private bool _isProjectUsageVisible = true;
+    private bool _isUsageAttributionVisible = true;
     private bool _isDailyUsageVisible = true;
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -60,6 +61,12 @@ public sealed class NavigationRailViewModel : INotifyPropertyChanged
     {
         get => _isProjectUsageVisible;
         set => SetField(ref _isProjectUsageVisible, value);
+    }
+
+    public bool IsUsageAttributionVisible
+    {
+        get => _isUsageAttributionVisible;
+        set => SetField(ref _isUsageAttributionVisible, value);
     }
 
     public bool IsDailyUsageVisible

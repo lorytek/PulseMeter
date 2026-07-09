@@ -33,6 +33,23 @@ public sealed class PulseMeterWindowViewModelHelperTests
     }
 
     [Fact]
+    public void RateLimitsDailyDisplayBuilder_BuildWarningText_DoesNotWarnWhileCurrentResetDayHasAllowance()
+    {
+        var now = new DateTimeOffset(2026, 7, 7, 10, 40, 0, TimeSpan.Zero);
+        var bucket = new RateLimitBucket
+        {
+            UsedPercent = 4,
+            WindowDurationMins = 10_080,
+            WindowLabel = "7d",
+            ResetsAtUtc = new DateTimeOffset(2026, 7, 14, 9, 0, 0, TimeSpan.Zero)
+        };
+
+        var warning = RateLimitsDailyDisplayBuilder.BuildWarningText([bucket], now);
+
+        Assert.Equal(string.Empty, warning);
+    }
+
+    [Fact]
     public void DailyUsageDisplayBuilder_BuildRows_CreatesSevenRowsAndMedianComparison()
     {
         var today = new DateOnly(2026, 7, 5);
@@ -67,6 +84,77 @@ public sealed class PulseMeterWindowViewModelHelperTests
         Assert.Equal("42.3%", rows[0].ShareText);
         Assert.Equal("12", rows[0].ThreadCountText);
         Assert.Equal(42.25, rows[0].SharePercentValue);
+    }
+
+    [Fact]
+    public void UsageAttributionPresenter_FormatsBurnAnalysisRowsAndSummary()
+    {
+        var now = new DateTimeOffset(2026, 7, 7, 12, 0, 0, TimeSpan.Zero);
+        var snapshot = new UsageAttributionSnapshot
+        {
+            Sessions =
+            [
+                new UsageAttributionSessionRow(
+                    "Implement attribution",
+                    "thread-1",
+                    "PulseMeter",
+                    @"C:\Projects\PulseMeter",
+                    900_000,
+                    1_250_000,
+                    42.25,
+                    500_000,
+                    200_000,
+                    100_000,
+                    50_000,
+                    now.AddMinutes(-18),
+                    now.AddMinutes(-12))
+            ],
+            BurnEvents =
+            [
+                new UsageAttributionBurnEvent(
+                    "Implement attribution",
+                    "thread-1",
+                    "PulseMeter",
+                    @"C:\Projects\PulseMeter",
+                    now.AddMinutes(-12),
+                    600_000,
+                    830_000,
+                    300_000,
+                    120_000,
+                    90_000,
+                    40_000)
+            ],
+            RawLocalTokens = 900_000,
+            EstimatedAttributedTokens = 1_250_000,
+            AccountWindowTokens = 3_000_000,
+            LastUpdatedUtc = now
+        };
+        var presenter = new UsageAttributionPresenter();
+
+        var sessions = presenter.BuildSessionRows(snapshot, now);
+        var burnEvents = presenter.BuildBurnEventRows(snapshot, now);
+
+        Assert.Equal("1.3M attributed across 1 local chat", presenter.SummaryText(snapshot));
+        Assert.Equal("Estimated from local chats, scaled to account usage", presenter.EvidenceText(snapshot));
+        Assert.True(presenter.HasAttribution(snapshot));
+        var session = Assert.Single(sessions);
+        Assert.Equal("Implement attribution", session.DisplayName);
+        Assert.Equal("PulseMeter", session.ProjectDisplayName);
+        Assert.Equal("1.3M", session.EstimatedTokensText);
+        Assert.Equal("42.3%", session.ShareText);
+        Assert.Equal("local raw 900.0K", session.RawLocalTokensText);
+        Assert.Equal("500.0K in / 200.0K out / 100.0K cached / 50.0K reasoning", session.BreakdownText);
+        Assert.Equal("12m ago", session.AgeText);
+        Assert.Contains("Chat id: thread-1", session.TooltipText);
+        Assert.Contains("Project: PulseMeter", session.TooltipText);
+        Assert.Contains(@"Path: C:\Projects\PulseMeter", session.TooltipText);
+
+        var burnEvent = Assert.Single(burnEvents);
+        Assert.Equal("830.0K", burnEvent.EstimatedTokensText);
+        Assert.Equal("12m ago", burnEvent.AgeText);
+        Assert.Equal("300.0K in / 120.0K out / 90.0K cached / 40.0K reasoning", burnEvent.BreakdownText);
+        Assert.Contains("Chat id: thread-1", burnEvent.TooltipText);
+        Assert.Equal("No local burn analysis yet.", presenter.EmptyStateText(UsageAttributionSnapshot.Empty));
     }
 
     [Fact]
@@ -128,6 +216,7 @@ public sealed class PulseMeterWindowViewModelHelperTests
     public void PulseMeterWindowLayoutCalculator_SanitizesAndScalesExpandedWindow()
     {
         Assert.Equal(1024, PulseMeterWindowLayoutCalculator.SanitizeExpandedWindowWidth(double.NaN));
+        Assert.Equal(720, PulseMeterWindowLayoutCalculator.SanitizeExpandedWindowWidth(1));
         Assert.Equal(1300, PulseMeterWindowLayoutCalculator.SanitizeExpandedWindowWidth(9999));
         Assert.Equal(460, PulseMeterWindowLayoutCalculator.SanitizeExpandedWindowHeight(1));
         Assert.Equal(1.0, PulseMeterWindowLayoutCalculator.CalculateExpandedLayoutScale(isExpanded: false, width: 1042, height: 712));

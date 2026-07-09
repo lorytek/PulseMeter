@@ -3,35 +3,20 @@
 $root = Split-Path -Parent $PSScriptRoot
 $artifactsRoot = Join-Path $root "artifacts"
 $project = Join-Path $root "src\PulseMeter\PulseMeter.csproj"
-$output = Join-Path $artifactsRoot "PulseMeter-win-x64"
-$exe = Join-Path $output "PulseMeter.exe"
-$launcher = Join-Path $output "launch-pulsemeter.vbs"
+$timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$output = Join-Path $artifactsRoot "PulseMeter-win-x64-$timestamp"
+$appExe = Join-Path $output "PulseMeter.exe"
+$icon = Join-Path $root "src\PulseMeter\Assets\PulseMeter.ico"
 $shortcutPath = Join-Path $root "PulseMeter.lnk"
 $desktopShortcutPath = Join-Path ([Environment]::GetFolderPath("Desktop")) "PulseMeter.lnk"
-$wscript = Join-Path $env:WINDIR "System32\wscript.exe"
-
-function Escape-VbScriptString([string]$value) {
-    return $value.Replace('"', '""')
-}
 
 function Save-PulseMeterShortcut([string]$path) {
     $shortcut = $script:shell.CreateShortcut($path)
-    $shortcut.TargetPath = $wscript
-    $shortcut.Arguments = "`"$launcher`""
+    $shortcut.TargetPath = $appExe
+    $shortcut.Arguments = ""
     $shortcut.WorkingDirectory = $output
-    $shortcut.IconLocation = "$exe,0"
+    $shortcut.IconLocation = $icon
     $shortcut.Save()
-}
-
-$resolvedArtifactsRoot = [System.IO.Path]::GetFullPath($artifactsRoot)
-$resolvedOutput = [System.IO.Path]::GetFullPath($output)
-$artifactPrefix = $resolvedArtifactsRoot.TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
-if (-not $resolvedOutput.StartsWith($artifactPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-    throw "Refusing to clean unexpected publish output path: $resolvedOutput"
-}
-
-if (Test-Path -LiteralPath $output) {
-    Remove-Item -LiteralPath $output -Recurse -Force
 }
 
 New-Item -ItemType Directory -Path $output -Force | Out-Null
@@ -41,10 +26,11 @@ dotnet publish $project `
     -r win-x64 `
     --self-contained true `
     -o $output `
+    /p:UseAppHost=true `
     /p:PublishSingleFile=true `
     /p:IncludeNativeLibrariesForSelfExtract=true `
     /p:EnableCompressionInSingleFile=true `
-    /p:UseAppHost=true `
+    /p:PublishReadyToRun=false `
     /p:DebugType=embedded `
     /p:DebugSymbols=false
 
@@ -52,28 +38,13 @@ if ($LASTEXITCODE -ne 0) {
     throw "dotnet publish failed with exit code $LASTEXITCODE"
 }
 
-if (-not (Test-Path -LiteralPath $exe)) {
-    throw "Published executable was not created: $exe"
+if (-not (Test-Path -LiteralPath $appExe)) {
+    throw "Published application executable was not created: $appExe"
 }
 
-$sidecarDll = Join-Path $output "PulseMeter.dll"
-if (Test-Path -LiteralPath $sidecarDll) {
-    throw "Single-file publish should not create a sidecar app dll: $sidecarDll"
+if (-not (Test-Path -LiteralPath $icon)) {
+    throw "PulseMeter icon was not found: $icon"
 }
-
-if (-not (Test-Path -LiteralPath $wscript)) {
-    throw "Windows Script Host was not found: $wscript"
-}
-
-$escapedOutput = Escape-VbScriptString $output
-$escapedExe = Escape-VbScriptString $exe
-$launcherContent = @"
-Set shell = CreateObject("WScript.Shell")
-shell.CurrentDirectory = "$escapedOutput"
-commandLine = """" & "$escapedExe" & """"
-shell.Run commandLine, 0, False
-"@
-Set-Content -LiteralPath $launcher -Value $launcherContent -Encoding ASCII
 
 $shell = New-Object -ComObject WScript.Shell
 Save-PulseMeterShortcut $shortcutPath
@@ -91,13 +62,11 @@ foreach ($staleShortcutPath in $staleShortcutPaths) {
     }
 }
 
-Write-Host "Published single-file executable:"
-Write-Host "  $exe"
-Write-Host "Created hidden launcher:"
-Write-Host "  $launcher"
+Write-Host "Published local self-contained app:"
+Write-Host "  $appExe"
 Write-Host "Updated shortcut:"
 Write-Host "  $shortcutPath"
 Write-Host "Updated desktop shortcut:"
 Write-Host "  $desktopShortcutPath"
 Write-Host "Shortcut target:"
-Write-Host "  $wscript `"$launcher`""
+Write-Host "  $appExe"

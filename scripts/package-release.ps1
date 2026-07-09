@@ -1,5 +1,5 @@
 ﻿param(
-    [string]$Version = "0.1.1",
+    [string]$Version = "0.2.0",
     [switch]$SkipTests,
     [switch]$FrameworkDependent
 )
@@ -76,7 +76,7 @@ Install:
 1. Extract the zip to a folder.
 2. Run PulseMeter.exe.
 
-Mock Mode works without Codex CLI, but it shows demo data only.
+Mock Mode works without Codex CLI and shows full showcase demo data, including alert states.
 
 Uninstall:
 1. Exit PulseMeter from the tray menu.
@@ -90,6 +90,11 @@ foreach ($doc in @("README.md", "PRIVACY.md", "SECURITY.md", "CHANGELOG.md", "LI
     if (Test-Path -LiteralPath $source) {
         Copy-Item -LiteralPath $source -Destination (Join-Path $output $doc) -Force
     }
+}
+
+$releaseNotes = Join-Path $root "RELEASE_NOTES_v$version.md"
+if (Test-Path -LiteralPath $releaseNotes) {
+    Copy-Item -LiteralPath $releaseNotes -Destination (Join-Path $output "RELEASE_NOTES.md") -Force
 }
 
 if (Test-Path -LiteralPath $zipPath) {

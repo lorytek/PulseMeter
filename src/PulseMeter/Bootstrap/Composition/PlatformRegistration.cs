@@ -16,6 +16,8 @@ internal static class PlatformRegistration
         services.AddSingleton<IResetCreditStateStore, ResetCreditStateStore>();
         services.AddSingleton<IPulseMeterWindowStateStore, PulseMeterWindowStateStore>();
         services.AddSingleton<IForegroundWindowService, ForegroundWindowService>();
+        services.AddSingleton<IUserIdleTimeProvider, UserIdleTimeProvider>();
+        services.AddSingleton<IClipboardService, ClipboardService>();
         services.AddSingleton<IPulseMeterTimerFactory, DispatcherPulseMeterTimerFactory>();
         services.AddSingleton<IUiDispatcher, WpfUiDispatcher>();
         services.AddSingleton<IPulseMeterWindowLifecycleCoordinator, PulseMeterWindowLifecycleCoordinator>();
