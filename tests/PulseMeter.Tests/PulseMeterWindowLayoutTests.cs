@@ -694,6 +694,20 @@ public sealed class PulseMeterWindowLayoutTests
     }
 
     [Fact]
+    public void CompactHeader_UsesSubtleQuotaUnderlinesMatchedToTheirStatusDots()
+    {
+        var xaml = ReadPulseMeterMarkup();
+        var quotaStart = xaml.IndexOf("x:Name=\"CompactQuotaSummaryItemsControl\"", StringComparison.Ordinal);
+        var controlsStart = xaml.IndexOf("x:Name=\"CompactHeaderControls\"", StringComparison.Ordinal);
+        var quotaBlock = xaml[quotaStart..controlsStart];
+
+        Assert.Contains("x:Name=\"CompactQuotaAccentLine\"", quotaBlock);
+        Assert.Contains("Height=\"1\"", quotaBlock);
+        Assert.Contains("Background=\"{Binding RingBrush}\"", quotaBlock);
+        Assert.Contains("Opacity=\"0.45\"", quotaBlock);
+    }
+
+    [Fact]
     public void CompactHeader_ReservesAnIndependentColumnForActionButtons()
     {
         var xaml = ReadPulseMeterMarkup();

@@ -86,6 +86,11 @@
                                                    FontFamily="Segoe UI"
                                                    FontSize="10.5" />
                                     </StackPanel>
+                                    <Border x:Name="CompactQuotaAccentLine"
+                                            Height="1"
+                                            Margin="0,3,0,0"
+                                            Background="{Binding RingBrush}"
+                                            Opacity="0.45" />
                                 </StackPanel>
                             </StackPanel>
                         </DataTemplate>
