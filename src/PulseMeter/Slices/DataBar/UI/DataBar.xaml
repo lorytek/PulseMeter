@@ -19,61 +19,81 @@
             </Style>
         </Viewbox.Style>
         <Grid x:Name="CompactHeaderGrid"
-              Width="334"
-              Height="40">
+              Width="382"
+              Height="52">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="93" />
             </Grid.ColumnDefinitions>
 
-            <ItemsControl x:Name="CompactQuotaSummaryItemsControl"
-                          Grid.Row="0"
-                          Grid.Column="0"
-                          VerticalAlignment="Center"
-                          HorizontalAlignment="Left"
-                          AlternationCount="10"
-                          ItemsSource="{Binding CompactQuotaRows}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal" />
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <StackPanel Orientation="Horizontal"
-                                    VerticalAlignment="Center">
-                            <TextBlock x:Name="CompactQuotaSeparatorPipe"
-                                       Margin="12,0"
-                                       Text="|"
-                                       Foreground="#9CA3AF"
-                                       FontFamily="Segoe UI"
-                                       FontSize="13"
-                                       VerticalAlignment="Center"
-                                       Visibility="{Binding ShowCompactSeparator, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                            <TextBlock Text="{Binding Label}"
-                                       Foreground="#374151"
-                                       FontFamily="Segoe UI"
-                                       FontSize="13"
-                                       VerticalAlignment="Center" />
-                            <Ellipse Width="6"
-                                     Height="6"
-                                     Margin="5,1,5,0"
-                                     VerticalAlignment="Center"
-                                     Fill="{Binding RingBrush}" />
-                            <TextBlock Text="{Binding CompactRemainingPercentText}"
-                                       Foreground="#374151"
-                                       FontFamily="Segoe UI"
-                                       FontSize="13"
-                                       VerticalAlignment="Center" />
-                        </StackPanel>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+            <Viewbox x:Name="CompactQuotaScaleBox"
+                     Grid.Row="0"
+                     Grid.Column="0"
+                     Stretch="Uniform"
+                     StretchDirection="DownOnly"
+                     VerticalAlignment="Center">
+                <ItemsControl x:Name="CompactQuotaSummaryItemsControl"
+                              VerticalAlignment="Center"
+                              HorizontalAlignment="Left"
+                              AlternationCount="10"
+                              ItemsSource="{Binding CompactQuotaRows}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal"
+                                        VerticalAlignment="Center">
+                                <Border x:Name="CompactQuotaSeparatorLine"
+                                        Width="1"
+                                        Height="34"
+                                        Margin="12,0"
+                                        VerticalAlignment="Center"
+                                        Background="#E5E7EB"
+                                        Visibility="{Binding ShowCompactSeparator, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Label}"
+                                                   Foreground="#374151"
+                                                   FontFamily="Segoe UI"
+                                                   FontSize="13"
+                                                   VerticalAlignment="Center" />
+                                        <Ellipse Width="6"
+                                                 Height="6"
+                                                 Margin="5,1,5,0"
+                                                 VerticalAlignment="Center"
+                                                 Fill="{Binding RingBrush}" />
+                                        <TextBlock Text="{Binding CompactRemainingPercentText}"
+                                                   Foreground="#374151"
+                                                   FontFamily="Segoe UI"
+                                                   FontSize="13"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <StackPanel Margin="0,3,0,0"
+                                                Orientation="Horizontal">
+                                        <TextBlock Text="Resets "
+                                                   Foreground="#6B7280"
+                                                   FontFamily="Segoe UI"
+                                                   FontSize="10.5" />
+                                        <TextBlock Text="{Binding ResetDisplayText}"
+                                                   Foreground="#6B7280"
+                                                   FontFamily="Segoe UI"
+                                                   FontSize="10.5" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Viewbox>
 
-            <StackPanel x:Name="CompactHeaderControls"
+            <StackPanel x:Name="CompactStatusIndicator"
                         Grid.Row="0"
                         Grid.Column="1"
                         Margin="12,0,0,0"
@@ -89,9 +109,17 @@
                            Foreground="#16A34A"
                            FontSize="13"
                            VerticalAlignment="Center" />
+            </StackPanel>
+
+            <StackPanel x:Name="CompactHeaderControls"
+                        Grid.Row="0"
+                        Grid.Column="2"
+                        Margin="12,0,0,0"
+                        Orientation="Horizontal"
+                        VerticalAlignment="Center">
                 <Border Width="1"
-                        Height="28"
-                        Margin="12,0"
+                        Height="32"
+                        Margin="0,0,12,0"
                         Background="#E5E7EB" />
                 <Button Style="{DynamicResource CompactIconButtonStyle}"
                         ToolTip="{Binding ExpandCollapseTooltip}"

@@ -83,9 +83,10 @@ internal static class QuotaDisplayBuilder
 
         if (resetAtUtc is DateTimeOffset resetAt)
         {
+            var localReset = resetAt.ToLocalTime();
             return IsShortWindow(bucket)
-                ? resetAt.ToLocalTime().ToString("h:mm tt", CultureInfo.InvariantCulture)
-                : CountdownFormatter.FormatResetCountdown(resetAt.ToUnixTimeSeconds(), now);
+                ? localReset.ToString("h:mm tt", CultureInfo.InvariantCulture)
+                : localReset.ToString("ddd h:mm tt", CultureInfo.InvariantCulture);
         }
 
         return bucket.ResetCountdown == "reset unknown" ? "unknown" : bucket.ResetCountdown;

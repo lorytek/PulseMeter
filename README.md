@@ -47,7 +47,7 @@ Want to help share PulseMeter? See [DISCOVERABILITY.md](DISCOVERABILITY.md).
 
 ## Quick Start
 
-1. Download `PulseMeter-0.2.0-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
+1. Download `PulseMeter-0.2.1-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
 2. Extract the zip to a normal folder, for example `Documents\PulseMeter`.
 3. Run `PulseMeter.exe`.
 4. If Windows shows an unknown-publisher or SmartScreen warning, choose `More info`, then `Run anyway`.
@@ -70,6 +70,7 @@ That warning is expected for this build. It is still a trust decision: only run 
 ## What It Shows
 
 - Remaining 5-hour and weekly Codex rate limits.
+- Compact tray reset times: local time for 5-hour limits and weekday plus time for weekly limits.
 - Reset-credit count and expiry dates when available.
 - Rate-limit daily allowance chunks.
 - Account usage summary and recent daily usage.

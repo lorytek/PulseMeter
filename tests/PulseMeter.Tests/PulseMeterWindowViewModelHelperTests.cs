@@ -224,6 +224,15 @@ public sealed class PulseMeterWindowViewModelHelperTests
         Assert.Equal(0.72, PulseMeterWindowLayoutCalculator.CalculateExpandedLayoutScale(isExpanded: true, width: 720, height: 460));
     }
 
+    [Fact]
+    public void CompactWindowMinimumWidth_FitsTheFixedTrayContentAndSurfaceChrome()
+    {
+        Assert.Equal(410, PulseMeterWindowLayoutCalculator.CompactWindowWidth);
+        Assert.Equal(410, PulseMeterWindowLayoutCalculator.CompactWindowMinWidth);
+        Assert.Equal(66, PulseMeterWindowLayoutCalculator.CompactWindowHeight);
+        Assert.Equal(66, PulseMeterWindowLayoutCalculator.CompactWindowMinHeight);
+    }
+
     private static DailyUsageBucket Bucket(DateOnly date, long tokens)
     {
         return new DailyUsageBucket

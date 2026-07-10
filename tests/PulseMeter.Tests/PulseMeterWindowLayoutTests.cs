@@ -632,34 +632,89 @@ public sealed class PulseMeterWindowLayoutTests
     {
         var xaml = ReadPulseMeterMarkup();
         var controlsIndex = xaml.IndexOf("x:Name=\"CompactHeaderControls\"", StringComparison.Ordinal);
+        var quotaScaleBoxStart = xaml.IndexOf("x:Name=\"CompactQuotaScaleBox\"", StringComparison.Ordinal);
         var quotaBlockStart = xaml.IndexOf("x:Name=\"CompactQuotaSummaryItemsControl\"", StringComparison.Ordinal);
 
         Assert.Contains("x:Name=\"CompactHeaderGrid\"", xaml);
-        Assert.Contains("Width=\"334\"", xaml);
+        Assert.Contains("Width=\"382\"", xaml);
         Assert.NotEqual(-1, controlsIndex);
+        Assert.NotEqual(-1, quotaScaleBoxStart);
         Assert.NotEqual(-1, quotaBlockStart);
 
         var controlsBlock = xaml[controlsIndex..Math.Min(xaml.Length, controlsIndex + 300)];
         Assert.Contains("Grid.Row=\"0\"", controlsBlock);
 
-        var quotaBlock = xaml[quotaBlockStart..Math.Min(xaml.Length, quotaBlockStart + 3_000)];
+        var quotaBlock = xaml[quotaBlockStart..controlsIndex];
         Assert.Contains("ItemsSource=\"{Binding CompactQuotaRows}\"", quotaBlock);
         Assert.Contains("<Ellipse", quotaBlock);
         Assert.Contains("Fill=\"{Binding RingBrush}\"", quotaBlock);
         Assert.Contains("Text=\"{Binding CompactRemainingPercentText}\"", quotaBlock);
-        Assert.Contains("x:Name=\"CompactQuotaSeparatorPipe\"", quotaBlock);
-        Assert.Contains("Text=\"|\"", quotaBlock);
+        Assert.Contains("x:Name=\"CompactQuotaSeparatorLine\"", quotaBlock);
         Assert.Contains("Margin=\"12,0\"", quotaBlock);
         Assert.Contains("Visibility=\"{Binding ShowCompactSeparator", quotaBlock);
         Assert.DoesNotContain("AlternationIndex", quotaBlock);
-        Assert.Contains("Grid.Row=\"0\"", quotaBlock);
-        Assert.Contains("Grid.Column=\"0\"", quotaBlock);
         Assert.Contains("HorizontalAlignment=\"Left\"", quotaBlock);
-        Assert.DoesNotContain("ResetDisplayText", quotaBlock);
+        Assert.Contains("Text=\"{Binding ResetDisplayText}\"", quotaBlock);
+
+        var quotaScaleBox = xaml[quotaScaleBoxStart..quotaBlockStart];
+        Assert.Contains("Grid.Row=\"0\"", quotaScaleBox);
+        Assert.Contains("Grid.Column=\"0\"", quotaScaleBox);
     }
 
     [Fact]
-    public void CompactHeader_UsesShortHeightAndPipeSeparatorBetweenQuotaRows()
+    public void CompactHeader_ScalesQuotaSummaryBeforeClippingItsText()
+    {
+        var xaml = ReadPulseMeterMarkup();
+        var quotaScaleBoxStart = xaml.IndexOf("x:Name=\"CompactQuotaScaleBox\"", StringComparison.Ordinal);
+        var quotaItemsStart = xaml.IndexOf("x:Name=\"CompactQuotaSummaryItemsControl\"", StringComparison.Ordinal);
+
+        Assert.NotEqual(-1, quotaScaleBoxStart);
+        Assert.True(quotaScaleBoxStart < quotaItemsStart);
+
+        var quotaScaleBox = xaml[quotaScaleBoxStart..quotaItemsStart];
+        Assert.Contains("Stretch=\"Uniform\"", quotaScaleBox);
+        Assert.Contains("StretchDirection=\"DownOnly\"", quotaScaleBox);
+    }
+
+    [Fact]
+    public void CompactHeader_ShowsResetDetailsOnASecondLineWithSubtleSeparators()
+    {
+        var xaml = ReadPulseMeterMarkup();
+        var compactStart = xaml.IndexOf("x:Name=\"CompactHeaderGrid\"", StringComparison.Ordinal);
+        var quotaStart = xaml.IndexOf("x:Name=\"CompactQuotaSummaryItemsControl\"", StringComparison.Ordinal);
+        var controlsStart = xaml.IndexOf("x:Name=\"CompactHeaderControls\"", StringComparison.Ordinal);
+
+        var compactBlock = xaml[compactStart..quotaStart];
+        var quotaBlock = xaml[quotaStart..controlsStart];
+
+        Assert.Contains("Height=\"52\"", compactBlock);
+        Assert.Contains("Text=\"{Binding ResetDisplayText}\"", quotaBlock);
+        Assert.Contains("x:Name=\"CompactQuotaSeparatorLine\"", quotaBlock);
+        Assert.DoesNotContain("Text=\"|\"", quotaBlock);
+    }
+
+    [Fact]
+    public void CompactHeader_ReservesAnIndependentColumnForActionButtons()
+    {
+        var xaml = ReadPulseMeterMarkup();
+        var gridStart = xaml.IndexOf("x:Name=\"CompactHeaderGrid\"", StringComparison.Ordinal);
+        var quotaStart = xaml.IndexOf("x:Name=\"CompactQuotaScaleBox\"", StringComparison.Ordinal);
+        var statusStart = xaml.IndexOf("x:Name=\"CompactStatusIndicator\"", StringComparison.Ordinal);
+        var controlsStart = xaml.IndexOf("x:Name=\"CompactHeaderControls\"", StringComparison.Ordinal);
+
+        Assert.NotEqual(-1, statusStart);
+
+        var columnsBlock = xaml[gridStart..quotaStart];
+        var statusBlock = xaml[statusStart..controlsStart];
+        var controlsBlock = xaml[controlsStart..];
+
+        Assert.Contains("<ColumnDefinition Width=\"93\" />", columnsBlock);
+        Assert.Contains("Grid.Column=\"1\"", statusBlock);
+        Assert.Contains("Grid.Column=\"2\"", controlsBlock);
+    }
+
+    [Fact]
+    public void CompactHeader_UsesCompactHeightAndLineSeparatorBetweenQuotaRows()
     {
         var xaml = ReadPulseMeterMarkup();
         var surfaceStart = xaml.IndexOf("x:Name=\"WindowSurface\"", StringComparison.Ordinal);
@@ -677,11 +732,10 @@ public sealed class PulseMeterWindowLayoutTests
         var quotaBlock = xaml[quotaStart..controlsStart];
 
         Assert.Contains("<Setter Property=\"Padding\" Value=\"14,6,12,6\" />", surfaceBlock);
-        Assert.Contains("Height=\"40\"", compactBlock);
-        Assert.Contains("Width=\"334\"", compactBlock);
-        Assert.Contains("x:Name=\"CompactQuotaSeparatorPipe\"", quotaBlock);
-        Assert.Contains("Text=\"|\"", quotaBlock);
-        Assert.DoesNotContain("x:Name=\"CompactQuotaSeparatorDot\"", quotaBlock);
+        Assert.Contains("Height=\"52\"", compactBlock);
+        Assert.Contains("Width=\"382\"", compactBlock);
+        Assert.Contains("x:Name=\"CompactQuotaSeparatorLine\"", quotaBlock);
+        Assert.DoesNotContain("Text=\"|\"", quotaBlock);
     }
 
     [Fact]

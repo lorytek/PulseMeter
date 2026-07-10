@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1
+
+- Redesigned the compact tray to show each limit and its reset time in a clear two-line group.
+- Shows local reset time for 5-hour limits and weekday plus time for weekly limits.
+- Keeps tray action buttons visible with a dedicated action column at all compact statuses.
+- Prevents compact quota text from clipping when usage or sync labels are longer.
+
 ## 0.2.0
 
 - Added Burn Analysis for top local chats by estimated token burn and largest token-burn events.

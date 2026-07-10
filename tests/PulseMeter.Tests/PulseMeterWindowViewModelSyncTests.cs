@@ -456,10 +456,10 @@ public sealed class PulseMeterWindowViewModelSyncTests
     {
         var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
 
-        Assert.Equal(360, viewModel.WindowWidth);
-        Assert.Equal(340, viewModel.WindowMinWidth);
-        Assert.Equal(54, viewModel.WindowHeight);
-        Assert.Equal(54, viewModel.WindowMinHeight);
+        Assert.Equal(410, viewModel.WindowWidth);
+        Assert.Equal(410, viewModel.WindowMinWidth);
+        Assert.Equal(66, viewModel.WindowHeight);
+        Assert.Equal(66, viewModel.WindowMinHeight);
 
         viewModel.ToggleExpanded();
 
@@ -477,8 +477,8 @@ public sealed class PulseMeterWindowViewModelSyncTests
             windowState: new PulseMeterWindowState(IsExpanded: true, Width: 1040, Height: 1200));
 
         Assert.False(viewModel.IsExpanded);
-        Assert.Equal(360, viewModel.WindowWidth);
-        Assert.Equal(54, viewModel.WindowHeight);
+        Assert.Equal(410, viewModel.WindowWidth);
+        Assert.Equal(66, viewModel.WindowHeight);
 
         viewModel.ToggleExpanded();
 
@@ -494,8 +494,8 @@ public sealed class PulseMeterWindowViewModelSyncTests
             windowState: new PulseMeterWindowState(IsExpanded: true, Width: 1024, Height: 1040));
 
         Assert.False(viewModel.IsExpanded);
-        Assert.Equal(360, viewModel.WindowWidth);
-        Assert.Equal(54, viewModel.WindowHeight);
+        Assert.Equal(410, viewModel.WindowWidth);
+        Assert.Equal(66, viewModel.WindowHeight);
 
         viewModel.ToggleExpanded();
 
@@ -523,8 +523,8 @@ public sealed class PulseMeterWindowViewModelSyncTests
 
         viewModel.RememberWindowSize(1100, 1200);
 
-        Assert.Equal(360, viewModel.WindowWidth);
-        Assert.Equal(54, viewModel.WindowHeight);
+        Assert.Equal(410, viewModel.WindowWidth);
+        Assert.Equal(66, viewModel.WindowHeight);
 
         viewModel.ToggleExpanded();
         viewModel.RememberWindowSize(1100, 1200);
