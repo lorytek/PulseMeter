@@ -11,7 +11,7 @@ PulseMeter is not affiliated with OpenAI.
 
 ## Download the App
 
-[Download PulseMeter 0.2.0 for Windows](https://github.com/lorytek/PulseMeter/releases/latest/download/PulseMeter-0.2.0-win-x64-portable.zip), extract the ZIP, and run `PulseMeter.exe`.
+[Download PulseMeter 0.2.1 for Windows](https://github.com/lorytek/PulseMeter/releases/latest/download/PulseMeter-0.2.1-win-x64-portable.zip), extract the ZIP, and run `PulseMeter.exe`.
 
 - SHA-256: updated on each GitHub release asset.
 - Windows 10 or Windows 11, 64-bit.
