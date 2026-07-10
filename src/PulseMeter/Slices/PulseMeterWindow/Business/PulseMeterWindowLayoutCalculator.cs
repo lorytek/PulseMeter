@@ -4,10 +4,12 @@ namespace PulseMeter.Slices.PulseMeterWindow.Business;
 
 internal static class PulseMeterWindowLayoutCalculator
 {
-    public const double CompactWindowWidth = 360;
-    public const double CompactWindowMinWidth = 340;
-    public const double CompactWindowHeight = 54;
-    public const double CompactWindowMinHeight = 54;
+    // The compact data bar is 382px wide. Add the window surface's 26px horizontal
+    // padding and 2px border so both reset labels and the fixed controls remain readable.
+    public const double CompactWindowWidth = 410;
+    public const double CompactWindowMinWidth = 410;
+    public const double CompactWindowHeight = 66;
+    public const double CompactWindowMinHeight = 66;
     public const double DefaultExpandedWindowWidth = 1024;
     public const double DefaultExpandedWindowHeight = 712;
     public const double NormalExpandedWindowWidth = 1042;

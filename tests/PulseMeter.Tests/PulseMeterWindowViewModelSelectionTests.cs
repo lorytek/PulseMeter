@@ -69,6 +69,44 @@ public sealed class PulseMeterWindowViewModelSelectionTests
     }
 
     [Fact]
+    public void QuotaRows_ShowResetHourForFiveHourAndDayForWeeklyWindow()
+    {
+        var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
+        var fiveHourResetLocal = new DateTimeOffset(
+            2026,
+            7,
+            7,
+            19,
+            28,
+            0,
+            TimeZoneInfo.Local.GetUtcOffset(new DateTime(2026, 7, 7, 19, 28, 0)));
+        var weeklyResetLocal = new DateTimeOffset(
+            2026,
+            7,
+            7,
+            9,
+            15,
+            0,
+            TimeZoneInfo.Local.GetUtcOffset(new DateTime(2026, 7, 7, 9, 15, 0)));
+
+        viewModel.ApplySnapshot(new UsageSnapshot
+        {
+            Buckets =
+            [
+                Bucket("codex", "General", "5h", 45, resetsAtUtc: fiveHourResetLocal.ToUniversalTime(), windowDurationMins: 300),
+                Bucket("codex", "General", "7d", 24, resetsAtUtc: weeklyResetLocal.ToUniversalTime(), windowDurationMins: 10_080)
+            ],
+            Source = "AppServer",
+            SyncStatus = SyncStatus.Live,
+            LastUpdatedUtc = DateTimeOffset.UtcNow
+        });
+
+        Assert.Equal(
+            ["7:28 PM", "Tue 9:15 AM"],
+            viewModel.CompactQuotaRows.Select(row => row.ResetDisplayText));
+    }
+
+    [Fact]
     public void CompactHeader_UsesPulseMeterTitleWithRows()
     {
         var viewModel = new PulseMeterWindowViewModel(new StubUsageService());

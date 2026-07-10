@@ -126,17 +126,11 @@ public sealed class ReleasePackagingTests
     }
 
     [Fact]
-    public void Version020ReleaseDocs_DescribeBurnAnalysisAndAttentionSignals()
+    public void Version020ReleaseNotes_DescribeBurnAnalysisAndAttentionSignals()
     {
-        var project = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "PulseMeter.csproj"));
-        var packageScript = File.ReadAllText(FindWorkspaceFile("scripts", "package-release.ps1"));
-        var checklist = File.ReadAllText(FindWorkspaceFile("RELEASE_CHECKLIST.md"));
         var changelog = File.ReadAllText(FindWorkspaceFile("CHANGELOG.md"));
         var releaseNotes = File.ReadAllText(FindWorkspaceFile("RELEASE_NOTES_v0.2.0.md"));
 
-        Assert.Contains("<Version>0.2.0</Version>", project);
-        Assert.Contains("[string]$Version = \"0.2.0\"", packageScript);
-        Assert.Contains("PulseMeter-0.2.0-win-x64-portable.zip", checklist);
         Assert.Contains("## 0.2.0", changelog);
         Assert.Contains("Burn Analysis", changelog);
         Assert.Contains("Needs Attention", changelog);
@@ -144,6 +138,25 @@ public sealed class ReleasePackagingTests
         Assert.Contains("top local chats by estimated token burn", releaseNotes);
         Assert.Contains("Largest burn events", releaseNotes);
         Assert.Contains("It does not parse or render Codex prompt/message bodies.", releaseNotes);
+        Assert.Contains("Apache License 2.0", releaseNotes);
+    }
+
+    [Fact]
+    public void Version021ReleaseDocs_DescribeCompactTrayResetDetails()
+    {
+        var project = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "PulseMeter.csproj"));
+        var packageScript = File.ReadAllText(FindWorkspaceFile("scripts", "package-release.ps1"));
+        var checklist = File.ReadAllText(FindWorkspaceFile("RELEASE_CHECKLIST.md"));
+        var changelog = File.ReadAllText(FindWorkspaceFile("CHANGELOG.md"));
+        var releaseNotes = File.ReadAllText(FindWorkspaceFile("RELEASE_NOTES_v0.2.1.md"));
+
+        Assert.Contains("<Version>0.2.1</Version>", project);
+        Assert.Contains("[string]$Version = \"0.2.1\"", packageScript);
+        Assert.Contains("PulseMeter-0.2.1-win-x64-portable.zip", checklist);
+        Assert.Contains("## 0.2.1", changelog);
+        Assert.Contains("PulseMeter 0.2.1", releaseNotes);
+        Assert.Contains("5-hour limit shows its local reset hour", releaseNotes);
+        Assert.Contains("weekly limit shows its reset weekday and local time", releaseNotes);
         Assert.Contains("Apache License 2.0", releaseNotes);
     }
 
