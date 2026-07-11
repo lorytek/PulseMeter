@@ -5,7 +5,17 @@ namespace PulseMeter.Platform.Persistence;
 
 public sealed record PulseMeterAppSettings(
     int AutoSyncSeconds = 90,
-    bool IsAlwaysOnTop = false);
+    bool IsAlwaysOnTop = false,
+    DashboardVisibilitySettings? DashboardVisibility = null);
+
+public sealed record DashboardVisibilitySettings(
+    bool RateLimits = true,
+    bool WeeklyPace = true,
+    bool ResetCredits = true,
+    bool AccountUsage = true,
+    bool ProjectUsage = true,
+    bool BurnAnalysis = true,
+    bool DailyUsage = true);
 
 public sealed record BudgetAlertSettings(
     bool IsEnabled = true,

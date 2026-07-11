@@ -50,6 +50,17 @@ public sealed class PublishScriptTests
     }
 
     [Fact]
+    public void PublishLocal_UpdatesExistingPinnedTaskbarShortcut()
+    {
+        var script = File.ReadAllText(FindWorkspaceFile("scripts", "publish-local.ps1"));
+
+        Assert.Contains("User Pinned\\TaskBar\\PulseMeter.lnk", script);
+        Assert.Contains("if (Test-Path -LiteralPath $taskbarShortcutPath)", script);
+        Assert.Contains("Save-PulseMeterShortcut $taskbarShortcutPath", script);
+        Assert.Contains("PulseMeter is not pinned to the taskbar", script);
+    }
+
+    [Fact]
     public void PulseMeterProject_IsWindowsExeSoDirectShortcutDoesNotOpenConsole()
     {
         var project = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "PulseMeter.csproj"));

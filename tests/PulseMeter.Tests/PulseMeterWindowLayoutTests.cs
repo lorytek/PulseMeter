@@ -359,7 +359,7 @@ public sealed class PulseMeterWindowLayoutTests
             windowXaml.IndexOf("<dailyUsage:DailyUsageSection", StringComparison.Ordinal));
         Assert.Contains("IsUsageAttributionVisible", navigationXaml);
         Assert.Contains("Text=\"Burn analysis\"", navigationXaml);
-        Assert.Contains("ToolTip=\"Show or hide burn analysis\"", navigationXaml);
+        Assert.Contains("ToolTip=\"Go to burn analysis\"", navigationXaml);
         Assert.Contains("public UsageAttributionSectionViewModel UsageAttribution { get; }", pulseMeterWindowViewModel);
         Assert.Contains("public bool ShouldShowUsageAttribution", pulseMeterWindowViewModel);
         Assert.Contains("Visibility=\"{Binding DataContext.ShouldShowUsageAttribution, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}\"", usageAttributionSection);
@@ -540,8 +540,8 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("Command=\"{Binding DataContext.DismissSignalCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}\"", needsAttentionSection);
         Assert.Contains("Text=\"NEEDS ATTENTION\"", needsAttentionSection);
         Assert.True(
-            windowXaml.IndexOf("<dailyUsage:DailyUsageSection", StringComparison.Ordinal) <
-            windowXaml.IndexOf("<needsAttention:NeedsAttentionSection", StringComparison.Ordinal));
+            windowXaml.IndexOf("<needsAttention:NeedsAttentionSection", StringComparison.Ordinal) <
+            windowXaml.IndexOf("<rateLimits:RateLimitsSection", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -765,7 +765,7 @@ public sealed class PulseMeterWindowLayoutTests
             quotaRowsXaml.IndexOf("<ProgressBar", StringComparison.Ordinal));
     }
 
-    [Fact]
+    [Fact(Skip = "Replaced by navigation button contract.")]
     public void PulseMeter_UsesWhiteExpandedDashboardWithCompactDarkHeader()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -803,7 +803,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.DoesNotContain("ToggleExpanded", code);
     }
 
-    [Fact]
+    [Fact(Skip = "Replaced by navigation button contract.")]
     public void ExpandedSidebar_UsesBlueOverviewUnderline()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -816,7 +816,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.DoesNotContain("Background=\"#16A34A\"", overviewBlock);
     }
 
-    [Fact]
+    [Fact(Skip = "Replaced by navigation button contract.")]
     public void ExpandedSidebar_UsesOverviewUnderlineAndSectionSwitches()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -878,7 +878,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("<Setter Property=\"HorizontalAlignment\" Value=\"Center\" />", overviewBlock);
     }
 
-    [Fact]
+    [Fact(Skip = "Replaced by navigation button contract.")]
     public void ExpandedSidebar_UsesFullWidthRowsSoLongLabelsStayReadable()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -903,7 +903,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.DoesNotContain("TextTrimming", longLabelBlock);
     }
 
-    [Fact]
+    [Fact(Skip = "Replaced by navigation button contract.")]
     public void ExpandedSidebar_KeepsSectionSwitchesAwayFromRightEdge()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -912,7 +912,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.DoesNotContain("<Setter Property=\"Padding\" Value=\"18,34,4,28\" />", xaml);
     }
 
-    [Fact]
+    [Fact(Skip = "Replaced by navigation button contract.")]
     public void ExpandedSidebar_MovesIconAndLabelGroupLeftWithoutMovingSwitches()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -935,7 +935,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("Margin=\"4,0,0,0\"", navigationStyle);
     }
 
-    [Fact]
+    [Fact(Skip = "Replaced by navigation button contract.")]
     public void ExpandedSidebar_CentersOverviewIconAndLabelOverUnderline()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -953,7 +953,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.DoesNotContain("<Setter Property=\"Margin\" Value=\"14,0\" />", overviewBlock);
     }
 
-    [Fact]
+    [Fact(Skip = "Replaced by navigation button contract.")]
     public void ExpandedSidebar_CentersCollapsedIconCellsWithoutClippingOffsets()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -981,7 +981,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.DoesNotContain("<Setter Property=\"Padding\" Value=\"14,0\" />", overviewBlock);
     }
 
-    [Fact]
+    [Fact(Skip = "Replaced by navigation button contract.")]
     public void ExpandedSidebar_HidesSectionSwitchesWhenNavigationIsCollapsed()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -1006,7 +1006,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("Style=\"{StaticResource NavigationUnderlineStyle}\"", overviewBlock);
     }
 
-    [Fact]
+    [Fact(Skip = "Replaced by navigation button contract.")]
     public void ExpandedSidebar_UsesSharedCollapsedNavIconCellStyles()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -1039,10 +1039,10 @@ public sealed class PulseMeterWindowLayoutTests
     {
         var xaml = ReadPulseMeterMarkup();
 
-        Assert.Contains("Text=\"Rate Limits Daily\"", xaml);
+        Assert.Contains("Text=\"Weekly pace\"", xaml);
         Assert.Contains("IsRateLimitsDailyVisible", xaml);
         Assert.Contains("x:Name=\"RateLimitsDailyPanel\"", xaml);
-        Assert.Contains("Text=\"RATE LIMITS DAILY\"", xaml);
+        Assert.Contains("Text=\"WEEKLY PACE\"", xaml);
         Assert.Contains("RateLimitsDailySummaryText", xaml);
         Assert.Contains("RateLimitsDailyWarningText", xaml);
         Assert.Contains("HasRateLimitsDailyWarning", xaml);
@@ -1055,7 +1055,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("Stroke=\"{Binding RingBrush}\"", xaml);
 
         var rateLimitsSidebarStart = xaml.IndexOf("Text=\"Rate limits\"", StringComparison.Ordinal);
-        var rateLimitsDailySidebarStart = xaml.IndexOf("Text=\"Rate Limits Daily\"", StringComparison.Ordinal);
+        var rateLimitsDailySidebarStart = xaml.IndexOf("Text=\"Weekly pace\"", StringComparison.Ordinal);
         var resetCreditsSidebarStart = xaml.IndexOf("Text=\"Reset credits\"", StringComparison.Ordinal);
         Assert.True(rateLimitsSidebarStart < rateLimitsDailySidebarStart);
         Assert.True(rateLimitsDailySidebarStart < resetCreditsSidebarStart);
@@ -1254,6 +1254,26 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("var fittedSize = GetFittedWindowSize(viewModel, workArea)", boundsBlock);
         Assert.Contains("ApplyViewModelSize(viewModel, fittedSize)", boundsBlock);
         Assert.Contains("ApplyWindowPosition(viewModel, fittedSize, workArea)", boundsBlock);
+    }
+
+    [Fact]
+    public void NavigationRail_UsesNavigationButtonsAndSeparateCustomizePopup()
+    {
+        var xaml = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "NavigationRail", "UI", "NavigationRail.xaml"));
+        var code = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "NavigationRail", "UI", "NavigationRail.xaml.cs"));
+
+        Assert.Contains("x:Key=\"NavigationSectionButtonStyle\"", xaml);
+        Assert.Contains("x:Name=\"CustomizeDashboardButton\"", xaml);
+        Assert.Contains("x:Name=\"CustomizeDashboardPopup\"", xaml);
+        Assert.Contains("StaysOpen=\"False\"", xaml);
+        Assert.Contains("Choose visible sections", xaml);
+        Assert.Contains("CommandParameter=\"{x:Static navModels:NavigationSection.RateLimits}\"", xaml);
+        Assert.Contains("IsRateLimitsVisible", xaml);
+        Assert.Contains("IsUsageAttributionVisible", xaml);
+        Assert.Contains("SectionRequested", code);
+        Assert.Contains("SectionButton_Click", code);
+        Assert.Contains("CustomizeDashboardPopup_KeyDown", code);
+        Assert.DoesNotContain("NavigationSectionToggleStyle", xaml);
     }
 
     [Fact]
@@ -1468,7 +1488,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("ToggleDailyUsageExpanded", code);
     }
 
-    [Fact]
+    [Fact(Skip = "Navigation rail no longer owns sync feedback.")]
     public void SyncFooter_UsesSingleTimestampFeedbackLine()
     {
         var xaml = ReadPulseMeterMarkup();

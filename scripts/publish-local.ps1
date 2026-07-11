@@ -9,6 +9,7 @@ $appExe = Join-Path $output "PulseMeter.exe"
 $icon = Join-Path $root "src\PulseMeter\Assets\PulseMeter.ico"
 $shortcutPath = Join-Path $root "PulseMeter.lnk"
 $desktopShortcutPath = Join-Path ([Environment]::GetFolderPath("Desktop")) "PulseMeter.lnk"
+$taskbarShortcutPath = Join-Path $env:APPDATA "Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\PulseMeter.lnk"
 
 function Save-PulseMeterShortcut([string]$path) {
     $shortcut = $script:shell.CreateShortcut($path)
@@ -49,6 +50,14 @@ if (-not (Test-Path -LiteralPath $icon)) {
 $shell = New-Object -ComObject WScript.Shell
 Save-PulseMeterShortcut $shortcutPath
 Save-PulseMeterShortcut $desktopShortcutPath
+if (Test-Path -LiteralPath $taskbarShortcutPath) {
+    Save-PulseMeterShortcut $taskbarShortcutPath
+    Write-Host "Updated existing taskbar shortcut:"
+    Write-Host "  $taskbarShortcutPath"
+}
+else {
+    Write-Host "PulseMeter is not pinned to the taskbar; no taskbar shortcut was created."
+}
 
 $staleShortcutName = [string]::Concat("Codex ", "Usage ", [char]72, [char]85, [char]68, ".lnk")
 $staleShortcutPaths = @(

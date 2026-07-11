@@ -127,7 +127,14 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(PulseMeterWindowViewModel.AutoSyncSeconds)
-            or nameof(PulseMeterWindowViewModel.IsAlwaysOnTop))
+            or nameof(PulseMeterWindowViewModel.IsAlwaysOnTop)
+            or nameof(PulseMeterWindowViewModel.IsRateLimitsVisible)
+            or nameof(PulseMeterWindowViewModel.IsRateLimitsDailyVisible)
+            or nameof(PulseMeterWindowViewModel.IsResetCreditsVisible)
+            or nameof(PulseMeterWindowViewModel.IsAccountUsageVisible)
+            or nameof(PulseMeterWindowViewModel.IsProjectUsageVisible)
+            or nameof(PulseMeterWindowViewModel.IsUsageAttributionVisible)
+            or nameof(PulseMeterWindowViewModel.IsDailyUsageVisible))
         {
             _appSettingsStore.Save(CaptureAppSettings(_viewModel));
         }
@@ -143,7 +150,8 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
     {
         return new PulseMeterAppSettings(
             viewModel.AutoSyncSeconds,
-            viewModel.IsAlwaysOnTop);
+            viewModel.IsAlwaysOnTop,
+            viewModel.NavigationRail.CaptureVisibility());
     }
 
     private void UpdateForegroundVisibility()

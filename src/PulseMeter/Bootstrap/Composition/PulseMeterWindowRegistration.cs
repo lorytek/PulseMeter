@@ -31,6 +31,8 @@ internal static class PulseMeterWindowRegistration
             var windowStateStore = sp.GetRequiredService<IPulseMeterWindowStateStore>();
             var appSettings = appSettingsStore.Load();
             var autoSyncSeconds = appSettings?.AutoSyncSeconds ?? (int)DefaultAutoRefreshInterval.TotalSeconds;
+            var navigationRail = sp.GetRequiredService<NavigationRailViewModel>();
+            navigationRail.ApplyVisibility(appSettings?.DashboardVisibility);
 
             return new PulseMeterWindowViewModel(
                 sp.GetRequiredService<IUsageService>(),
@@ -40,7 +42,7 @@ internal static class PulseMeterWindowRegistration
                 isAlwaysOnTop: appSettings?.IsAlwaysOnTop ?? false,
                 dataBar: sp.GetRequiredService<DataBarViewModel>(),
                 expandedHeader: sp.GetRequiredService<ExpandedHeaderViewModel>(),
-                navigationRail: sp.GetRequiredService<NavigationRailViewModel>(),
+                navigationRail: navigationRail,
                 rateLimits: sp.GetRequiredService<RateLimitsSectionViewModel>(),
                 rateLimitsDaily: sp.GetRequiredService<RateLimitsDailySectionViewModel>(),
                 needsAttention: sp.GetRequiredService<NeedsAttentionSectionViewModel>(),

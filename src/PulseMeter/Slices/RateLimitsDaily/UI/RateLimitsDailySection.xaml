@@ -11,7 +11,7 @@
                                     Style="{DynamicResource LightCardStyle}"
                                     Visibility="{Binding DataContext.IsRateLimitsDailyVisible, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <StackPanel>
-                                    <TextBlock Text="RATE LIMITS DAILY"
+                                    <TextBlock Text="WEEKLY PACE"
                                                Foreground="#111827"
                                                FontSize="20"
                                                FontWeight="Bold" />

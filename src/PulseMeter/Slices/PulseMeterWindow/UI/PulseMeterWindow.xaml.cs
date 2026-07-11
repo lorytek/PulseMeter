@@ -6,6 +6,8 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using PulseMeter.Slices.PulseMeterWindow;
 using PulseMeter.Slices.PulseMeterWindow.Business;
+using PulseMeter.Slices.NavigationRail.Models;
+using PulseMeter.Slices.NavigationRail.UI;
 using PulseMeter.Platform.Persistence;
 using PulseMeter.Platform.Windows;
 using WpfComboBoxItem = System.Windows.Controls.ComboBoxItem;
@@ -32,6 +34,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
     private PulseMeterWindowViewModel? _boundViewModel;
     private bool _isApplyingViewModelSize;
     private bool _isApplyingWindowPlacement;
+    private bool _isProgrammaticSectionScroll;
     private HwndSource? _windowSource;
 
     public IPulseMeterWindowStateStore? WindowStateStore { get; set; }
@@ -120,6 +123,74 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         }
 
         Hide();
+    }
+
+    private void NavigationRail_SectionRequested(object? sender, NavigationSectionRequestedEventArgs e)
+    {
+        if (_boundViewModel is null)
+        {
+            return;
+        }
+
+        if (e.Section == NavigationSection.Overview)
+        {
+            ExpandedContentScrollViewer.ScrollToTop();
+            return;
+        }
+
+        var target = GetSectionTarget(e.Section);
+        if (target is null || target.Visibility != Visibility.Visible)
+        {
+            _boundViewModel.NavigationRail.SelectSection(NavigationSection.Overview);
+            ExpandedContentScrollViewer.ScrollToTop();
+            return;
+        }
+
+        _isProgrammaticSectionScroll = true;
+        target.BringIntoView();
+        Dispatcher.BeginInvoke(new Action(() => _isProgrammaticSectionScroll = false));
+    }
+
+    private void ExpandedContentScrollViewer_ScrollChanged(object sender, System.Windows.Controls.ScrollChangedEventArgs e)
+    {
+        if (_isProgrammaticSectionScroll || _boundViewModel is null)
+        {
+            return;
+        }
+
+        var visibleSections = new[]
+        {
+            (NavigationSection.RateLimits, (FrameworkElement)RateLimitsSection),
+            (NavigationSection.WeeklyPace, (FrameworkElement)WeeklyPaceSection),
+            (NavigationSection.ResetCredits, (FrameworkElement)ResetCreditsSection),
+            (NavigationSection.AccountUsage, (FrameworkElement)AccountUsageSection),
+            (NavigationSection.ProjectUsage, (FrameworkElement)ProjectUsageSection),
+            (NavigationSection.BurnAnalysis, (FrameworkElement)BurnAnalysisSection),
+            (NavigationSection.DailyUsage, (FrameworkElement)DailyUsageSection)
+        }.Where(item => item.Item2.Visibility == Visibility.Visible).ToList();
+
+        var viewportTop = 20d;
+        var current = visibleSections
+            .Where(item => item.Item2.TransformToAncestor(ExpandedContentScrollViewer).Transform(new WpfPoint()).Y <= viewportTop)
+            .Select(item => item.Item1)
+            .LastOrDefault();
+
+        _boundViewModel.NavigationRail.SelectSection(current == default ? NavigationSection.Overview : current);
+    }
+
+    private FrameworkElement? GetSectionTarget(NavigationSection section)
+    {
+        return section switch
+        {
+            NavigationSection.RateLimits => RateLimitsSection,
+            NavigationSection.WeeklyPace => WeeklyPaceSection,
+            NavigationSection.ResetCredits => ResetCreditsSection,
+            NavigationSection.AccountUsage => AccountUsageSection,
+            NavigationSection.ProjectUsage => ProjectUsageSection,
+            NavigationSection.BurnAnalysis => BurnAnalysisSection,
+            NavigationSection.DailyUsage => DailyUsageSection,
+            _ => null
+        };
     }
 
     private static bool IsInteractiveElement(DependencyObject? source)
