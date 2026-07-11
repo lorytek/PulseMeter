@@ -53,8 +53,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         Closed += OnClosed;
         Loaded += (_, _) =>
         {
-            ApplyViewModelSize();
-            ApplyWindowPosition();
+            ApplyViewModelBounds();
             SaveWindowState();
         };
     }
@@ -163,18 +162,11 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         Top = position.Top;
     }
 
-    private void ApplyWindowPosition()
+    private void ApplyWindowPosition(PulseMeterWindowViewModel viewModel, WpfSize fittedSize, Rect workArea)
     {
-        if (DataContext is not PulseMeterWindowViewModel viewModel)
-        {
-            return;
-        }
-
         _isApplyingWindowPlacement = true;
         try
         {
-            var workArea = WindowMonitorWorkArea.GetFor(this);
-            var fittedSize = GetFittedWindowSize(viewModel, workArea);
             if (viewModel.WindowLeft is double left && viewModel.WindowTop is double top)
             {
                 var clamped = ClampWindowPosition(left, top, fittedSize.Width, fittedSize.Height, workArea);
@@ -272,12 +264,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
             _boundViewModel.PropertyChanged += OnViewModelPropertyChanged;
         }
 
-        ApplyViewModelSize();
-        _boundViewModel?.UpdateExpandedLayoutScale(ActualWidth, ActualHeight);
-        if (IsLoaded)
-        {
-            ApplyWindowPosition();
-        }
+        ApplyViewModelBounds();
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -288,25 +275,28 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
             or nameof(PulseMeterWindowViewModel.WindowWidth)
             or nameof(PulseMeterWindowViewModel.WindowMinWidth))
         {
-            ApplyViewModelSize();
-            if (sender is PulseMeterWindowViewModel scaleViewModel)
-            {
-                scaleViewModel.UpdateExpandedLayoutScale(ActualWidth, ActualHeight);
-            }
-
-            ApplyWindowPosition();
+            ApplyViewModelBounds();
 
             SaveWindowState();
         }
     }
 
-    private void ApplyViewModelSize()
+    private void ApplyViewModelBounds()
     {
         if (DataContext is not PulseMeterWindowViewModel viewModel)
         {
             return;
         }
 
+        var workArea = WindowMonitorWorkArea.GetFor(this);
+        var fittedSize = GetFittedWindowSize(viewModel, workArea);
+        ApplyViewModelSize(viewModel, fittedSize);
+        viewModel.UpdateExpandedLayoutScale(ActualWidth, ActualHeight);
+        ApplyWindowPosition(viewModel, fittedSize, workArea);
+    }
+
+    private void ApplyViewModelSize(PulseMeterWindowViewModel viewModel, WpfSize fittedSize)
+    {
         _isApplyingViewModelSize = true;
         try
         {
@@ -315,8 +305,6 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
                 WindowState = WindowState.Normal;
             }
 
-            var workArea = WindowMonitorWorkArea.GetFor(this);
-            var fittedSize = GetFittedWindowSize(viewModel, workArea);
             MinWidth = Math.Min(viewModel.WindowMinWidth, fittedSize.Width);
             MinHeight = Math.Min(viewModel.WindowMinHeight, fittedSize.Height);
             ResizeMode = System.Windows.ResizeMode.CanResize;
@@ -393,8 +381,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
                 ShowWindow(handle, SwRestore);
             }
 
-            ApplyViewModelSize();
-            ApplyWindowPosition();
+            ApplyViewModelBounds();
             SaveWindowState();
         }));
     }
