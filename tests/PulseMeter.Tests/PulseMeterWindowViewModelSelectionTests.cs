@@ -188,7 +188,7 @@ public sealed class PulseMeterWindowViewModelSelectionTests
         Assert.Equal("Daily allowance to stay within your weekly limit.", viewModel.RateLimitsDailySummaryText);
         Assert.False(viewModel.HasRateLimitsDailyWarning);
         Assert.Equal(string.Empty, viewModel.RateLimitsDailyWarningText);
-        Assert.Equal(["Day 1", "Day 2", "Day 3", "Day 4", "Day 5", "Day 6", "Day 7"], viewModel.DailyRateLimitRows.Select(row => row.Label));
+        Assert.All(viewModel.DailyRateLimitRows, row => Assert.DoesNotMatch("^Day \\d$", row.Label));
         Assert.Equal("#1F73FF", viewModel.DailyRateLimitRows[0].LabelBrush);
         Assert.All(viewModel.DailyRateLimitRows.Skip(1), row => Assert.Equal("#6B7280", row.LabelBrush));
         Assert.All(viewModel.DailyRateLimitRows, row =>

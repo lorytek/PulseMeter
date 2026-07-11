@@ -1,3 +1,4 @@
+using System.Globalization;
 using PulseMeter.Shared.Formatting;
 using PulseMeter.Slices.UsageCollection;
 
@@ -31,7 +32,7 @@ internal static class RateLimitsDailyDisplayBuilder
                 2);
             var remainingPercent = Math.Round(100 - consumedPercent, 2);
             rows.Add(new DailyRateLimitDisplayRow(
-                $"Day {index + 1}",
+                GetWeekdayLabel(weeklyBucket, index, activeDayIndex, now),
                 index == activeDayIndex ? "#1F73FF" : "#6B7280",
                 MeterDisplayFormatter.FormatWholePercent(remainingPercent),
                 remainingPercent,
@@ -128,6 +129,27 @@ internal static class RateLimitsDailyDisplayBuilder
         return Math.Min(DailyRateLimitSliceCount - 1, (int)Math.Floor(clampedWeeklyUsed / sliceSize));
     }
 
+    private static string GetWeekdayLabel(
+        RateLimitBucket weeklyBucket,
+        int index,
+        int activeDayIndex,
+        DateTimeOffset now)
+    {
+        var resetAtUtc = GetResetAtUtc(weeklyBucket);
+        var duration = TimeSpan.FromMinutes(weeklyBucket.WindowDurationMins ?? WeeklyWindowMinutes);
+        if (resetAtUtc is not null && duration > TimeSpan.Zero)
+        {
+            var sliceTicks = Math.Max(1, duration.Ticks / DailyRateLimitSliceCount);
+            var sliceStartUtc = resetAtUtc.Value - duration + TimeSpan.FromTicks(sliceTicks * index);
+            return sliceStartUtc.ToLocalTime().ToString("dddd", CultureInfo.CurrentCulture);
+        }
+
+        return now
+            .AddDays(index - activeDayIndex)
+            .ToLocalTime()
+            .ToString("dddd", CultureInfo.CurrentCulture);
+    }
+
     private static bool TryGetWeeklyWindowTiming(
         RateLimitBucket weeklyBucket,
         DateTimeOffset now,
@@ -137,8 +159,7 @@ internal static class RateLimitsDailyDisplayBuilder
         elapsed = TimeSpan.Zero;
         duration = TimeSpan.Zero;
 
-        var resetAtUtc = weeklyBucket.ResetsAtUtc
-            ?? (weeklyBucket.ResetsAtUnixSeconds is long unix ? DateTimeOffset.FromUnixTimeSeconds(unix) : null);
+        var resetAtUtc = GetResetAtUtc(weeklyBucket);
         if (resetAtUtc is null)
         {
             return false;
@@ -162,6 +183,12 @@ internal static class RateLimitsDailyDisplayBuilder
         }
 
         return true;
+    }
+
+    private static DateTimeOffset? GetResetAtUtc(RateLimitBucket weeklyBucket)
+    {
+        return weeklyBucket.ResetsAtUtc
+            ?? (weeklyBucket.ResetsAtUnixSeconds is long unix ? DateTimeOffset.FromUnixTimeSeconds(unix) : null);
     }
 
     private static string FormatPaceWaitDuration(TimeSpan wait)

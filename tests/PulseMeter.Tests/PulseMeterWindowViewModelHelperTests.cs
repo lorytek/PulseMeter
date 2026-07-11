@@ -24,12 +24,31 @@ public sealed class PulseMeterWindowViewModelHelperTests
         var rows = RateLimitsDailyDisplayBuilder.BuildRows([bucket], now);
 
         Assert.Equal(7, rows.Count);
-        Assert.Equal("Day 1", rows[0].Label);
+        Assert.Equal("Thursday", rows[0].Label);
         Assert.Equal("0%", rows[0].RemainingPercentText);
-        Assert.Equal("Day 4", rows[3].Label);
+        Assert.Equal("Sunday", rows[3].Label);
         Assert.Equal("#1F73FF", rows[3].LabelBrush);
         Assert.Equal("50%", rows[3].RemainingPercentText);
         Assert.Equal("100%", rows[4].RemainingPercentText);
+    }
+
+    [Fact]
+    public void RateLimitsDailyDisplayBuilder_BuildRows_AlignsWeekdayNamesToTheActiveSliceWithoutResetTiming()
+    {
+        var now = new DateTimeOffset(2026, 7, 5, 12, 0, 0, TimeSpan.Zero);
+        var bucket = new RateLimitBucket
+        {
+            UsedPercent = 50,
+            WindowDurationMins = 10_080,
+            WindowLabel = "7d"
+        };
+
+        var rows = RateLimitsDailyDisplayBuilder.BuildRows([bucket], now);
+
+        Assert.Equal(
+            ["Thursday", "Friday", "Saturday", "Sunday", "Monday", "Tuesday", "Wednesday"],
+            rows.Select(row => row.Label));
+        Assert.Equal("#1F73FF", rows[3].LabelBrush);
     }
 
     [Fact]
