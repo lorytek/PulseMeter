@@ -4,6 +4,8 @@ using PulseMeter.Slices.ProjectUsage;
 using PulseMeter.Slices.RateLimitsDaily;
 using PulseMeter.Slices.PulseMeterWindow;
 using PulseMeter.Slices.UsageCollection;
+using Rect = System.Windows.Rect;
+using Size = System.Windows.Size;
 
 namespace PulseMeter.Tests;
 
@@ -250,6 +252,54 @@ public sealed class PulseMeterWindowViewModelHelperTests
         Assert.Equal(410, PulseMeterWindowLayoutCalculator.CompactWindowMinWidth);
         Assert.Equal(66, PulseMeterWindowLayoutCalculator.CompactWindowHeight);
         Assert.Equal(66, PulseMeterWindowLayoutCalculator.CompactWindowMinHeight);
+    }
+
+    [Fact]
+    public void PulseMeterWindowPlacementCalculator_FitSize_ClampsToPaddedWorkAreaWithOnePixelFloor()
+    {
+        var workArea = new Rect(100, 200, 500, 300);
+
+        var fitted = PulseMeterWindowPlacementCalculator.FitSize(900, 400, workArea, edgePadding: 12);
+        var tiny = PulseMeterWindowPlacementCalculator.FitSize(0, -20, new Rect(0, 0, 10, 8), edgePadding: 12);
+
+        Assert.Equal(new Size(476, 276), fitted);
+        Assert.Equal(new Size(1, 1), tiny);
+    }
+
+    [Fact]
+    public void PulseMeterWindowPlacementCalculator_Clamp_UsesRawLowerBoundsAndRetainsRightBottomPadding()
+    {
+        var workArea = new Rect(100, 200, 500, 300);
+
+        var clamped = PulseMeterWindowPlacementCalculator.Clamp(50, 600, 260, 120, workArea, edgePadding: 12);
+        var oversize = PulseMeterWindowPlacementCalculator.Clamp(0, 0, 900, 400, workArea, edgePadding: 12);
+
+        Assert.Equal(new Rect(100, 368, 260, 120), clamped);
+        Assert.Equal(new Rect(100, 200, 476, 276), oversize);
+    }
+
+    [Fact]
+    public void PulseMeterWindowPlacementCalculator_Clamp_PreservesSavedNegativeMonitorPositionWithinWorkArea()
+    {
+        var workArea = new Rect(-1920, 0, 1920, 1080);
+
+        var clamped = PulseMeterWindowPlacementCalculator.Clamp(-1900, 120, 410, 66, workArea, edgePadding: 24);
+
+        Assert.Equal(new Rect(-1900, 120, 410, 66), clamped);
+    }
+
+    [Fact]
+    public void PulseMeterWindowPlacementCalculator_FitSize_TreatsNonfiniteDimensionsAndPaddingAsSafeMinimums()
+    {
+        var workArea = new Rect(0, 0, 640, 480);
+
+        var fitted = PulseMeterWindowPlacementCalculator.FitSize(
+            double.NaN,
+            double.PositiveInfinity,
+            workArea,
+            edgePadding: double.NegativeInfinity);
+
+        Assert.Equal(new Size(1, 1), fitted);
     }
 
     private static DailyUsageBucket Bucket(DateOnly date, long tokens)
