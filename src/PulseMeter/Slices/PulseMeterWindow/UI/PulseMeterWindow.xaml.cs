@@ -147,7 +147,15 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         }
 
         _isProgrammaticSectionScroll = true;
-        target.BringIntoView();
+        var targetTop = target
+            .TransformToAncestor(ExpandedContentScrollViewer)
+            .Transform(new WpfPoint())
+            .Y;
+        var targetOffset = Math.Clamp(
+            ExpandedContentScrollViewer.VerticalOffset + targetTop,
+            0,
+            ExpandedContentScrollViewer.ScrollableHeight);
+        ExpandedContentScrollViewer.ScrollToVerticalOffset(targetOffset);
         Dispatcher.BeginInvoke(new Action(() => _isProgrammaticSectionScroll = false));
     }
 

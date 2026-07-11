@@ -1277,6 +1277,18 @@ public sealed class PulseMeterWindowLayoutTests
     }
 
     [Fact]
+    public void NavigationRail_PlacesRequestedSectionAtTheTopOfTheViewport()
+    {
+        var code = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml.cs"));
+        var handlerStart = code.IndexOf("private void NavigationRail_SectionRequested", StringComparison.Ordinal);
+        var handler = code[handlerStart..Math.Min(code.Length, handlerStart + 1_400)];
+
+        Assert.Contains("ScrollToVerticalOffset", handler);
+        Assert.Contains("TransformToAncestor(ExpandedContentScrollViewer)", handler);
+        Assert.DoesNotContain("target.BringIntoView()", handler);
+    }
+
+    [Fact]
     public void PulseMeterWindow_PreventsMaximizedBlankWindowState()
     {
         var code = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml.cs"));
