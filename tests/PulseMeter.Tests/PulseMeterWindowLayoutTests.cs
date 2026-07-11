@@ -1198,16 +1198,47 @@ public sealed class PulseMeterWindowLayoutTests
         var applySizeBlock = code[applySizeStart..Math.Min(code.Length, applySizeStart + 900)];
 
         Assert.Contains("ApplyViewModelSize", code);
-        Assert.Contains("Width = viewModel.WindowWidth", code);
-        Assert.Contains("Height = viewModel.WindowHeight", code);
+        Assert.Contains("Width = fittedSize.Width", code);
+        Assert.Contains("Height = fittedSize.Height", code);
         Assert.Contains("RememberWindowSize", code);
         Assert.Contains("SaveWindowState", code);
         Assert.Contains("WindowStateStore", code);
         Assert.Contains("PropertyChanged", code);
         Assert.True(
             applySizeBlock.IndexOf("WindowState = WindowState.Normal", StringComparison.Ordinal) <
-            applySizeBlock.IndexOf("Width = viewModel.WindowWidth", StringComparison.Ordinal));
+            applySizeBlock.IndexOf("Width = fittedSize.Width", StringComparison.Ordinal));
         Assert.Contains("CanRememberWindowPlacement()", code);
+    }
+
+    [Fact]
+    public void PulseMeterWindow_ReappliesSafeBoundsForTheNearestMonitor()
+    {
+        var code = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml.cs"));
+        var monitorPath = Path.Combine(TestWorkspace.FindRoot(), "src", "PulseMeter", "Platform", "Windows", "WindowMonitorWorkArea.cs");
+        Assert.True(File.Exists(monitorPath));
+
+        var monitorCode = File.ReadAllText(monitorPath);
+        var applySizeStart = code.IndexOf("private void ApplyViewModelSize()", StringComparison.Ordinal);
+        var applySizeBlock = code[applySizeStart..Math.Min(code.Length, applySizeStart + 1_300)];
+        var propertyChangedStart = code.IndexOf("private void OnViewModelPropertyChanged", StringComparison.Ordinal);
+        var propertyChangedBlock = code[propertyChangedStart..Math.Min(code.Length, propertyChangedStart + 1_000)];
+
+        Assert.Contains("WindowMonitorWorkArea.GetFor(this)", code);
+        Assert.Contains("PulseMeterWindowPlacementCalculator.FitSize", code);
+        Assert.Contains("var fittedSize = GetFittedWindowSize(viewModel, workArea)", applySizeBlock);
+        Assert.Contains("MinWidth = Math.Min(viewModel.WindowMinWidth, fittedSize.Width)", applySizeBlock);
+        Assert.Contains("MinHeight = Math.Min(viewModel.WindowMinHeight, fittedSize.Height)", applySizeBlock);
+        Assert.Contains("Width = fittedSize.Width", applySizeBlock);
+        Assert.Contains("Height = fittedSize.Height", applySizeBlock);
+        Assert.Contains("nameof(PulseMeterWindowViewModel.IsExpanded)", propertyChangedBlock);
+        Assert.Contains("or nameof(PulseMeterWindowViewModel.WindowWidth)", propertyChangedBlock);
+        Assert.Contains("or nameof(PulseMeterWindowViewModel.WindowHeight)", propertyChangedBlock);
+        Assert.Contains("ApplyWindowPosition();", propertyChangedBlock);
+        Assert.DoesNotContain("!viewModel.HasWindowPosition", propertyChangedBlock);
+        Assert.Contains("MonitorFromWindow(handle, MonitorDefaultToNearest)", monitorCode);
+        Assert.Contains("GetMonitorInfo(monitor, ref monitorInfo)", monitorCode);
+        Assert.Contains("TransformFromDevice", monitorCode);
+        Assert.Contains("SystemParameters.WorkArea", monitorCode);
     }
 
     [Fact]

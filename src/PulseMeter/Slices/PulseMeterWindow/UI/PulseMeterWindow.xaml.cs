@@ -5,12 +5,15 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using PulseMeter.Slices.PulseMeterWindow;
+using PulseMeter.Slices.PulseMeterWindow.Business;
 using PulseMeter.Platform.Persistence;
+using PulseMeter.Platform.Windows;
 using WpfComboBoxItem = System.Windows.Controls.ComboBoxItem;
 using WpfButtonBase = System.Windows.Controls.Primitives.ButtonBase;
 using WpfPoint = System.Windows.Point;
 using WpfScrollBar = System.Windows.Controls.Primitives.ScrollBar;
 using WpfSelector = System.Windows.Controls.Primitives.Selector;
+using WpfSize = System.Windows.Size;
 using WpfTextBoxBase = System.Windows.Controls.Primitives.TextBoxBase;
 
 namespace PulseMeter.Slices.PulseMeterWindow.UI;
@@ -24,6 +27,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
     private const int SysCommandMask = 0xFFF0;
     private const int ScMaximize = 0xF030;
     private const int SwRestore = 9;
+    private const double WorkAreaPadding = 24;
 
     private PulseMeterWindowViewModel? _boundViewModel;
     private bool _isApplyingViewModelSize;
@@ -146,11 +150,17 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         SaveWindowState();
     }
 
-    private void MoveToTopRight()
+    private void MoveToTopRight(double width, double height, Rect workArea)
     {
-        var workArea = SystemParameters.WorkArea;
-        Left = Math.Max(workArea.Left, workArea.Right - ActualWidth - 24);
-        Top = Math.Max(workArea.Top, workArea.Top + 24);
+        var position = PulseMeterWindowPlacementCalculator.Clamp(
+            workArea.Right - width - WorkAreaPadding,
+            workArea.Top + WorkAreaPadding,
+            width,
+            height,
+            workArea,
+            WorkAreaPadding);
+        Left = position.Left;
+        Top = position.Top;
     }
 
     private void ApplyWindowPosition()
@@ -163,15 +173,17 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         _isApplyingWindowPlacement = true;
         try
         {
+            var workArea = WindowMonitorWorkArea.GetFor(this);
+            var fittedSize = GetFittedWindowSize(viewModel, workArea);
             if (viewModel.WindowLeft is double left && viewModel.WindowTop is double top)
             {
-                var clamped = ClampWindowPosition(left, top, viewModel.WindowWidth, viewModel.WindowHeight);
+                var clamped = ClampWindowPosition(left, top, fittedSize.Width, fittedSize.Height, workArea);
                 Left = clamped.Left;
                 Top = clamped.Top;
             }
             else
             {
-                MoveToTopRight();
+                MoveToTopRight(fittedSize.Width, fittedSize.Height, workArea);
             }
         }
         finally
@@ -180,15 +192,30 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         }
     }
 
-    private static (double Left, double Top) ClampWindowPosition(double left, double top, double width, double height)
+    private static (double Left, double Top) ClampWindowPosition(
+        double left,
+        double top,
+        double width,
+        double height,
+        Rect workArea)
     {
-        var workArea = SystemParameters.WorkArea;
-        var maxLeft = Math.Max(workArea.Left, workArea.Right - width - 24);
-        var maxTop = Math.Max(workArea.Top, workArea.Bottom - height - 24);
-        var clampedLeft = Math.Min(Math.Max(left, workArea.Left), maxLeft);
-        var clampedTop = Math.Min(Math.Max(top, workArea.Top), maxTop);
+        var clamped = PulseMeterWindowPlacementCalculator.Clamp(
+            left,
+            top,
+            width,
+            height,
+            workArea,
+            WorkAreaPadding);
+        return (clamped.Left, clamped.Top);
+    }
 
-        return (clampedLeft, clampedTop);
+    private static WpfSize GetFittedWindowSize(PulseMeterWindowViewModel viewModel, Rect workArea)
+    {
+        return PulseMeterWindowPlacementCalculator.FitSize(
+            viewModel.WindowWidth,
+            viewModel.WindowHeight,
+            workArea,
+            WorkAreaPadding);
     }
 
     private void Window_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -267,10 +294,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
                 scaleViewModel.UpdateExpandedLayoutScale(ActualWidth, ActualHeight);
             }
 
-            if (sender is PulseMeterWindowViewModel viewModel && !viewModel.HasWindowPosition)
-            {
-                ApplyWindowPosition();
-            }
+            ApplyWindowPosition();
 
             SaveWindowState();
         }
@@ -291,11 +315,13 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
                 WindowState = WindowState.Normal;
             }
 
-            MinWidth = viewModel.WindowMinWidth;
-            MinHeight = viewModel.WindowMinHeight;
+            var workArea = WindowMonitorWorkArea.GetFor(this);
+            var fittedSize = GetFittedWindowSize(viewModel, workArea);
+            MinWidth = Math.Min(viewModel.WindowMinWidth, fittedSize.Width);
+            MinHeight = Math.Min(viewModel.WindowMinHeight, fittedSize.Height);
             ResizeMode = System.Windows.ResizeMode.CanResize;
-            Width = viewModel.WindowWidth;
-            Height = viewModel.WindowHeight;
+            Width = fittedSize.Width;
+            Height = fittedSize.Height;
         }
         finally
         {
@@ -368,6 +394,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
             }
 
             ApplyViewModelSize();
+            ApplyWindowPosition();
             SaveWindowState();
         }));
     }
