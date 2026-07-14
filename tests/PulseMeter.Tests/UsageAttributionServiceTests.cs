@@ -81,6 +81,34 @@ public sealed class UsageAttributionServiceTests
     }
 
     [Fact]
+    public async Task GetUsageAttributionAsync_GroupsSameMinuteCallsAndSkipsRepeatedCumulativeSnapshots()
+    {
+        var codexHome = CreateCodexHome();
+        var now = new DateTimeOffset(2026, 7, 7, 12, 1, 0, TimeSpan.Zero);
+        var rollout = WriteRollout(
+            codexHome,
+            "burn-moment.jsonl",
+            Event(now.AddSeconds(-55), total: 600, cumulative: 600),
+            Event(now.AddSeconds(-40), total: 500, cumulative: 1_100),
+            Event(now.AddSeconds(-35), total: 500, cumulative: 1_100));
+        CreateStateDatabase(
+            codexHome,
+            Thread("thread-burn-moment", "Rapid agent cycle", @"C:\Projects\PulseMeter", rollout, now));
+        var service = new UsageAttributionService(codexHome, maxSessions: 5, maxBurnEvents: 5);
+
+        var snapshot = await service.GetUsageAttributionAsync(
+            [new DailyUsageBucket { StartDate = "2026-07-07", Tokens = 1_100 }],
+            now);
+
+        Assert.Equal(1_100, snapshot.RawLocalTokens);
+        Assert.Equal(1_100, Assert.Single(snapshot.Sessions).RawLocalTokens);
+        var moment = Assert.Single(snapshot.BurnEvents);
+        Assert.Equal(1_100, moment.RawLocalTokens);
+        Assert.Equal(1_100, moment.EstimatedTokens);
+        Assert.Equal(new DateTimeOffset(2026, 7, 7, 12, 0, 0, TimeSpan.Zero), moment.TimestampUtc);
+    }
+
+    [Fact]
     public async Task GetUsageAttributionAsync_UsesOnlyLastThirtyDaysAndIgnoresBadRollouts()
     {
         var codexHome = CreateCodexHome();
@@ -203,14 +231,15 @@ public sealed class UsageAttributionServiceTests
         long? input = null,
         long? cached = null,
         long? output = null,
-        long? reasoning = null)
+        long? reasoning = null,
+        long? cumulative = null)
     {
-        return new UsageEvent(timestamp, total, input, cached, output, reasoning, null);
+        return new UsageEvent(timestamp, total, input, cached, output, reasoning, cumulative, null);
     }
 
     private static UsageEvent BadLine()
     {
-        return new UsageEvent(default, 0, null, null, null, null, "{not valid json");
+        return new UsageEvent(default, 0, null, null, null, null, null, "{not valid json");
     }
 
     private static string WriteRollout(string codexHome, string fileName, params UsageEvent[] events)
@@ -225,6 +254,10 @@ public sealed class UsageAttributionServiceTests
                 return item.RawLine;
             }
 
+            var cumulativeUsage = item.CumulativeTotalTokens is long cumulative
+                ? $",\"total_token_usage\":{{\"total_tokens\":{cumulative}}}"
+                : string.Empty;
+
             return "{" +
                 $"\"timestamp\":\"{item.Timestamp:O}\"," +
                 "\"type\":\"event_msg\"," +
@@ -234,7 +267,7 @@ public sealed class UsageAttributionServiceTests
                 $"\"output_tokens\":{item.OutputTokens ?? 0}," +
                 $"\"reasoning_tokens\":{item.ReasoningTokens ?? 0}," +
                 $"\"total_tokens\":{item.TotalTokens}" +
-                "}}}}";
+                "}" + cumulativeUsage + "}}}";
         });
         File.WriteAllLines(path, lines);
         return path;
@@ -285,5 +318,6 @@ public sealed class UsageAttributionServiceTests
         long? CachedInputTokens,
         long? OutputTokens,
         long? ReasoningTokens,
+        long? CumulativeTotalTokens,
         string? RawLine);
 }

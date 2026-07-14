@@ -5,12 +5,17 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using PulseMeter.Slices.PulseMeterWindow;
+using PulseMeter.Slices.PulseMeterWindow.Business;
+using PulseMeter.Slices.NavigationRail.Models;
+using PulseMeter.Slices.NavigationRail.UI;
 using PulseMeter.Platform.Persistence;
+using PulseMeter.Platform.Windows;
 using WpfComboBoxItem = System.Windows.Controls.ComboBoxItem;
 using WpfButtonBase = System.Windows.Controls.Primitives.ButtonBase;
 using WpfPoint = System.Windows.Point;
 using WpfScrollBar = System.Windows.Controls.Primitives.ScrollBar;
 using WpfSelector = System.Windows.Controls.Primitives.Selector;
+using WpfSize = System.Windows.Size;
 using WpfTextBoxBase = System.Windows.Controls.Primitives.TextBoxBase;
 
 namespace PulseMeter.Slices.PulseMeterWindow.UI;
@@ -24,10 +29,12 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
     private const int SysCommandMask = 0xFFF0;
     private const int ScMaximize = 0xF030;
     private const int SwRestore = 9;
+    private const double WorkAreaPadding = 24;
 
     private PulseMeterWindowViewModel? _boundViewModel;
     private bool _isApplyingViewModelSize;
     private bool _isApplyingWindowPlacement;
+    private bool _isProgrammaticSectionScroll;
     private HwndSource? _windowSource;
 
     public IPulseMeterWindowStateStore? WindowStateStore { get; set; }
@@ -49,8 +56,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         Closed += OnClosed;
         Loaded += (_, _) =>
         {
-            ApplyViewModelSize();
-            ApplyWindowPosition();
+            ApplyViewModelBounds();
             SaveWindowState();
         };
     }
@@ -119,6 +125,82 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         Hide();
     }
 
+    private void NavigationRail_SectionRequested(object? sender, NavigationSectionRequestedEventArgs e)
+    {
+        if (_boundViewModel is null)
+        {
+            return;
+        }
+
+        if (e.Section == NavigationSection.Overview)
+        {
+            ExpandedContentScrollViewer.ScrollToTop();
+            return;
+        }
+
+        var target = GetSectionTarget(e.Section);
+        if (target is null || target.Visibility != Visibility.Visible)
+        {
+            _boundViewModel.NavigationRail.SelectSection(NavigationSection.Overview);
+            ExpandedContentScrollViewer.ScrollToTop();
+            return;
+        }
+
+        _isProgrammaticSectionScroll = true;
+        var targetTop = target
+            .TransformToAncestor(ExpandedContentScrollViewer)
+            .Transform(new WpfPoint())
+            .Y;
+        var targetOffset = Math.Clamp(
+            ExpandedContentScrollViewer.VerticalOffset + targetTop,
+            0,
+            ExpandedContentScrollViewer.ScrollableHeight);
+        ExpandedContentScrollViewer.ScrollToVerticalOffset(targetOffset);
+        Dispatcher.BeginInvoke(new Action(() => _isProgrammaticSectionScroll = false));
+    }
+
+    private void ExpandedContentScrollViewer_ScrollChanged(object sender, System.Windows.Controls.ScrollChangedEventArgs e)
+    {
+        if (_isProgrammaticSectionScroll || _boundViewModel is null)
+        {
+            return;
+        }
+
+        var visibleSections = new[]
+        {
+            (NavigationSection.RateLimits, (FrameworkElement)RateLimitsSection),
+            (NavigationSection.WeeklyPace, (FrameworkElement)WeeklyPaceSection),
+            (NavigationSection.ResetCredits, (FrameworkElement)ResetCreditsSection),
+            (NavigationSection.AccountUsage, (FrameworkElement)AccountUsageSection),
+            (NavigationSection.ProjectUsage, (FrameworkElement)ProjectUsageSection),
+            (NavigationSection.BurnAnalysis, (FrameworkElement)BurnAnalysisSection),
+            (NavigationSection.DailyUsage, (FrameworkElement)DailyUsageSection)
+        }.Where(item => item.Item2.Visibility == Visibility.Visible).ToList();
+
+        var viewportTop = 20d;
+        var current = visibleSections
+            .Where(item => item.Item2.TransformToAncestor(ExpandedContentScrollViewer).Transform(new WpfPoint()).Y <= viewportTop)
+            .Select(item => item.Item1)
+            .LastOrDefault();
+
+        _boundViewModel.NavigationRail.SelectSection(current == default ? NavigationSection.Overview : current);
+    }
+
+    private FrameworkElement? GetSectionTarget(NavigationSection section)
+    {
+        return section switch
+        {
+            NavigationSection.RateLimits => RateLimitsSection,
+            NavigationSection.WeeklyPace => WeeklyPaceSection,
+            NavigationSection.ResetCredits => ResetCreditsSection,
+            NavigationSection.AccountUsage => AccountUsageSection,
+            NavigationSection.ProjectUsage => ProjectUsageSection,
+            NavigationSection.BurnAnalysis => BurnAnalysisSection,
+            NavigationSection.DailyUsage => DailyUsageSection,
+            _ => null
+        };
+    }
+
     private static bool IsInteractiveElement(DependencyObject? source)
     {
         while (source is not null)
@@ -138,6 +220,29 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
     {
         _windowSource = (HwndSource?)PresentationSource.FromVisual(this);
         _windowSource?.AddHook(WndProc);
+        ApplySavedViewModelPosition();
+        ApplyViewModelBounds();
+    }
+
+    private void ApplySavedViewModelPosition()
+    {
+        if (DataContext is not PulseMeterWindowViewModel viewModel
+            || viewModel.WindowLeft is not double left
+            || viewModel.WindowTop is not double top)
+        {
+            return;
+        }
+
+        _isApplyingWindowPlacement = true;
+        try
+        {
+            Left = left;
+            Top = top;
+        }
+        finally
+        {
+            _isApplyingWindowPlacement = false;
+        }
     }
 
     private void OnClosed(object? sender, EventArgs e)
@@ -146,32 +251,33 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         SaveWindowState();
     }
 
-    private void MoveToTopRight()
+    private void MoveToTopRight(double width, double height, Rect workArea)
     {
-        var workArea = SystemParameters.WorkArea;
-        Left = Math.Max(workArea.Left, workArea.Right - ActualWidth - 24);
-        Top = Math.Max(workArea.Top, workArea.Top + 24);
+        var position = PulseMeterWindowPlacementCalculator.Clamp(
+            workArea.Right - width - WorkAreaPadding,
+            workArea.Top + WorkAreaPadding,
+            width,
+            height,
+            workArea,
+            WorkAreaPadding);
+        Left = position.Left;
+        Top = position.Top;
     }
 
-    private void ApplyWindowPosition()
+    private void ApplyWindowPosition(PulseMeterWindowViewModel viewModel, WpfSize fittedSize, Rect workArea)
     {
-        if (DataContext is not PulseMeterWindowViewModel viewModel)
-        {
-            return;
-        }
-
         _isApplyingWindowPlacement = true;
         try
         {
             if (viewModel.WindowLeft is double left && viewModel.WindowTop is double top)
             {
-                var clamped = ClampWindowPosition(left, top, viewModel.WindowWidth, viewModel.WindowHeight);
+                var clamped = ClampWindowPosition(left, top, fittedSize.Width, fittedSize.Height, workArea);
                 Left = clamped.Left;
                 Top = clamped.Top;
             }
             else
             {
-                MoveToTopRight();
+                MoveToTopRight(fittedSize.Width, fittedSize.Height, workArea);
             }
         }
         finally
@@ -180,15 +286,30 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         }
     }
 
-    private static (double Left, double Top) ClampWindowPosition(double left, double top, double width, double height)
+    private static (double Left, double Top) ClampWindowPosition(
+        double left,
+        double top,
+        double width,
+        double height,
+        Rect workArea)
     {
-        var workArea = SystemParameters.WorkArea;
-        var maxLeft = Math.Max(workArea.Left, workArea.Right - width - 24);
-        var maxTop = Math.Max(workArea.Top, workArea.Bottom - height - 24);
-        var clampedLeft = Math.Min(Math.Max(left, workArea.Left), maxLeft);
-        var clampedTop = Math.Min(Math.Max(top, workArea.Top), maxTop);
+        var clamped = PulseMeterWindowPlacementCalculator.Clamp(
+            left,
+            top,
+            width,
+            height,
+            workArea,
+            WorkAreaPadding);
+        return (clamped.Left, clamped.Top);
+    }
 
-        return (clampedLeft, clampedTop);
+    private static WpfSize GetFittedWindowSize(PulseMeterWindowViewModel viewModel, Rect workArea)
+    {
+        return PulseMeterWindowPlacementCalculator.FitSize(
+            viewModel.WindowWidth,
+            viewModel.WindowHeight,
+            workArea,
+            WorkAreaPadding);
     }
 
     private void Window_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -245,11 +366,9 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
             _boundViewModel.PropertyChanged += OnViewModelPropertyChanged;
         }
 
-        ApplyViewModelSize();
-        _boundViewModel?.UpdateExpandedLayoutScale(ActualWidth, ActualHeight);
-        if (IsLoaded)
+        if (_windowSource is not null)
         {
-            ApplyWindowPosition();
+            ApplyViewModelBounds();
         }
     }
 
@@ -261,28 +380,28 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
             or nameof(PulseMeterWindowViewModel.WindowWidth)
             or nameof(PulseMeterWindowViewModel.WindowMinWidth))
         {
-            ApplyViewModelSize();
-            if (sender is PulseMeterWindowViewModel scaleViewModel)
-            {
-                scaleViewModel.UpdateExpandedLayoutScale(ActualWidth, ActualHeight);
-            }
-
-            if (sender is PulseMeterWindowViewModel viewModel && !viewModel.HasWindowPosition)
-            {
-                ApplyWindowPosition();
-            }
+            ApplyViewModelBounds();
 
             SaveWindowState();
         }
     }
 
-    private void ApplyViewModelSize()
+    private void ApplyViewModelBounds()
     {
         if (DataContext is not PulseMeterWindowViewModel viewModel)
         {
             return;
         }
 
+        var workArea = WindowMonitorWorkArea.GetFor(this);
+        var fittedSize = GetFittedWindowSize(viewModel, workArea);
+        ApplyViewModelSize(viewModel, fittedSize);
+        viewModel.UpdateExpandedLayoutScale(ActualWidth, ActualHeight);
+        ApplyWindowPosition(viewModel, fittedSize, workArea);
+    }
+
+    private void ApplyViewModelSize(PulseMeterWindowViewModel viewModel, WpfSize fittedSize)
+    {
         _isApplyingViewModelSize = true;
         try
         {
@@ -291,11 +410,11 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
                 WindowState = WindowState.Normal;
             }
 
-            MinWidth = viewModel.WindowMinWidth;
-            MinHeight = viewModel.WindowMinHeight;
+            MinWidth = Math.Min(viewModel.WindowMinWidth, fittedSize.Width);
+            MinHeight = Math.Min(viewModel.WindowMinHeight, fittedSize.Height);
             ResizeMode = System.Windows.ResizeMode.CanResize;
-            Width = viewModel.WindowWidth;
-            Height = viewModel.WindowHeight;
+            Width = fittedSize.Width;
+            Height = fittedSize.Height;
         }
         finally
         {
@@ -367,7 +486,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
                 ShowWindow(handle, SwRestore);
             }
 
-            ApplyViewModelSize();
+            ApplyViewModelBounds();
             SaveWindowState();
         }));
     }

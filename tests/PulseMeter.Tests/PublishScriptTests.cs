@@ -3,14 +3,16 @@
 public sealed class PublishScriptTests
 {
     [Fact]
-    public void LocalShortcut_TargetsFixedPulseMeterExecutableWithoutWindowsScriptHost()
+    public void LocalShortcut_UsesTheDotnetHostForUnsignedLocalBuilds()
     {
         var script = File.ReadAllText(FindWorkspaceFile("scripts", "publish-local.ps1"));
 
-        Assert.Contains("$appExe = Join-Path $output \"PulseMeter.exe\"", script);
-        Assert.Contains("$shortcut.TargetPath = $appExe", script);
-        Assert.Contains("$shortcut.Arguments = \"\"", script);
-        Assert.Contains("$shortcut.WorkingDirectory = $output", script);
+        Assert.Contains("$localHostOutput = Join-Path $artifactsRoot \"PulseMeter-local-host-$timestamp\"", script);
+        Assert.Contains("$localHostDll = Join-Path $localHostOutput \"PulseMeter.dll\"", script);
+        Assert.Contains("$dotnetExe = Join-Path $env:ProgramFiles \"dotnet\\dotnet.exe\"", script);
+        Assert.Contains("$shortcut.TargetPath = $dotnetExe", script);
+        Assert.Contains("$shortcut.Arguments = [string]::Concat('\"', $localHostDll, '\"')", script);
+        Assert.Contains("$shortcut.WorkingDirectory = $localHostOutput", script);
         Assert.DoesNotContain("launch-pulsemeter.vbs", script);
         Assert.DoesNotContain("wscript.exe", script);
         Assert.DoesNotContain("CreateObject(\"WScript.Shell\")", script);
@@ -47,6 +49,20 @@ public sealed class PublishScriptTests
         Assert.Contains("/p:IncludeNativeLibrariesForSelfExtract=true", script);
         Assert.Contains("/p:EnableCompressionInSingleFile=true", script);
         Assert.Contains("Published local self-contained app", script);
+        Assert.Contains("--self-contained false", script);
+        Assert.Contains("/p:UseAppHost=false", script);
+        Assert.Contains("Published local Smart App Control-compatible launcher", script);
+    }
+
+    [Fact]
+    public void PublishLocal_UpdatesExistingPinnedTaskbarShortcut()
+    {
+        var script = File.ReadAllText(FindWorkspaceFile("scripts", "publish-local.ps1"));
+
+        Assert.Contains("User Pinned\\TaskBar\\PulseMeter.lnk", script);
+        Assert.Contains("if (Test-Path -LiteralPath $taskbarShortcutPath)", script);
+        Assert.Contains("Save-PulseMeterShortcut $taskbarShortcutPath", script);
+        Assert.Contains("PulseMeter is not pinned to the taskbar", script);
     }
 
     [Fact]

@@ -359,7 +359,7 @@ public sealed class PulseMeterWindowLayoutTests
             windowXaml.IndexOf("<dailyUsage:DailyUsageSection", StringComparison.Ordinal));
         Assert.Contains("IsUsageAttributionVisible", navigationXaml);
         Assert.Contains("Text=\"Burn analysis\"", navigationXaml);
-        Assert.Contains("ToolTip=\"Show or hide burn analysis\"", navigationXaml);
+        Assert.Contains("ToolTip=\"Go to burn analysis\"", navigationXaml);
         Assert.Contains("public UsageAttributionSectionViewModel UsageAttribution { get; }", pulseMeterWindowViewModel);
         Assert.Contains("public bool ShouldShowUsageAttribution", pulseMeterWindowViewModel);
         Assert.Contains("Visibility=\"{Binding DataContext.ShouldShowUsageAttribution, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}\"", usageAttributionSection);
@@ -374,7 +374,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("Text=\"&#xE946;\"", usageAttributionSection);
         Assert.Contains("ToolTip=\"Share is of total burned tokens in the last 30 days.\"", usageAttributionSection);
         Assert.Contains("Text=\"Tokens\"", usageAttributionSection);
-        Assert.Contains("Text=\"Event\"", usageAttributionSection);
+        Assert.Contains("Text=\"Moment\"", usageAttributionSection);
         Assert.Contains("x:Name=\"BurnAnalysisTablesGrid\"", usageAttributionSection);
         Assert.Contains("SizeChanged=\"BurnAnalysisTablesGrid_SizeChanged\"", usageAttributionSection);
         Assert.Contains("x:Name=\"BurnAnalysisChatsColumn\"", usageAttributionSection);
@@ -414,7 +414,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.True(shareHeaderStart < shareInfoIconStart);
         Assert.DoesNotContain("ToolTip=\"Share is of total burned tokens in the last 30 days.\"", usageAttributionSection[shareHeaderStart..shareInfoIconStart]);
         var topChatsStart = usageAttributionSection.IndexOf("Text=\"Top chats by token burn\"", StringComparison.Ordinal);
-        var burnEventsStart = usageAttributionSection.IndexOf("Text=\"Largest burn events\"", StringComparison.Ordinal);
+        var burnEventsStart = usageAttributionSection.IndexOf("Text=\"Largest burn moments\"", StringComparison.Ordinal);
         var topChatsSection = usageAttributionSection[topChatsStart..burnEventsStart];
         var burnEventsSection = usageAttributionSection[burnEventsStart..];
         Assert.DoesNotContain("Text=\"Burn\"", topChatsSection);
@@ -540,8 +540,8 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("Command=\"{Binding DataContext.DismissSignalCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}\"", needsAttentionSection);
         Assert.Contains("Text=\"NEEDS ATTENTION\"", needsAttentionSection);
         Assert.True(
-            windowXaml.IndexOf("<dailyUsage:DailyUsageSection", StringComparison.Ordinal) <
-            windowXaml.IndexOf("<needsAttention:NeedsAttentionSection", StringComparison.Ordinal));
+            windowXaml.IndexOf("<needsAttention:NeedsAttentionSection", StringComparison.Ordinal) <
+            windowXaml.IndexOf("<rateLimits:RateLimitsSection", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -694,6 +694,24 @@ public sealed class PulseMeterWindowLayoutTests
     }
 
     [Fact]
+    public void CompactHeader_UsesInlineResetDetailsOnlyForWeeklyOnlyQuotaState()
+    {
+        var xaml = ReadPulseMeterMarkup();
+        var quotaStart = xaml.IndexOf("x:Name=\"CompactQuotaSummaryItemsControl\"", StringComparison.Ordinal);
+        var controlsStart = xaml.IndexOf("x:Name=\"CompactHeaderControls\"", StringComparison.Ordinal);
+        var quotaBlock = xaml[quotaStart..controlsStart];
+
+        Assert.Contains("x:Name=\"CompactQuotaDetails\"", quotaBlock);
+        Assert.Contains("x:Name=\"CompactQuotaResetPanel\"", quotaBlock);
+        Assert.Contains("VerticalAlignment=\"Center\"", quotaBlock);
+        Assert.Contains("DataContext.IsWeeklyOnlyCompactLayout", quotaBlock);
+        Assert.Contains("<Setter Property=\"Orientation\" Value=\"Vertical\" />", quotaBlock);
+        Assert.Contains("<Setter Property=\"Orientation\" Value=\"Horizontal\" />", quotaBlock);
+        Assert.Contains("<Setter Property=\"Margin\" Value=\"10,0,0,0\" />", quotaBlock);
+        Assert.Contains("<Setter Property=\"Visibility\" Value=\"Collapsed\" />", quotaBlock);
+    }
+
+    [Fact]
     public void CompactHeader_UsesSubtleQuotaUnderlinesMatchedToTheirStatusDots()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -746,6 +764,7 @@ public sealed class PulseMeterWindowLayoutTests
         var quotaBlock = xaml[quotaStart..controlsStart];
 
         Assert.Contains("<Setter Property=\"Padding\" Value=\"14,6,12,6\" />", surfaceBlock);
+        Assert.Contains("<Setter Property=\"BorderBrush\" Value=\"#008CBA\" />", surfaceBlock);
         Assert.Contains("Height=\"52\"", compactBlock);
         Assert.Contains("Width=\"382\"", compactBlock);
         Assert.Contains("x:Name=\"CompactQuotaSeparatorLine\"", quotaBlock);
@@ -765,7 +784,7 @@ public sealed class PulseMeterWindowLayoutTests
             quotaRowsXaml.IndexOf("<ProgressBar", StringComparison.Ordinal));
     }
 
-    [Fact]
+    [Fact(Skip = "Replaced by navigation button contract.")]
     public void PulseMeter_UsesWhiteExpandedDashboardWithCompactDarkHeader()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -803,7 +822,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.DoesNotContain("ToggleExpanded", code);
     }
 
-    [Fact]
+    [Fact(Skip = "Replaced by navigation button contract.")]
     public void ExpandedSidebar_UsesBlueOverviewUnderline()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -816,7 +835,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.DoesNotContain("Background=\"#16A34A\"", overviewBlock);
     }
 
-    [Fact]
+    [Fact(Skip = "Replaced by navigation button contract.")]
     public void ExpandedSidebar_UsesOverviewUnderlineAndSectionSwitches()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -878,7 +897,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("<Setter Property=\"HorizontalAlignment\" Value=\"Center\" />", overviewBlock);
     }
 
-    [Fact]
+    [Fact(Skip = "Replaced by navigation button contract.")]
     public void ExpandedSidebar_UsesFullWidthRowsSoLongLabelsStayReadable()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -903,7 +922,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.DoesNotContain("TextTrimming", longLabelBlock);
     }
 
-    [Fact]
+    [Fact(Skip = "Replaced by navigation button contract.")]
     public void ExpandedSidebar_KeepsSectionSwitchesAwayFromRightEdge()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -912,7 +931,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.DoesNotContain("<Setter Property=\"Padding\" Value=\"18,34,4,28\" />", xaml);
     }
 
-    [Fact]
+    [Fact(Skip = "Replaced by navigation button contract.")]
     public void ExpandedSidebar_MovesIconAndLabelGroupLeftWithoutMovingSwitches()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -935,7 +954,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("Margin=\"4,0,0,0\"", navigationStyle);
     }
 
-    [Fact]
+    [Fact(Skip = "Replaced by navigation button contract.")]
     public void ExpandedSidebar_CentersOverviewIconAndLabelOverUnderline()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -953,7 +972,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.DoesNotContain("<Setter Property=\"Margin\" Value=\"14,0\" />", overviewBlock);
     }
 
-    [Fact]
+    [Fact(Skip = "Replaced by navigation button contract.")]
     public void ExpandedSidebar_CentersCollapsedIconCellsWithoutClippingOffsets()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -981,7 +1000,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.DoesNotContain("<Setter Property=\"Padding\" Value=\"14,0\" />", overviewBlock);
     }
 
-    [Fact]
+    [Fact(Skip = "Replaced by navigation button contract.")]
     public void ExpandedSidebar_HidesSectionSwitchesWhenNavigationIsCollapsed()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -1006,7 +1025,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("Style=\"{StaticResource NavigationUnderlineStyle}\"", overviewBlock);
     }
 
-    [Fact]
+    [Fact(Skip = "Replaced by navigation button contract.")]
     public void ExpandedSidebar_UsesSharedCollapsedNavIconCellStyles()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -1039,10 +1058,10 @@ public sealed class PulseMeterWindowLayoutTests
     {
         var xaml = ReadPulseMeterMarkup();
 
-        Assert.Contains("Text=\"Rate Limits Daily\"", xaml);
+        Assert.Contains("Text=\"Weekly pace\"", xaml);
         Assert.Contains("IsRateLimitsDailyVisible", xaml);
         Assert.Contains("x:Name=\"RateLimitsDailyPanel\"", xaml);
-        Assert.Contains("Text=\"RATE LIMITS DAILY\"", xaml);
+        Assert.Contains("Text=\"WEEKLY PACE\"", xaml);
         Assert.Contains("RateLimitsDailySummaryText", xaml);
         Assert.Contains("RateLimitsDailyWarningText", xaml);
         Assert.Contains("HasRateLimitsDailyWarning", xaml);
@@ -1055,7 +1074,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("Stroke=\"{Binding RingBrush}\"", xaml);
 
         var rateLimitsSidebarStart = xaml.IndexOf("Text=\"Rate limits\"", StringComparison.Ordinal);
-        var rateLimitsDailySidebarStart = xaml.IndexOf("Text=\"Rate Limits Daily\"", StringComparison.Ordinal);
+        var rateLimitsDailySidebarStart = xaml.IndexOf("Text=\"Weekly pace\"", StringComparison.Ordinal);
         var resetCreditsSidebarStart = xaml.IndexOf("Text=\"Reset credits\"", StringComparison.Ordinal);
         Assert.True(rateLimitsSidebarStart < rateLimitsDailySidebarStart);
         Assert.True(rateLimitsDailySidebarStart < resetCreditsSidebarStart);
@@ -1194,20 +1213,116 @@ public sealed class PulseMeterWindowLayoutTests
     public void PulseMeterWindow_CodeBehindAppliesAndPersistsNativeWindowBounds()
     {
         var code = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml.cs"));
-        var applySizeStart = code.IndexOf("private void ApplyViewModelSize()", StringComparison.Ordinal);
+        var applySizeStart = code.IndexOf("private void ApplyViewModelSize(PulseMeterWindowViewModel viewModel, WpfSize fittedSize)", StringComparison.Ordinal);
         var applySizeBlock = code[applySizeStart..Math.Min(code.Length, applySizeStart + 900)];
 
         Assert.Contains("ApplyViewModelSize", code);
-        Assert.Contains("Width = viewModel.WindowWidth", code);
-        Assert.Contains("Height = viewModel.WindowHeight", code);
+        Assert.Contains("Width = fittedSize.Width", code);
+        Assert.Contains("Height = fittedSize.Height", code);
         Assert.Contains("RememberWindowSize", code);
         Assert.Contains("SaveWindowState", code);
         Assert.Contains("WindowStateStore", code);
         Assert.Contains("PropertyChanged", code);
         Assert.True(
             applySizeBlock.IndexOf("WindowState = WindowState.Normal", StringComparison.Ordinal) <
-            applySizeBlock.IndexOf("Width = viewModel.WindowWidth", StringComparison.Ordinal));
+            applySizeBlock.IndexOf("Width = fittedSize.Width", StringComparison.Ordinal));
         Assert.Contains("CanRememberWindowPlacement()", code);
+    }
+
+    [Fact]
+    public void PulseMeterWindow_ReappliesSafeBoundsForTheNearestMonitor()
+    {
+        var code = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml.cs"));
+        var monitorPath = Path.Combine(TestWorkspace.FindRoot(), "src", "PulseMeter", "Platform", "Windows", "WindowMonitorWorkArea.cs");
+        Assert.True(File.Exists(monitorPath));
+
+        var monitorCode = File.ReadAllText(monitorPath);
+        var applySizeStart = code.IndexOf("private void ApplyViewModelBounds()", StringComparison.Ordinal);
+        var applySizeBlock = code[applySizeStart..Math.Min(code.Length, applySizeStart + 1_300)];
+        var propertyChangedStart = code.IndexOf("private void OnViewModelPropertyChanged", StringComparison.Ordinal);
+        var propertyChangedBlock = code[propertyChangedStart..Math.Min(code.Length, propertyChangedStart + 1_000)];
+
+        Assert.Contains("WindowMonitorWorkArea.GetFor(this)", code);
+        Assert.Contains("PulseMeterWindowPlacementCalculator.FitSize", code);
+        Assert.Contains("var fittedSize = GetFittedWindowSize(viewModel, workArea)", applySizeBlock);
+        Assert.Contains("MinWidth = Math.Min(viewModel.WindowMinWidth, fittedSize.Width)", applySizeBlock);
+        Assert.Contains("MinHeight = Math.Min(viewModel.WindowMinHeight, fittedSize.Height)", applySizeBlock);
+        Assert.Contains("Width = fittedSize.Width", applySizeBlock);
+        Assert.Contains("Height = fittedSize.Height", applySizeBlock);
+        Assert.Contains("nameof(PulseMeterWindowViewModel.IsExpanded)", propertyChangedBlock);
+        Assert.Contains("or nameof(PulseMeterWindowViewModel.WindowWidth)", propertyChangedBlock);
+        Assert.Contains("or nameof(PulseMeterWindowViewModel.WindowHeight)", propertyChangedBlock);
+        Assert.Contains("ApplyViewModelBounds();", propertyChangedBlock);
+        Assert.DoesNotContain("!viewModel.HasWindowPosition", propertyChangedBlock);
+        Assert.Contains("MonitorFromWindow(handle, MonitorDefaultToNearest)", monitorCode);
+        Assert.Contains("GetMonitorInfo(monitor, ref monitorInfo)", monitorCode);
+        Assert.Contains("TransformFromDevice", monitorCode);
+        Assert.Contains("SystemParameters.WorkArea", monitorCode);
+    }
+
+    [Fact]
+    public void PulseMeterWindow_AppliesFittedSizeAndPlacementFromOneMonitorLookup()
+    {
+        var code = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml.cs"));
+        var boundsStart = code.IndexOf("private void ApplyViewModelBounds()", StringComparison.Ordinal);
+
+        Assert.NotEqual(-1, boundsStart);
+
+        var boundsBlock = code[boundsStart..Math.Min(code.Length, boundsStart + 1_200)];
+        Assert.Contains("var workArea = WindowMonitorWorkArea.GetFor(this)", boundsBlock);
+        Assert.Contains("var fittedSize = GetFittedWindowSize(viewModel, workArea)", boundsBlock);
+        Assert.Contains("ApplyViewModelSize(viewModel, fittedSize)", boundsBlock);
+        Assert.Contains("ApplyWindowPosition(viewModel, fittedSize, workArea)", boundsBlock);
+    }
+
+    [Fact]
+    public void PulseMeterWindow_AppliesSavedPositionBeforeResolvingStartupMonitor()
+    {
+        var code = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml.cs"));
+        var sourceInitializedStart = code.IndexOf("private void OnSourceInitialized", StringComparison.Ordinal);
+        var sourceInitializedBlock = code[sourceInitializedStart..Math.Min(code.Length, sourceInitializedStart + 700)];
+        var dataContextStart = code.IndexOf("private void OnDataContextChanged", StringComparison.Ordinal);
+        var dataContextBlock = code[dataContextStart..Math.Min(code.Length, dataContextStart + 800)];
+
+        Assert.NotEqual(-1, sourceInitializedStart);
+        Assert.True(
+            sourceInitializedBlock.IndexOf("ApplySavedViewModelPosition();", StringComparison.Ordinal) <
+            sourceInitializedBlock.IndexOf("ApplyViewModelBounds();", StringComparison.Ordinal));
+        Assert.Contains("Left = left", code);
+        Assert.Contains("Top = top", code);
+        Assert.Contains("if (_windowSource is not null)", dataContextBlock);
+    }
+
+    [Fact]
+    public void NavigationRail_UsesNavigationButtonsAndSeparateCustomizePopup()
+    {
+        var xaml = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "NavigationRail", "UI", "NavigationRail.xaml"));
+        var code = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "NavigationRail", "UI", "NavigationRail.xaml.cs"));
+
+        Assert.Contains("x:Key=\"NavigationSectionButtonStyle\"", xaml);
+        Assert.Contains("x:Name=\"CustomizeDashboardButton\"", xaml);
+        Assert.Contains("x:Name=\"CustomizeDashboardPopup\"", xaml);
+        Assert.Contains("StaysOpen=\"False\"", xaml);
+        Assert.Contains("Choose visible sections", xaml);
+        Assert.Contains("CommandParameter=\"{x:Static navModels:NavigationSection.RateLimits}\"", xaml);
+        Assert.Contains("IsRateLimitsVisible", xaml);
+        Assert.Contains("IsUsageAttributionVisible", xaml);
+        Assert.Contains("SectionRequested", code);
+        Assert.Contains("SectionButton_Click", code);
+        Assert.Contains("CustomizeDashboardPopup_KeyDown", code);
+        Assert.DoesNotContain("NavigationSectionToggleStyle", xaml);
+    }
+
+    [Fact]
+    public void NavigationRail_PlacesRequestedSectionAtTheTopOfTheViewport()
+    {
+        var code = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml.cs"));
+        var handlerStart = code.IndexOf("private void NavigationRail_SectionRequested", StringComparison.Ordinal);
+        var handler = code[handlerStart..Math.Min(code.Length, handlerStart + 1_400)];
+
+        Assert.Contains("ScrollToVerticalOffset", handler);
+        Assert.Contains("TransformToAncestor(ExpandedContentScrollViewer)", handler);
+        Assert.DoesNotContain("target.BringIntoView()", handler);
     }
 
     [Fact]
@@ -1422,7 +1537,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("ToggleDailyUsageExpanded", code);
     }
 
-    [Fact]
+    [Fact(Skip = "Navigation rail no longer owns sync feedback.")]
     public void SyncFooter_UsesSingleTimestampFeedbackLine()
     {
         var xaml = ReadPulseMeterMarkup();

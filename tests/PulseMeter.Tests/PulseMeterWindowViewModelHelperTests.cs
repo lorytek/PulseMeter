@@ -4,6 +4,8 @@ using PulseMeter.Slices.ProjectUsage;
 using PulseMeter.Slices.RateLimitsDaily;
 using PulseMeter.Slices.PulseMeterWindow;
 using PulseMeter.Slices.UsageCollection;
+using Rect = System.Windows.Rect;
+using Size = System.Windows.Size;
 
 namespace PulseMeter.Tests;
 
@@ -170,7 +172,9 @@ public sealed class PulseMeterWindowViewModelHelperTests
 
         var burnEvent = Assert.Single(burnEvents);
         Assert.Equal("830.0K", burnEvent.EstimatedTokensText);
-        Assert.Equal("12m ago", burnEvent.AgeText);
+        Assert.Equal(
+            now.AddMinutes(-12).ToLocalTime().ToString("dd MMM HH:mm", System.Globalization.CultureInfo.InvariantCulture),
+            burnEvent.MomentText);
         Assert.Equal("300.0K in / 120.0K out / 90.0K cached / 40.0K reasoning", burnEvent.BreakdownText);
         Assert.Contains("Chat id: thread-1", burnEvent.TooltipText);
         Assert.Equal("No local burn analysis yet.", presenter.EmptyStateText(UsageAttributionSnapshot.Empty));
@@ -252,6 +256,84 @@ public sealed class PulseMeterWindowViewModelHelperTests
         Assert.Equal(66, PulseMeterWindowLayoutCalculator.CompactWindowMinHeight);
     }
 
+    [Fact]
+    public void DataBar_UsesInlineLayoutOnlyForAWeeklyOnlyQuota()
+    {
+        var dataBar = new PulseMeter.Slices.DataBar.UI.DataBarViewModel();
+
+        dataBar.ApplyState(
+            isExpanded: false,
+            compactQuotaRows: [CompactQuotaRow(isWeekly: true)],
+            statusBadgeText: "LIVE",
+            expandCollapseTooltip: "Expand PulseMeter");
+
+        Assert.True(dataBar.IsWeeklyOnlyCompactLayout);
+
+        dataBar.ApplyState(
+            isExpanded: false,
+            compactQuotaRows: [CompactQuotaRow(isWeekly: false)],
+            statusBadgeText: "LIVE",
+            expandCollapseTooltip: "Expand PulseMeter");
+
+        Assert.False(dataBar.IsWeeklyOnlyCompactLayout);
+
+        dataBar.ApplyState(
+            isExpanded: false,
+            compactQuotaRows: [CompactQuotaRow(isWeekly: true), CompactQuotaRow(isWeekly: false)],
+            statusBadgeText: "LIVE",
+            expandCollapseTooltip: "Expand PulseMeter");
+
+        Assert.False(dataBar.IsWeeklyOnlyCompactLayout);
+    }
+
+    [Fact]
+    public void PulseMeterWindowPlacementCalculator_FitSize_ClampsToPaddedWorkAreaWithOnePixelFloor()
+    {
+        var workArea = new Rect(100, 200, 500, 300);
+
+        var fitted = PulseMeterWindowPlacementCalculator.FitSize(900, 400, workArea, edgePadding: 12);
+        var tiny = PulseMeterWindowPlacementCalculator.FitSize(0, -20, new Rect(0, 0, 10, 8), edgePadding: 12);
+
+        Assert.Equal(new Size(476, 276), fitted);
+        Assert.Equal(new Size(1, 1), tiny);
+    }
+
+    [Fact]
+    public void PulseMeterWindowPlacementCalculator_Clamp_UsesRawLowerBoundsAndRetainsRightBottomPadding()
+    {
+        var workArea = new Rect(100, 200, 500, 300);
+
+        var clamped = PulseMeterWindowPlacementCalculator.Clamp(50, 600, 260, 120, workArea, edgePadding: 12);
+        var oversize = PulseMeterWindowPlacementCalculator.Clamp(0, 0, 900, 400, workArea, edgePadding: 12);
+
+        Assert.Equal(new Rect(100, 368, 260, 120), clamped);
+        Assert.Equal(new Rect(100, 200, 476, 276), oversize);
+    }
+
+    [Fact]
+    public void PulseMeterWindowPlacementCalculator_Clamp_PreservesSavedNegativeMonitorPositionWithinWorkArea()
+    {
+        var workArea = new Rect(-1920, 0, 1920, 1080);
+
+        var clamped = PulseMeterWindowPlacementCalculator.Clamp(-1900, 120, 410, 66, workArea, edgePadding: 24);
+
+        Assert.Equal(new Rect(-1900, 120, 410, 66), clamped);
+    }
+
+    [Fact]
+    public void PulseMeterWindowPlacementCalculator_FitSize_TreatsNonfiniteDimensionsAndPaddingAsSafeMinimums()
+    {
+        var workArea = new Rect(0, 0, 640, 480);
+
+        var fitted = PulseMeterWindowPlacementCalculator.FitSize(
+            double.NaN,
+            double.PositiveInfinity,
+            workArea,
+            edgePadding: double.NegativeInfinity);
+
+        Assert.Equal(new Size(1, 1), fitted);
+    }
+
     private static DailyUsageBucket Bucket(DateOnly date, long tokens)
     {
         return new DailyUsageBucket
@@ -259,5 +341,22 @@ public sealed class PulseMeterWindowViewModelHelperTests
             StartDate = date.ToString("yyyy-MM-dd"),
             Tokens = tokens
         };
+    }
+
+    private static PulseMeter.Slices.RateLimits.Models.QuotaDisplayRow CompactQuotaRow(bool isWeekly)
+    {
+        return new PulseMeter.Slices.RateLimits.Models.QuotaDisplayRow(
+            Label: isWeekly ? "Weekly" : "5h",
+            UsageLimitLabel: string.Empty,
+            RemainingPercentText: "16% left",
+            ResetDisplayText: "Sun 7:58 PM",
+            RemainingPercentValue: 16,
+            CompactRemainingPercentText: "16% left",
+            RingArcData: string.Empty,
+            RingBrush: "#28B946",
+            RingPercentText: "16%",
+            RingSubtitleText: string.Empty,
+            IsWeekly: isWeekly,
+            ShowCompactSeparator: false);
     }
 }

@@ -76,10 +76,15 @@ public sealed class PulseMeterWindowLifecycleCoordinatorTests
             new ImmediateUiDispatcher());
 
         await coordinator.StartAsync();
+        viewModel.NavigationRail.IsProjectUsageVisible = false;
+        viewModel.NavigationRail.IsUsageAttributionVisible = false;
         coordinator.Stop();
 
         Assert.True(tray.IsDisposed);
         Assert.NotNull(settingsStore.Saved);
+        Assert.NotNull(settingsStore.Saved!.DashboardVisibility);
+        Assert.False(settingsStore.Saved.DashboardVisibility!.ProjectUsage);
+        Assert.False(settingsStore.Saved.DashboardVisibility.BurnAnalysis);
         Assert.NotNull(windowStateStore.Saved);
         Assert.All(timerFactory.Timers, timer => Assert.False(timer.Started));
     }

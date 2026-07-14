@@ -11,13 +11,22 @@ PulseMeter is not affiliated with OpenAI.
 
 ## Download the App
 
-[Download PulseMeter 0.2.1 for Windows](https://github.com/lorytek/PulseMeter/releases/latest/download/PulseMeter-0.2.1-win-x64-portable.zip), extract the ZIP, and run `PulseMeter.exe`.
+[Download PulseMeter 0.3.0 for Windows](https://github.com/lorytek/PulseMeter/releases/latest/download/PulseMeter-0.3.0-win-x64-portable.zip), extract the ZIP, and run `PulseMeter.exe`.
 
-- SHA-256: updated on each GitHub release asset.
+- A matching `.sha256` checksum file is attached to each GitHub release.
 - Windows 10 or Windows 11, 64-bit.
 - No .NET install required for the portable release ZIP.
 
 Only run release zips you downloaded from a PulseMeter release page you trust. The `Source code (zip)` and `Source code (tar.gz)` links on GitHub Releases are automatic GitHub source archives for developers, not the portable Windows app.
+
+## New in 0.3.0
+
+- More reliable live quota readings: suspicious drops are confirmed before replacing the last trusted values.
+- Better expanded navigation with direct section jumps, top-aligned destinations, a dedicated Customize menu, and improved keyboard access.
+- Window placement that stays usable across monitor and work-area changes.
+- Burn Analysis groups repeated low-level token updates into clearer per-minute burn moments.
+- An adaptive compact HUD that keeps weekly-only data on one line and preserves the full two-limit layout when both limits are available.
+- Refreshed screenshots covering the current dashboard, Burn Analysis, project attribution, and compact HUD.
 
 ## Who This Is For
 
@@ -31,23 +40,23 @@ Want to help share PulseMeter? See [DISCOVERABILITY.md](DISCOVERABILITY.md).
 
 ## Screenshots
 
-![PulseMeter rate limits and account usage dashboard](assets/pulsemeter-rate-limits-account-dashboard.png)
+![PulseMeter overview with attention signals, rate limits, and weekly pace](assets/pulsemeter-rate-limits-account-dashboard.png)
 
 ****
 
-![PulseMeter reset credits, account usage, and project usage dashboard](assets/pulsemeter-reset-account-project-dashboard.png)
+![PulseMeter burn analysis with top chats and grouped burn moments](assets/pulsemeter-reset-account-project-dashboard.png)
 
 ****
 
-![PulseMeter showing project usage and daily usage rows](assets/pulsemeter-account-project-usage.png)
+![PulseMeter project usage with local estimated attribution](assets/pulsemeter-account-project-usage.png)
 
 ****
 
-![PulseMeter compact HUD with live status](assets/pulsemeter-compact-hud.png)
+![PulseMeter compact HUD with live rate-limit status](assets/pulsemeter-compact-hud.png)
 
 ## Quick Start
 
-1. Download `PulseMeter-0.2.1-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
+1. Download `PulseMeter-0.3.0-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
 2. Extract the zip to a normal folder, for example `Documents\PulseMeter`.
 3. Run `PulseMeter.exe`.
 4. If Windows shows an unknown-publisher or SmartScreen warning, choose `More info`, then `Run anyway`.
@@ -75,7 +84,7 @@ That warning is expected for this build. It is still a trust decision: only run 
 - Rate-limit daily allowance chunks.
 - Account usage summary and recent daily usage.
 - Estimated project usage for the last 30 days.
-- Burn Analysis showing top local chats by estimated token burn and largest token-burn events for the last 30 days.
+- Burn Analysis showing top local chats by estimated token burn and largest grouped burn moments for the last 30 days.
 - Needs Attention automatic alert signals for local usage and rate-limit risk.
 - Limit Runway estimates when a 5-hour or weekly pool may run out before reset.
 - Idle Drain Detector flags usage movement while Windows reports you were idle.

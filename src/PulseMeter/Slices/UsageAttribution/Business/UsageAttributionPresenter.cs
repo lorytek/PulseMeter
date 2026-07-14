@@ -46,8 +46,8 @@ public sealed class UsageAttributionPresenter : IUsageAttributionPresenter
                 MeterDisplayFormatter.FormatTokens(row.EstimatedTokens),
                 $"local raw {MeterDisplayFormatter.FormatTokens(row.RawLocalTokens)}",
                 FormatBreakdown(row.InputTokens, row.OutputTokens, row.CachedInputTokens, row.ReasoningTokens),
-                FormatAge(row.TimestampUtc, now),
-                FormatTooltip(row.ThreadId, row.SessionDisplayName, row.ProjectDisplayName, row.ProjectPath, row.TimestampUtc, "Event")))
+                FormatMomentTime(row.TimestampUtc),
+                FormatTooltip(row.ThreadId, row.SessionDisplayName, row.ProjectDisplayName, row.ProjectPath, row.TimestampUtc, "Moment")))
             .ToList();
     }
 
@@ -103,6 +103,11 @@ public sealed class UsageAttributionPresenter : IUsageAttributionPresenter
         }
 
         return parts.Count == 0 ? "breakdown unavailable" : string.Join(" / ", parts);
+    }
+
+    private static string FormatMomentTime(DateTimeOffset timestamp)
+    {
+        return timestamp.ToLocalTime().ToString("dd MMM HH:mm", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private static string FormatAge(DateTimeOffset? timestampUtc, DateTimeOffset now)

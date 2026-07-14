@@ -28,6 +28,23 @@ public sealed class PulseMeterWindowViewModelSyncTests
     }
 
     [Fact]
+    public void RefreshClock_MarksOverdueLiveSnapshotAsStale()
+    {
+        var viewModel = new PulseMeterWindowViewModel(new StubUsageService(), TimeSpan.FromSeconds(90));
+        viewModel.ApplySnapshot(new UsageSnapshot
+        {
+            Source = "AppServer",
+            SyncStatus = SyncStatus.Live,
+            LastUpdatedUtc = DateTimeOffset.UtcNow.AddMinutes(-5)
+        });
+
+        viewModel.RefreshClock();
+
+        Assert.Equal("STALE", viewModel.StatusBadgeText);
+        Assert.Equal("Stale", viewModel.SyncStatusText);
+    }
+
+    [Fact]
     public async Task SyncNowCommand_RefreshesImmediately()
     {
         var service = new StubUsageService();

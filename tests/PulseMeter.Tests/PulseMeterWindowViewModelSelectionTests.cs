@@ -340,17 +340,17 @@ public sealed class PulseMeterWindowViewModelSelectionTests
     {
         var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
 
-        Assert.Equal("Ã¢â€“Â¼", viewModel.ExpandCollapseGlyph);
+        Assert.Equal("\u25BC", viewModel.ExpandCollapseGlyph);
         Assert.Equal("Expand details", viewModel.ExpandCollapseTooltip);
 
         viewModel.ToggleExpanded();
 
-        Assert.Equal("Ã¢â€“Â²", viewModel.ExpandCollapseGlyph);
+        Assert.Equal("\u25B2", viewModel.ExpandCollapseGlyph);
         Assert.Equal("Collapse details", viewModel.ExpandCollapseTooltip);
 
         viewModel.Collapse();
 
-        Assert.Equal("Ã¢â€“Â¼", viewModel.ExpandCollapseGlyph);
+        Assert.Equal("\u25BC", viewModel.ExpandCollapseGlyph);
         Assert.Equal("Expand details", viewModel.ExpandCollapseTooltip);
     }
 
@@ -389,21 +389,21 @@ public sealed class PulseMeterWindowViewModelSelectionTests
 
         Assert.True(viewModel.IsNavigationPanelExpanded);
         Assert.Equal(205, viewModel.NavigationPanelWidth);
-        Assert.Equal("\u00E2\u20AC\u00B9", viewModel.NavigationPanelToggleGlyph);
+        Assert.Equal("\u2039", viewModel.NavigationPanelToggleGlyph);
         Assert.Equal("Collapse navigation", viewModel.NavigationPanelToggleTooltip);
 
         viewModel.ToggleNavigationPanel();
 
         Assert.False(viewModel.IsNavigationPanelExpanded);
         Assert.Equal(64, viewModel.NavigationPanelWidth);
-        Assert.Equal("\u00E2\u20AC\u00BA", viewModel.NavigationPanelToggleGlyph);
+        Assert.Equal("\u203A", viewModel.NavigationPanelToggleGlyph);
         Assert.Equal("Expand navigation", viewModel.NavigationPanelToggleTooltip);
 
         viewModel.ToggleNavigationPanel();
 
         Assert.True(viewModel.IsNavigationPanelExpanded);
         Assert.Equal(205, viewModel.NavigationPanelWidth);
-        Assert.Equal("\u00E2\u20AC\u00B9", viewModel.NavigationPanelToggleGlyph);
+        Assert.Equal("\u2039", viewModel.NavigationPanelToggleGlyph);
     }
 
     [Fact]

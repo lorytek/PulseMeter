@@ -88,7 +88,7 @@ public sealed class UsageAttributionService : IUsageAttributionService
             .ToList();
 
         var burnEvents = sessionAggregates
-            .SelectMany(session => session.Events.Select(item => ToBurnEvent(session.Thread, item, scale, titleCounts)))
+            .SelectMany(session => BuildBurnMoments(session, scale, titleCounts))
             .OrderByDescending(row => row.RawLocalTokens)
             .ThenByDescending(row => row.TimestampUtc)
             .Take(_maxBurnEvents)
@@ -193,6 +193,7 @@ public sealed class UsageAttributionService : IUsageAttributionService
         }
 
         var events = new List<UsageAttributionEvent>();
+        var cumulativeTotals = new HashSet<long>();
         try
         {
             foreach (var line in File.ReadLines(rolloutPath))
@@ -204,7 +205,9 @@ public sealed class UsageAttributionService : IUsageAttributionService
                     continue;
                 }
 
-                if (ReadTokenCountLine(line, cutoffDate) is { } usageEvent)
+                if (ReadTokenCountLine(line, cutoffDate) is { } usageEvent
+                    && (usageEvent.CumulativeTotalTokens is not long cumulativeTotal
+                        || cumulativeTotals.Add(cumulativeTotal)))
                 {
                     events.Add(usageEvent);
                 }
@@ -251,13 +254,18 @@ public sealed class UsageAttributionService : IUsageAttributionService
                 return null;
             }
 
+            var cumulativeTotalTokens = TryGetObject(info, "total_token_usage", out var totalUsage)
+                ? ReadLong(totalUsage, "total_tokens") ?? ReadLong(totalUsage, "totalTokens")
+                : null;
+
             return new UsageAttributionEvent(
                 timestamp.Value.ToUniversalTime(),
                 totalTokens.Value,
                 ReadLong(usage, "input_tokens") ?? ReadLong(usage, "inputTokens"),
                 ReadLong(usage, "output_tokens") ?? ReadLong(usage, "outputTokens"),
                 ReadLong(usage, "cached_input_tokens") ?? ReadLong(usage, "cachedInputTokens"),
-                ReadLong(usage, "reasoning_tokens") ?? ReadLong(usage, "reasoningTokens") ?? ReadLong(usage, "reasoning_output_tokens"));
+                ReadLong(usage, "reasoning_tokens") ?? ReadLong(usage, "reasoningTokens") ?? ReadLong(usage, "reasoning_output_tokens"),
+                cumulativeTotalTokens);
         }
         catch (JsonException)
         {
@@ -305,6 +313,33 @@ public sealed class UsageAttributionService : IUsageAttributionService
             usageEvent.OutputTokens,
             usageEvent.CachedInputTokens,
             usageEvent.ReasoningTokens);
+    }
+
+    private static IEnumerable<UsageAttributionBurnEvent> BuildBurnMoments(
+        SessionAggregate session,
+        double scale,
+        IReadOnlyDictionary<string, int> titleCounts)
+    {
+        return session.Events
+            .GroupBy(item => StartOfUtcMinute(item.TimestampUtc))
+            .Select(group => ToBurnEvent(
+                session.Thread,
+                new UsageAttributionEvent(
+                    group.Key,
+                    group.Sum(item => item.TotalTokens),
+                    SumNullable(group.Select(item => item.InputTokens)),
+                    SumNullable(group.Select(item => item.OutputTokens)),
+                    SumNullable(group.Select(item => item.CachedInputTokens)),
+                    SumNullable(group.Select(item => item.ReasoningTokens)),
+                    null),
+                scale,
+                titleCounts));
+    }
+
+    private static DateTimeOffset StartOfUtcMinute(DateTimeOffset timestamp)
+    {
+        var utc = timestamp.ToUniversalTime();
+        return new DateTimeOffset(utc.Year, utc.Month, utc.Day, utc.Hour, utc.Minute, 0, TimeSpan.Zero);
     }
 
     private static long ScaleTokens(long rawTokens, double scale)
@@ -508,7 +543,8 @@ public sealed class UsageAttributionService : IUsageAttributionService
         long? InputTokens,
         long? OutputTokens,
         long? CachedInputTokens,
-        long? ReasoningTokens);
+        long? ReasoningTokens,
+        long? CumulativeTotalTokens);
 
     private sealed class SessionAggregate
     {

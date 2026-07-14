@@ -92,6 +92,8 @@ public sealed class CodexUsageServiceTests
         Assert.Contains("\"capabilities\"", client.InitializeParametersJson);
         Assert.Contains("\"experimentalApi\":false", client.InitializeParametersJson);
         Assert.Contains("\"requestAttestation\":false", client.InitializeParametersJson);
+        var expectedVersion = typeof(CodexUsageService).Assembly.GetName().Version?.ToString(3);
+        Assert.Contains($"\"version\":\"{expectedVersion}\"", client.InitializeParametersJson);
         Assert.Contains("request:account/rateLimits/read", client.Calls);
         Assert.Contains("request:account/usage/read", client.Calls);
     }
@@ -128,6 +130,99 @@ public sealed class CodexUsageServiceTests
         Assert.Single(snapshot.DailyBuckets);
     }
 
+    [Fact]
+    public async Task GetSnapshotAsync_ReusesHealthyAppServerAcrossRefreshes()
+    {
+        var processFactory = new StubProcessFactory();
+        var client = new StubJsonRpcClient(
+            ("initialize", "{}"),
+            ("account/rateLimits/read", "{}"),
+            ("account/usage/read", "{\"dailyUsageBuckets\":[],\"summary\":{}}"),
+            ("thread/loaded/list", "[]"));
+        await using var service = CreateService(
+            processFactory: processFactory,
+            jsonRpcClientFactory: new StubJsonRpcClientFactory(client));
+
+        await service.GetSnapshotAsync();
+        await service.GetSnapshotAsync();
+
+        Assert.Equal(1, processFactory.StartCount);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_ReplacesConnectionAfterRequestFailure()
+    {
+        var failedClient = new StubJsonRpcClient(("initialize", "{}"));
+        var healthyClient = new StubJsonRpcClient(
+            ("initialize", "{}"),
+            ("account/rateLimits/read", "{}"),
+            ("account/usage/read", "{\"dailyUsageBuckets\":[],\"summary\":{}}"),
+            ("thread/loaded/list", "[]"));
+        var processFactory = new StubProcessFactory();
+        await using var service = CreateService(
+            processFactory: processFactory,
+            jsonRpcClientFactory: new SequenceJsonRpcClientFactory(failedClient, healthyClient));
+
+        var failed = await service.GetSnapshotAsync();
+        var recovered = await service.GetSnapshotAsync();
+
+        Assert.Equal(SyncStatus.Unavailable, failed.SyncStatus);
+        Assert.Equal(SyncStatus.Live, recovered.SyncStatus);
+        Assert.Equal(2, processFactory.StartCount);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_KeepsLastConfirmedValuesWhenFreshReadsRegressInsideSameWindow()
+    {
+        var reset = DateTimeOffset.UtcNow.AddHours(2);
+        var baselineClient = new SequentialRateLimitJsonRpcClient(
+            RateLimitsJson(60, reset),
+            RateLimitsJson(5, reset.AddMinutes(3)));
+        var staleConfirmationClient = RateLimitsOnlyClient(RateLimitsJson(5, reset.AddMinutes(3)));
+        var processFactory = new StubProcessFactory();
+        await using var service = CreateService(
+            processFactory: processFactory,
+            jsonRpcClientFactory: new SequenceJsonRpcClientFactory(
+                baselineClient,
+                staleConfirmationClient));
+
+        var baseline = await service.GetSnapshotAsync();
+        var rejected = await service.GetSnapshotAsync();
+
+        Assert.Equal(SyncStatus.Live, baseline.SyncStatus);
+        Assert.Equal(SyncStatus.Stale, rejected.SyncStatus);
+        Assert.Equal(60, Assert.Single(rejected.Buckets).UsedPercent);
+        Assert.Equal(baseline.LastUpdatedUtc, rejected.LastUpdatedUtc);
+        Assert.Contains("last confirmed", rejected.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(2, processFactory.StartCount);
+    }
+
+    private static StubJsonRpcClient RateLimitsOnlyClient(string rateLimitsJson)
+    {
+        return new StubJsonRpcClient(
+            ("initialize", "{}"),
+            ("account/rateLimits/read", rateLimitsJson));
+    }
+
+    private static string RateLimitsJson(double usedPercent, DateTimeOffset reset)
+    {
+        return JsonSerializer.Serialize(new
+        {
+            rateLimitsByLimitId = new
+            {
+                codex = new
+                {
+                    primary = new
+                    {
+                        usedPercent,
+                        windowDurationMins = 300,
+                        resetsAt = reset.ToUnixTimeSeconds()
+                    }
+                }
+            }
+        });
+    }
+
     private static async Task<UsageSnapshot> InvokeFallbackAsync(CodexUsageService service, Exception exception)
     {
         var method = typeof(CodexUsageService).GetMethod(
@@ -145,6 +240,7 @@ public sealed class CodexUsageServiceTests
     private static CodexUsageService CreateService(
         ICodexResetCreditService? resetCreditService = null,
         IUsageAttributionService? usageAttributionService = null,
+        IAppServerProcessFactory? processFactory = null,
         IJsonRpcClientFactory? jsonRpcClientFactory = null)
     {
         return new CodexUsageService(
@@ -152,7 +248,7 @@ public sealed class CodexUsageServiceTests
             resetCreditService ?? new StubResetCreditService(),
             new StubProjectUsageService(),
             usageAttributionService ?? new StubUsageAttributionService(UsageAttributionSnapshot.Empty),
-            new StubProcessFactory(),
+            processFactory ?? new StubProcessFactory(),
             jsonRpcClientFactory ?? new StubJsonRpcClientFactory());
     }
 
@@ -228,8 +324,11 @@ public sealed class CodexUsageServiceTests
 
     private sealed class StubProcessFactory : IAppServerProcessFactory
     {
+        public int StartCount { get; private set; }
+
         public IAppServerProcess Start(string? executable = null)
         {
+            StartCount++;
             return new StubAppServerProcess();
         }
     }
@@ -246,6 +345,18 @@ public sealed class CodexUsageServiceTests
         public IJsonRpcClient Create(StreamReader reader, StreamWriter writer)
         {
             return _client ?? throw new InvalidOperationException("Not used by fallback test.");
+        }
+    }
+
+    private sealed class SequenceJsonRpcClientFactory(params IJsonRpcClient[] clients) : IJsonRpcClientFactory
+    {
+        private readonly Queue<IJsonRpcClient> _clients = new(clients);
+
+        public IJsonRpcClient Create(StreamReader reader, StreamWriter writer)
+        {
+            return _clients.Count > 0
+                ? _clients.Dequeue()
+                : throw new InvalidOperationException("No JSON-RPC client remains for this connection.");
         }
     }
 
@@ -293,6 +404,51 @@ public sealed class CodexUsageServiceTests
         }
 
         public Task SendNotificationAsync(string method, object? parameters = null, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        private static JsonElement ParseElement(string json)
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.Clone();
+        }
+    }
+
+    private sealed class SequentialRateLimitJsonRpcClient(params string[] rateLimitResponses) : IJsonRpcClient
+    {
+        private readonly Queue<JsonElement> _rateLimitResponses = new(rateLimitResponses.Select(ParseElement));
+
+        public event EventHandler<JsonRpcNotificationEventArgs>? NotificationReceived;
+
+        public void Start()
+        {
+        }
+
+        public Task<JsonElement> SendRequestAsync(
+            string method,
+            object? parameters = null,
+            CancellationToken cancellationToken = default)
+        {
+            return method switch
+            {
+                "initialize" => Task.FromResult(ParseElement("{}")),
+                "account/rateLimits/read" when _rateLimitResponses.Count > 0 => Task.FromResult(_rateLimitResponses.Dequeue()),
+                "account/usage/read" => Task.FromResult(ParseElement("{\"dailyUsageBuckets\":[],\"summary\":{}}")),
+                "thread/loaded/list" => Task.FromResult(ParseElement("[]")),
+                _ => throw new InvalidOperationException("Unexpected request: " + method)
+            };
+        }
+
+        public Task SendNotificationAsync(
+            string method,
+            object? parameters = null,
+            CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
         }

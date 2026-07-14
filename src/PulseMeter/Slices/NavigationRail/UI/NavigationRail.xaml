@@ -1,559 +1,206 @@
 <UserControl x:Class="PulseMeter.Slices.NavigationRail.UI.NavigationRail"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:navModels="clr-namespace:PulseMeter.Slices.NavigationRail.Models">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
 
         <Style x:Key="NavigationPanelToggleButtonStyle" TargetType="Button">
-            <Setter Property="Width" Value="22" />
-            <Setter Property="Height" Value="22" />
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Width="16"
-                                Height="16"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Background="#FFFFFF"
-                                BorderBrush="#9CA3AF"
-                                BorderThickness="1"
-                                CornerRadius="4">
-                            <Path Width="4"
-                                  Height="7"
-                                  HorizontalAlignment="Center"
-                                  VerticalAlignment="Center"
-                                  Stroke="#374151"
-                                  StrokeThickness="1.2"
-                                  StrokeStartLineCap="Round"
-                                  StrokeEndLineCap="Round"
-                                  StrokeLineJoin="Round"
-                                  Stretch="Fill">
-                                <Path.Style>
-                                    <Style TargetType="Path">
-                                        <Setter Property="Data" Value="M 0 0 L 4 3.5 L 0 7" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsNavigationPanelExpanded}" Value="False">
-                                                <Setter Property="Data" Value="M 4 0 L 0 3.5 L 4 7" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Path.Style>
-                            </Path>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
-        <Style x:Key="NavigationUnderlineStyle" TargetType="Border">
-            <Setter Property="Height" Value="3" />
-            <Setter Property="Margin" Value="14,0,14,4" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="VerticalAlignment" Value="Bottom" />
-            <Setter Property="CornerRadius" Value="2" />
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsNavigationPanelExpanded}" Value="False">
-                    <Setter Property="Width" Value="14" />
-                    <Setter Property="Margin" Value="0,0,0,4" />
-                    <Setter Property="HorizontalAlignment" Value="Center" />
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-
-        <Style x:Key="NavigationSectionToggleStyle" TargetType="ToggleButton">
-            <Setter Property="Height" Value="44" />
-            <Setter Property="Padding" Value="8,0,0,0" />
+        <Style x:Key="NavigationSectionButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="42" />
+            <Setter Property="Margin" Value="0,4,0,0" />
+            <Setter Property="Padding" Value="8,0" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Foreground" Value="#374151" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate TargetType="ToggleButton">
-                        <Border x:Name="SectionToggleSurface"
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Surface"
                                 Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8"
+                                CornerRadius="6"
                                 Padding="{TemplateBinding Padding}">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-
-                                <ContentPresenter Grid.Column="0"
-                                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
-                                <Grid x:Name="SectionSwitch"
-                                      Grid.Column="1"
-                                      Width="28"
-                                      Height="15"
-                                      Margin="4,0,0,0"
-                                      HorizontalAlignment="Right"
-                                      VerticalAlignment="Center">
-                                    <Border x:Name="SectionSwitchTrack"
-                                            Background="#DADDE3"
-                                            CornerRadius="7.5" />
-                                    <Ellipse x:Name="SectionSwitchThumb"
-                                             Width="13"
-                                             Height="13"
-                                             Margin="1"
-                                             HorizontalAlignment="Left"
-                                             VerticalAlignment="Center"
-                                             Fill="#FFFFFF">
-                                        <Ellipse.Effect>
-                                            <DropShadowEffect BlurRadius="3"
-                                                              ShadowDepth="1"
-                                                              Direction="270"
-                                                              Opacity="0.20"
-                                                              Color="#000000" />
-                                        </Ellipse.Effect>
-                                    </Ellipse>
-                                </Grid>
-                            </Grid>
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="SectionToggleSurface" Property="Background" Value="#F9FAFB" />
+                                <Setter TargetName="Surface" Property="Background" Value="#F3F7FC" />
                             </Trigger>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="SectionSwitchTrack" Property="Background" Value="#65D75F" />
-                                <Setter TargetName="SectionSwitchThumb" Property="HorizontalAlignment" Value="Right" />
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Surface" Property="BorderBrush" Value="#1F73FF" />
+                                <Setter TargetName="Surface" Property="BorderThickness" Value="1" />
                             </Trigger>
                             <DataTrigger Binding="{Binding IsNavigationPanelExpanded}" Value="False">
-                                <Setter TargetName="SectionSwitch" Property="Visibility" Value="Collapsed" />
+                                <Setter Property="Width" Value="42" />
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="HorizontalContentAlignment" Value="Center" />
                             </DataTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsNavigationPanelExpanded}" Value="False">
-                    <Setter Property="Width" Value="36" />
-                    <Setter Property="Padding" Value="0" />
-                    <Setter Property="HorizontalContentAlignment" Value="Center" />
-                </DataTrigger>
-            </Style.Triggers>
         </Style>
 
         <Style x:Key="NavigationItemContentStyle" TargetType="StackPanel">
             <Setter Property="Orientation" Value="Horizontal" />
             <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="HorizontalAlignment" Value="Left" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsNavigationPanelExpanded}" Value="False">
                     <Setter Property="HorizontalAlignment" Value="Center" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
-
-        <Style x:Key="NavigationIconCellStyle" TargetType="Grid">
-            <Setter Property="Width" Value="22" />
-            <Setter Property="Height" Value="22" />
-            <Setter Property="HorizontalAlignment" Value="Center" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="SnapsToDevicePixels" Value="True" />
-        </Style>
-
-        <Style x:Key="NavigationIconGlyphStyle" TargetType="TextBlock">
-            <Setter Property="Width" Value="22" />
-            <Setter Property="Height" Value="22" />
-            <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
-            <Setter Property="FontSize" Value="18" />
-            <Setter Property="TextAlignment" Value="Center" />
-            <Setter Property="HorizontalAlignment" Value="Center" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-        </Style>
     </UserControl.Resources>
 
     <Border Width="{Binding NavigationPanelWidth}"
+            Padding="14,28,14,20"
+            Background="#FFFFFF"
             BorderBrush="#E5E7EB"
             BorderThickness="0,0,1,0">
-        <Border.Style>
-            <Style TargetType="Border">
-                <Setter Property="Padding" Value="18,34,14,28" />
-                <Style.Triggers>
-                    <DataTrigger Binding="{Binding IsNavigationPanelExpanded}" Value="False">
-                        <Setter Property="Padding" Value="14,34,14,28" />
-                    </DataTrigger>
-                </Style.Triggers>
-            </Style>
-        </Border.Style>
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <Grid>
-                <Grid.Style>
-                    <Style TargetType="Grid">
-                        <Setter Property="HorizontalAlignment" Value="Stretch" />
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsNavigationPanelExpanded}" Value="False">
-                                <Setter Property="Width" Value="22" />
-                                <Setter Property="HorizontalAlignment" Value="Center" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Grid.Style>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel Visibility="Collapsed">
-                    <TextBlock Text="PulseMeter"
-                               Foreground="#111827"
-                               FontSize="21"
-                               FontWeight="SemiBold" />
-                    <TextBlock Margin="0,8,0,0"
-                               Text="{Binding DataContext.SelectedLimitOption.DisplayName, RelativeSource={RelativeSource AncestorType=Window}, TargetNullValue=General}"
-                               Foreground="#374151"
-                               FontSize="16" />
-                </StackPanel>
-                <Button Grid.Column="1"
-                        Margin="0,2,0,0"
-                        HorizontalAlignment="Right"
-                        VerticalAlignment="Top"
-                        Content="{Binding NavigationPanelToggleGlyph}"
-                        ToolTip="{Binding NavigationPanelToggleTooltip}"
-                        Click="NavigationPanelToggleButton_Click"
-                        Style="{StaticResource NavigationPanelToggleButtonStyle}" />
-            </Grid>
+            <Button HorizontalAlignment="Right"
+                    Content="{Binding NavigationPanelToggleGlyph}"
+                    ToolTip="{Binding NavigationPanelToggleTooltip}"
+                    Click="NavigationPanelToggleButton_Click"
+                    Style="{StaticResource NavigationPanelToggleButtonStyle}" />
 
-            <StackPanel Grid.Row="1"
-                        Visibility="Collapsed"
-                        Orientation="Horizontal">
-                <StackPanel.Style>
-                    <Style TargetType="StackPanel">
-                        <Setter Property="Margin" Value="0,36,0,0" />
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsNavigationPanelExpanded}" Value="False">
-                                <Setter Property="Margin" Value="13,36,0,0" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </StackPanel.Style>
-                <Border Width="10"
-                        Height="10"
-                        VerticalAlignment="Center"
-                        Background="#28B946"
-                        CornerRadius="5" />
-                <TextBlock Margin="9,0,0,0"
-                           Text="{Binding DataContext.StatusBadgeText, RelativeSource={RelativeSource AncestorType=Window}}"
-                           Foreground="#16A34A"
-                           FontSize="13"
-                           VerticalAlignment="Center"
-                           Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            <StackPanel Grid.Row="1" Margin="0,28,0,0">
+                <Button CommandParameter="{x:Static navModels:NavigationSection.Overview}"
+                        ToolTip="Go to overview"
+                        AutomationProperties.Name="Go to overview"
+                        Click="SectionButton_Click"
+                        Style="{StaticResource NavigationSectionButtonStyle}">
+                    <StackPanel Style="{StaticResource NavigationItemContentStyle}">
+                        <TextBlock Text="&#xE80F;" FontFamily="Segoe MDL2 Assets" FontSize="17" />
+                        <TextBlock Margin="8,0,0,0" Text="Overview" FontSize="14" FontWeight="SemiBold"
+                                   Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </StackPanel>
+                </Button>
+
+                <Button CommandParameter="{x:Static navModels:NavigationSection.RateLimits}"
+                        ToolTip="Go to rate limits" AutomationProperties.Name="Go to rate limits"
+                        Visibility="{Binding IsRateLimitsVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        Click="SectionButton_Click" Style="{StaticResource NavigationSectionButtonStyle}">
+                    <StackPanel Style="{StaticResource NavigationItemContentStyle}">
+                        <TextBlock Text="&#xE916;" FontFamily="Segoe MDL2 Assets" FontSize="17" />
+                        <TextBlock Margin="8,0,0,0" Text="Rate limits" FontSize="13.5" Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </StackPanel>
+                </Button>
+
+                <Button CommandParameter="{x:Static navModels:NavigationSection.WeeklyPace}"
+                        ToolTip="Go to weekly pace" AutomationProperties.Name="Go to weekly pace"
+                        Visibility="{Binding IsRateLimitsDailyVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        Click="SectionButton_Click" Style="{StaticResource NavigationSectionButtonStyle}">
+                    <StackPanel Style="{StaticResource NavigationItemContentStyle}">
+                        <TextBlock Text="&#xE823;" FontFamily="Segoe MDL2 Assets" FontSize="17" />
+                        <TextBlock Margin="8,0,0,0" Text="Weekly pace" FontSize="13.5" Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </StackPanel>
+                </Button>
+
+                <Button CommandParameter="{x:Static navModels:NavigationSection.ResetCredits}"
+                        ToolTip="Go to reset credits" AutomationProperties.Name="Go to reset credits"
+                        Visibility="{Binding IsResetCreditsVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        Click="SectionButton_Click" Style="{StaticResource NavigationSectionButtonStyle}">
+                    <StackPanel Style="{StaticResource NavigationItemContentStyle}">
+                        <TextBlock Text="&#xE7BA;" FontFamily="Segoe MDL2 Assets" FontSize="17" />
+                        <TextBlock Margin="8,0,0,0" Text="Reset credits" FontSize="13.5" Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </StackPanel>
+                </Button>
+
+                <Button CommandParameter="{x:Static navModels:NavigationSection.AccountUsage}"
+                        ToolTip="Go to account usage" AutomationProperties.Name="Go to account usage"
+                        Visibility="{Binding IsAccountUsageVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        Click="SectionButton_Click" Style="{StaticResource NavigationSectionButtonStyle}">
+                    <StackPanel Style="{StaticResource NavigationItemContentStyle}">
+                        <TextBlock Text="&#xE9D2;" FontFamily="Segoe MDL2 Assets" FontSize="17" />
+                        <TextBlock Margin="8,0,0,0" Text="Account usage" FontSize="13.5" Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </StackPanel>
+                </Button>
+
+                <Button CommandParameter="{x:Static navModels:NavigationSection.ProjectUsage}"
+                        ToolTip="Go to project usage" AutomationProperties.Name="Go to project usage"
+                        Visibility="{Binding IsProjectUsageVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        Click="SectionButton_Click" Style="{StaticResource NavigationSectionButtonStyle}">
+                    <StackPanel Style="{StaticResource NavigationItemContentStyle}">
+                        <TextBlock Text="&#xE8F1;" FontFamily="Segoe MDL2 Assets" FontSize="17" />
+                        <TextBlock Margin="8,0,0,0" Text="Project usage" FontSize="13.5" Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </StackPanel>
+                </Button>
+
+                <Button CommandParameter="{x:Static navModels:NavigationSection.BurnAnalysis}"
+                        ToolTip="Go to burn analysis" AutomationProperties.Name="Go to burn analysis"
+                        Visibility="{Binding IsUsageAttributionVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        Click="SectionButton_Click" Style="{StaticResource NavigationSectionButtonStyle}">
+                    <StackPanel Style="{StaticResource NavigationItemContentStyle}">
+                        <TextBlock Text="&#xE9D9;" FontFamily="Segoe MDL2 Assets" FontSize="17" />
+                        <TextBlock Margin="8,0,0,0" Text="Burn analysis" FontSize="13.5" Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </StackPanel>
+                </Button>
+
+                <Button CommandParameter="{x:Static navModels:NavigationSection.DailyUsage}"
+                        ToolTip="Go to daily usage" AutomationProperties.Name="Go to daily usage"
+                        Visibility="{Binding IsDailyUsageVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        Click="SectionButton_Click" Style="{StaticResource NavigationSectionButtonStyle}">
+                    <StackPanel Style="{StaticResource NavigationItemContentStyle}">
+                        <TextBlock Text="&#xE8FD;" FontFamily="Segoe MDL2 Assets" FontSize="17" />
+                        <TextBlock Margin="8,0,0,0" Text="Daily usage" FontSize="13.5" Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </StackPanel>
+                </Button>
             </StackPanel>
 
-            <StackPanel Grid.Row="2">
-                <StackPanel.Style>
-                    <Style TargetType="StackPanel">
-                        <Setter Property="Margin" Value="0,24,0,0" />
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsNavigationPanelExpanded}" Value="False">
-                                <Setter Property="Margin" Value="0,24,0,0" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </StackPanel.Style>
-                <Border Height="64"
-                        Background="Transparent"
-                        CornerRadius="6">
-                    <Border.Style>
-                        <Style TargetType="Border">
-                            <Setter Property="Width" Value="165" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsNavigationPanelExpanded}" Value="False">
-                                    <Setter Property="Width" Value="36" />
-                                    <Setter Property="HorizontalAlignment" Value="Center" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
-                    <Grid>
-                        <StackPanel>
-                            <StackPanel.Style>
-                                <Style TargetType="StackPanel"
-                                       BasedOn="{StaticResource NavigationItemContentStyle}">
-                                    <Setter Property="HorizontalAlignment" Value="Center" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsNavigationPanelExpanded}" Value="False">
-                                            <Setter Property="Margin" Value="0" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </StackPanel.Style>
-                            <Grid Style="{StaticResource NavigationIconCellStyle}">
-                                <TextBlock Text="&#xE80F;"
-                                           Foreground="#374151"
-                                           Style="{StaticResource NavigationIconGlyphStyle}" />
-                            </Grid>
-                            <TextBlock Margin="8,0,0,0"
-                                       Text="Overview"
-                                       Foreground="#111827"
-                                       FontSize="15"
-                                       FontWeight="SemiBold"
-                                       VerticalAlignment="Center"
-                                       Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                        </StackPanel>
-                        <Border x:Name="OverviewUnderline"
-                                Background="#1F73FF"
-                                Style="{StaticResource NavigationUnderlineStyle}" />
-                    </Grid>
-                </Border>
-                <ToggleButton Margin="0,26,0,0"
-                              IsChecked="{Binding IsRateLimitsVisible, Mode=TwoWay}"
-                              Style="{StaticResource NavigationSectionToggleStyle}"
-                              ToolTip="Show or hide rate limits">
-                    <StackPanel Style="{StaticResource NavigationItemContentStyle}">
-                        <Grid Style="{StaticResource NavigationIconCellStyle}">
-                            <TextBlock Text="&#xE916;"
-                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                       Style="{StaticResource NavigationIconGlyphStyle}" />
-                        </Grid>
-                        <TextBlock Margin="6,0,0,0"
-                                   Text="Rate limits"
-                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                   FontSize="13.5"
-                                   VerticalAlignment="Center"
-                                   Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    </StackPanel>
-                </ToggleButton>
-                <ToggleButton Margin="0,18,0,0"
-                              IsChecked="{Binding IsRateLimitsDailyVisible, Mode=TwoWay}"
-                              Style="{StaticResource NavigationSectionToggleStyle}"
-                              ToolTip="Show or hide daily rate limits">
-                    <StackPanel Style="{StaticResource NavigationItemContentStyle}">
-                        <Grid Style="{StaticResource NavigationIconCellStyle}">
-                            <Ellipse Width="12"
-                                     Height="12"
-                                     HorizontalAlignment="Center"
-                                     VerticalAlignment="Center"
-                                     Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                     StrokeThickness="2" />
-                            <Border Width="2"
-                                    Height="6"
-                                    Margin="11,4,0,0"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Top"
-                                    Background="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                    CornerRadius="1" />
-                        </Grid>
-                        <TextBlock Margin="6,0,0,0"
-                                   Text="Rate Limits Daily"
-                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                   FontSize="13.5"
-                                   VerticalAlignment="Center"
-                                   Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    </StackPanel>
-                </ToggleButton>
-                <ToggleButton Margin="0,18,0,0"
-                              IsChecked="{Binding IsResetCreditsVisible, Mode=TwoWay}"
-                              Style="{StaticResource NavigationSectionToggleStyle}"
-                              ToolTip="Show or hide reset credits">
-                    <StackPanel Style="{StaticResource NavigationItemContentStyle}">
-                        <Grid Style="{StaticResource NavigationIconCellStyle}">
-                            <TextBlock Text="&#xE7BA;"
-                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                       Style="{StaticResource NavigationIconGlyphStyle}" />
-                        </Grid>
-                        <TextBlock Margin="6,0,0,0"
-                                   Text="Reset credits"
-                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                   FontSize="13.5"
-                                   VerticalAlignment="Center"
-                                   Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    </StackPanel>
-                </ToggleButton>
-                <ToggleButton Margin="0,18,0,0"
-                              IsChecked="{Binding IsAccountUsageVisible, Mode=TwoWay}"
-                              Style="{StaticResource NavigationSectionToggleStyle}"
-                              ToolTip="Show or hide account usage">
-                    <StackPanel Style="{StaticResource NavigationItemContentStyle}">
-                        <Grid Style="{StaticResource NavigationIconCellStyle}">
-                            <Border Width="2"
-                                    Height="9"
-                                    Margin="3,0,0,1"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Bottom"
-                                    Background="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                    CornerRadius="1" />
-                            <Border Width="2"
-                                    Height="16"
-                                    Margin="10,0,0,1"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Bottom"
-                                    Background="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                    CornerRadius="1" />
-                            <Border Width="2"
-                                    Height="21"
-                                    Margin="17,0,0,1"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Bottom"
-                                    Background="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                    CornerRadius="1" />
-                        </Grid>
-                        <TextBlock Margin="6,0,0,0"
-                                   Text="Account usage"
-                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                   FontSize="13.5"
-                                   VerticalAlignment="Center"
-                                   Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    </StackPanel>
-                </ToggleButton>
-                <ToggleButton Margin="0,18,0,0"
-                              IsChecked="{Binding IsProjectUsageVisible, Mode=TwoWay}"
-                              Style="{StaticResource NavigationSectionToggleStyle}"
-                              ToolTip="Show or hide project usage">
-                    <StackPanel Style="{StaticResource NavigationItemContentStyle}">
-                        <Grid Style="{StaticResource NavigationIconCellStyle}">
-                            <Border Width="16"
-                                    Height="2"
-                                    Margin="3,5,0,0"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Top"
-                                    Background="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                    CornerRadius="1" />
-                            <Border Width="12"
-                                    Height="2"
-                                    Margin="3,10,0,0"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Top"
-                                    Background="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                    CornerRadius="1" />
-                            <Border Width="18"
-                                    Height="2"
-                                    Margin="3,15,0,0"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Top"
-                                    Background="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                    CornerRadius="1" />
-                        </Grid>
-                        <TextBlock Margin="6,0,0,0"
-                                   Text="Project usage"
-                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                   FontSize="13.5"
-                                   VerticalAlignment="Center"
-                                   Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    </StackPanel>
-                </ToggleButton>
-                <ToggleButton Margin="0,18,0,0"
-                              IsChecked="{Binding IsUsageAttributionVisible, Mode=TwoWay}"
-                              Style="{StaticResource NavigationSectionToggleStyle}"
-                              ToolTip="Show or hide burn analysis">
-                    <StackPanel Style="{StaticResource NavigationItemContentStyle}">
-                        <Grid Style="{StaticResource NavigationIconCellStyle}">
-                            <Border Width="16"
-                                    Height="2"
-                                    Margin="3,15,0,0"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Top"
-                                    Background="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                    CornerRadius="1" />
-                            <Border Width="12"
-                                    Height="2"
-                                    Margin="7,10,0,0"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Top"
-                                    Background="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                    CornerRadius="1" />
-                            <Border Width="7"
-                                    Height="2"
-                                    Margin="12,5,0,0"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Top"
-                                    Background="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                    CornerRadius="1" />
-                        </Grid>
-                        <TextBlock Margin="6,0,0,0"
-                                   Text="Burn analysis"
-                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                   FontSize="13.5"
-                                   VerticalAlignment="Center"
-                                   Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    </StackPanel>
-                </ToggleButton>
-                <ToggleButton Margin="0,18,0,0"
-                              IsChecked="{Binding IsDailyUsageVisible, Mode=TwoWay}"
-                              Style="{StaticResource NavigationSectionToggleStyle}"
-                              ToolTip="Show or hide daily usage">
-                    <StackPanel Style="{StaticResource NavigationItemContentStyle}">
-                        <Grid Style="{StaticResource NavigationIconCellStyle}">
-                            <TextBlock Text="&#xE8FD;"
-                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                       Style="{StaticResource NavigationIconGlyphStyle}" />
-                        </Grid>
-                        <TextBlock Margin="6,0,0,0"
-                                   Text="Daily usage"
-                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                   FontSize="13.5"
-                                   VerticalAlignment="Center"
-                                   Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    </StackPanel>
-                </ToggleButton>
-            </StackPanel>
-
-            <StackPanel Grid.Row="3"
-                        Visibility="Collapsed"
-                        Orientation="Horizontal">
-                <StackPanel.Style>
-                    <Style TargetType="StackPanel">
-                        <Setter Property="Margin" Value="0" />
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsNavigationPanelExpanded}" Value="False">
-                                <Setter Property="Margin" Value="13,0,0,0" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </StackPanel.Style>
-                <Border Width="10"
-                        Height="10"
-                        VerticalAlignment="Center"
-                        Background="#28B946"
-                        CornerRadius="5" />
-                <TextBlock Margin="9,0,0,0"
-                           Text="{Binding DataContext.SyncFeedbackText, RelativeSource={RelativeSource AncestorType=Window}}"
-                           Foreground="#16A34A"
-                           FontSize="12"
-                           VerticalAlignment="Center"
-                           TextWrapping="Wrap"
-                           Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
-            </StackPanel>
-
-            <Button Grid.Row="4"
-                    Visibility="Collapsed"
-                    Margin="-8,28,0,0"
-                    Height="48"
-                    HorizontalAlignment="Stretch"
-                    Command="{Binding DataContext.SyncNowCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                    Style="{DynamicResource LightButtonStyle}">
-                <StackPanel Orientation="Horizontal"
-                            HorizontalAlignment="Center">
-                    <TextBlock Text="&#xE72C;"
-                               FontFamily="Segoe MDL2 Assets"
-                               FontSize="15"
-                               VerticalAlignment="Center" />
-                    <TextBlock Margin="10,0,0,0"
-                               Text="{Binding DataContext.SyncButtonText, RelativeSource={RelativeSource AncestorType=Window}}"
-                               VerticalAlignment="Center"
-                               Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            <Button x:Name="CustomizeDashboardButton"
+                    Grid.Row="2"
+                    Height="36"
+                    Padding="8,0"
+                    Background="#F8FAFC"
+                    BorderBrush="#D9E0EA"
+                    ToolTip="Choose visible sections"
+                    AutomationProperties.Name="Choose visible sections"
+                    Click="CustomizeDashboardButton_Click">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="15" />
+                    <TextBlock Margin="8,0,0,0" Text="Customize" FontSize="13" Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 </StackPanel>
             </Button>
+
+            <Popup x:Name="CustomizeDashboardPopup"
+                   Placement="Right"
+                   PlacementTarget="{Binding ElementName=CustomizeDashboardButton}"
+                   StaysOpen="False"
+                   AllowsTransparency="True"
+                   KeyDown="CustomizeDashboardPopup_KeyDown">
+                <Border Width="220" Margin="8,0,0,0" Padding="14" Background="#FFFFFF" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="6">
+                    <StackPanel KeyboardNavigation.TabNavigation="Cycle">
+                        <TextBlock Text="Visible sections" FontSize="14" FontWeight="SemiBold" Foreground="#111827" />
+                        <CheckBox x:Name="RateLimitsVisibilityCheckBox" Margin="0,12,0,0" Content="Rate limits" IsChecked="{Binding IsRateLimitsVisible, Mode=TwoWay}" AutomationProperties.Name="Show rate limits" />
+                        <CheckBox Margin="0,8,0,0" Content="Weekly pace" IsChecked="{Binding IsRateLimitsDailyVisible, Mode=TwoWay}" AutomationProperties.Name="Show weekly pace" />
+                        <CheckBox Margin="0,8,0,0" Content="Reset credits" IsChecked="{Binding IsResetCreditsVisible, Mode=TwoWay}" AutomationProperties.Name="Show reset credits" />
+                        <CheckBox Margin="0,8,0,0" Content="Account usage" IsChecked="{Binding IsAccountUsageVisible, Mode=TwoWay}" AutomationProperties.Name="Show account usage" />
+                        <CheckBox Margin="0,8,0,0" Content="Project usage" IsChecked="{Binding IsProjectUsageVisible, Mode=TwoWay}" AutomationProperties.Name="Show project usage" />
+                        <CheckBox Margin="0,8,0,0" Content="Burn analysis" IsChecked="{Binding IsUsageAttributionVisible, Mode=TwoWay}" AutomationProperties.Name="Show burn analysis" />
+                        <CheckBox Margin="0,8,0,0" Content="Daily usage" IsChecked="{Binding IsDailyUsageVisible, Mode=TwoWay}" AutomationProperties.Name="Show daily usage" />
+                        <Button Margin="0,14,0,0" Padding="8,5" HorizontalAlignment="Left" Content="Reset to defaults" Click="ResetVisibility_Click" />
+                    </StackPanel>
+                </Border>
+            </Popup>
         </Grid>
     </Border>
 </UserControl>
