@@ -37,6 +37,10 @@ Want to help share PulseMeter? See [DISCOVERABILITY.md](DISCOVERABILITY.md).
 
 ## Screenshots
 
+![PulseMeter Needs Attention view showing usage alerts, budget warnings, runway projections, and reset-credit signals](assets/pulsemeter-needs-attention.png)
+
+****
+
 ![PulseMeter overview showing rate limits, weekly pace, and reset credits](assets/pulsemeter-rate-limits-account-dashboard.png)
 
 ****
