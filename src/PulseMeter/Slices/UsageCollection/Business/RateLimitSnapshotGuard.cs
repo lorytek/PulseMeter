@@ -6,6 +6,10 @@ public static class RateLimitSnapshotGuard
 
     public static bool IsSuspiciousRegression(UsageSnapshot previous, UsageSnapshot candidate)
     {
+        var resetCreditWasConsumed = previous.ResetCreditsAvailable is int previousCredits
+            && candidate.ResetCreditsAvailable is int candidateCredits
+            && candidateCredits < previousCredits;
+
         if (previous.Buckets.Count > 0 && candidate.Buckets.Count == 0)
         {
             return true;
@@ -16,6 +20,13 @@ public static class RateLimitSnapshotGuard
             var candidateBucket = candidate.Buckets.FirstOrDefault(bucket => IsSameWindow(previousBucket, bucket));
             if (candidateBucket is null)
             {
+                if (resetCreditWasConsumed
+                    && candidate.Buckets.Count > 0
+                    && IsResettableShortWindow(previousBucket))
+                {
+                    continue;
+                }
+
                 return true;
             }
 
@@ -31,7 +42,8 @@ public static class RateLimitSnapshotGuard
             }
 
             var minimumResetAdvance = TimeSpan.FromMinutes(windowMinutes / 2d);
-            if (candidateReset - previousReset < minimumResetAdvance)
+            if (candidateReset - previousReset < minimumResetAdvance
+                && !(resetCreditWasConsumed && IsResettableShortWindow(previousBucket)))
             {
                 return true;
             }
@@ -44,5 +56,10 @@ public static class RateLimitSnapshotGuard
     {
         return left.WindowDurationMins == right.WindowDurationMins
             && string.Equals(left.LimitId, right.LimitId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsResettableShortWindow(RateLimitBucket bucket)
+    {
+        return bucket.WindowDurationMins is > 0 and <= 1440;
     }
 }

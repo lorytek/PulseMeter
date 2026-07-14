@@ -10,7 +10,7 @@
     <ApplicationIcon>Assets\PulseMeter.ico</ApplicationIcon>
     <AssemblyName>PulseMeter</AssemblyName>
     <RootNamespace>PulseMeter</RootNamespace>
-    <Version>0.3.0</Version>
+    <Version>0.3.1</Version>
     <Authors>PulseMeter contributors</Authors>
     <Product>PulseMeter</Product>
     <AssemblyTitle>PulseMeter</AssemblyTitle>

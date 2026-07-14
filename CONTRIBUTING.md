@@ -52,7 +52,7 @@ dotnet build PulseMeter.slnx -c Release
 For release/package changes:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-release.ps1 -Version 0.3.0
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-release.ps1 -Version 0.3.1
 ```
 
 ## Security

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+- Fixed live sync remaining stale after a reset credit legitimately cleared the short rolling quota window.
+- Uses the confirmed reset-credit count decrease to distinguish a real reset from a suspicious quota regression.
+- Keeps weekly-limit drops, empty responses, and missing buckets without a consumed credit behind the existing confirmation guard.
+
 ## 0.3.0
 
 - Added confirmation of suspicious live quota regressions and last-confirmed-value fallback when readings disagree.

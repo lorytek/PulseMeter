@@ -197,6 +197,32 @@ public sealed class CodexUsageServiceTests
         Assert.Equal(2, processFactory.StartCount);
     }
 
+    [Fact]
+    public async Task GetSnapshotAsync_AcceptsShortWindowDisappearingWhenResetCreditWasConsumed()
+    {
+        var reset = DateTimeOffset.UtcNow.AddHours(2);
+        var weeklyReset = DateTimeOffset.UtcNow.AddDays(2);
+        var client = new SequentialRateLimitJsonRpcClient(
+            RateLimitsJson(60, reset, 25, weeklyReset),
+            RateLimitsJson(null, null, 25, weeklyReset));
+        var processFactory = new StubProcessFactory();
+        await using var service = CreateService(
+            resetCreditService: new SequentialResetCreditService(2, 1),
+            processFactory: processFactory,
+            jsonRpcClientFactory: new StubJsonRpcClientFactory(client));
+
+        var baseline = await service.GetSnapshotAsync();
+        var refreshed = await service.GetSnapshotAsync();
+
+        Assert.Equal(SyncStatus.Live, refreshed.SyncStatus);
+        var weekly = Assert.Single(refreshed.Buckets);
+        Assert.Equal(10080, weekly.WindowDurationMins);
+        Assert.Equal(25, weekly.UsedPercent);
+        Assert.Equal(1, refreshed.ResetCreditsAvailable);
+        Assert.Equal(1, processFactory.StartCount);
+        Assert.Equal(2, baseline.ResetCreditsAvailable);
+    }
+
     private static StubJsonRpcClient RateLimitsOnlyClient(string rateLimitsJson)
     {
         return new StubJsonRpcClient(
@@ -217,6 +243,37 @@ public sealed class CodexUsageServiceTests
                         usedPercent,
                         windowDurationMins = 300,
                         resetsAt = reset.ToUnixTimeSeconds()
+                    }
+                }
+            }
+        });
+    }
+
+    private static string RateLimitsJson(
+        double? primaryUsedPercent,
+        DateTimeOffset? primaryReset,
+        double weeklyUsedPercent,
+        DateTimeOffset weeklyReset)
+    {
+        return JsonSerializer.Serialize(new
+        {
+            rateLimitsByLimitId = new
+            {
+                codex = new
+                {
+                    primary = primaryUsedPercent is null || primaryReset is null
+                        ? null
+                        : new
+                        {
+                            usedPercent = primaryUsedPercent.Value,
+                            windowDurationMins = 300,
+                            resetsAt = primaryReset.Value.ToUnixTimeSeconds()
+                        },
+                    secondary = new
+                    {
+                        usedPercent = weeklyUsedPercent,
+                        windowDurationMins = 10080,
+                        resetsAt = weeklyReset.ToUnixTimeSeconds()
                     }
                 }
             }
@@ -284,6 +341,17 @@ public sealed class CodexUsageServiceTests
         public Task<ResetCreditFetchResult?> TryFetchAsync(CancellationToken cancellationToken = default)
         {
             throw new TaskCanceledException("Reset credit lookup timed out.");
+        }
+    }
+
+    private sealed class SequentialResetCreditService(params int[] availableCounts) : ICodexResetCreditService
+    {
+        private readonly Queue<int> _availableCounts = new(availableCounts);
+
+        public Task<ResetCreditFetchResult?> TryFetchAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<ResetCreditFetchResult?>(
+                new ResetCreditFetchResult(_availableCounts.Dequeue(), []));
         }
     }
 

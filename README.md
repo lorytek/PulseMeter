@@ -11,7 +11,7 @@ PulseMeter is not affiliated with OpenAI.
 
 ## Download the App
 
-[Download PulseMeter 0.3.0 for Windows](https://github.com/lorytek/PulseMeter/releases/latest/download/PulseMeter-0.3.0-win-x64-portable.zip), extract the ZIP, and run `PulseMeter.exe`.
+[Download PulseMeter 0.3.1 for Windows](https://github.com/lorytek/PulseMeter/releases/latest/download/PulseMeter-0.3.1-win-x64-portable.zip), extract the ZIP, and run `PulseMeter.exe`.
 
 - A matching `.sha256` checksum file is attached to each GitHub release.
 - Windows 10 or Windows 11, 64-bit.
@@ -19,14 +19,11 @@ PulseMeter is not affiliated with OpenAI.
 
 Only run release zips you downloaded from a PulseMeter release page you trust. The `Source code (zip)` and `Source code (tar.gz)` links on GitHub Releases are automatic GitHub source archives for developers, not the portable Windows app.
 
-## New in 0.3.0
+## New in 0.3.1
 
-- More reliable live quota readings: suspicious drops are confirmed before replacing the last trusted values.
-- Better expanded navigation with direct section jumps, top-aligned destinations, a dedicated Customize menu, and improved keyboard access.
-- Window placement that stays usable across monitor and work-area changes.
-- Burn Analysis groups repeated low-level token updates into clearer per-minute burn moments.
-- An adaptive compact HUD that keeps weekly-only data on one line and preserves the full two-limit layout when both limits are available.
-- Refreshed screenshots covering the current dashboard, Burn Analysis, project attribution, and compact HUD.
+- Credit resets no longer leave PulseMeter stuck on stale pre-reset quota values.
+- A consumed reset credit can legitimately clear the short rolling limit while the weekly limit remains live.
+- Suspicious weekly drops, missing data without a consumed credit, and malformed empty responses remain protected by the confirmation guard.
 
 ## Who This Is For
 
@@ -56,7 +53,7 @@ Want to help share PulseMeter? See [DISCOVERABILITY.md](DISCOVERABILITY.md).
 
 ## Quick Start
 
-1. Download `PulseMeter-0.3.0-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
+1. Download `PulseMeter-0.3.1-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
 2. Extract the zip to a normal folder, for example `Documents\PulseMeter`.
 3. Run `PulseMeter.exe`.
 4. If Windows shows an unknown-publisher or SmartScreen warning, choose `More info`, then `Run anyway`.

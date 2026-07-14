@@ -107,6 +107,7 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
     {
         var client = await EnsureClientAsync(cancellationToken).ConfigureAwait(false);
         var snapshot = await ReadRateLimitsAsync(client, cancellationToken).ConfigureAwait(false);
+        snapshot = await TryMergeResetCreditExpiryAsync(snapshot, cancellationToken).ConfigureAwait(false);
 
         if (_lastGoodLiveSnapshot is not null
             && RateLimitSnapshotGuard.IsSuspiciousRegression(_lastGoodLiveSnapshot, snapshot))
@@ -128,7 +129,6 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
         }
 
         var now = snapshot.LastUpdatedUtc ?? DateTimeOffset.UtcNow;
-        snapshot = await TryMergeResetCreditExpiryAsync(snapshot, cancellationToken).ConfigureAwait(false);
 
         try
         {
