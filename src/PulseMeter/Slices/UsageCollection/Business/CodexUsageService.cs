@@ -10,6 +10,8 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
     private static readonly TimeSpan LiveRequestTimeout = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan ResetCreditMergeTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan ThreadObservationTimeout = TimeSpan.FromSeconds(2);
+    private static readonly string ClientVersion =
+        typeof(CodexUsageService).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
     private readonly IMockUsageService _mockUsageService;
     private readonly ICodexResetCreditService _resetCreditService;
@@ -66,6 +68,7 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
         }
         catch (Exception ex) when (ShouldFallbackFromRefreshException(ex, cancellationToken))
         {
+            await ResetConnectionAsync().ConfigureAwait(false);
             var fallback = await BuildFallbackSnapshotAsync(ex, cancellationToken).ConfigureAwait(false);
             SnapshotUpdated?.Invoke(this, fallback);
             return fallback;
@@ -103,18 +106,34 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
     private async Task<UsageSnapshot> GetLiveSnapshotAsync(CancellationToken cancellationToken)
     {
         var client = await EnsureClientAsync(cancellationToken).ConfigureAwait(false);
+        var snapshot = await ReadRateLimitsAsync(client, cancellationToken).ConfigureAwait(false);
 
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(LiveRequestTimeout);
+        if (_lastGoodLiveSnapshot is not null
+            && RateLimitSnapshotGuard.IsSuspiciousRegression(_lastGoodLiveSnapshot, snapshot))
+        {
+            client = await EnsureClientAsync(cancellationToken, forceReconnect: true).ConfigureAwait(false);
+            var confirmation = await ReadRateLimitsAsync(client, cancellationToken).ConfigureAwait(false);
+            if (RateLimitSnapshotGuard.IsSuspiciousRegression(_lastGoodLiveSnapshot, confirmation))
+            {
+                var stale = CodexUsageParser.WithStatus(
+                    _lastGoodLiveSnapshot,
+                    SyncStatus.Stale,
+                    "AppServer",
+                    "Rate-limit readings disagreed; showing the last confirmed values.");
+                SnapshotUpdated?.Invoke(this, stale);
+                return stale;
+            }
 
-        var now = DateTimeOffset.UtcNow;
-        var rateLimits = await client.SendRequestAsync("account/rateLimits/read", null, timeout.Token).ConfigureAwait(false);
-        Debug.WriteLine("[pulsemeter] account/rateLimits/read raw result: " + rateLimits.GetRawText());
-        var snapshot = CodexUsageParser.ParseRateLimits(rateLimits, now, "AppServer");
+            snapshot = confirmation;
+        }
+
+        var now = snapshot.LastUpdatedUtc ?? DateTimeOffset.UtcNow;
         snapshot = await TryMergeResetCreditExpiryAsync(snapshot, cancellationToken).ConfigureAwait(false);
 
         try
         {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(LiveRequestTimeout);
             var usage = await client.SendRequestAsync("account/usage/read", null, timeout.Token).ConfigureAwait(false);
             snapshot = CodexUsageParser.MergeUsageSummary(snapshot, usage);
             snapshot = await TryMergeProjectUsageAsync(snapshot, now, cancellationToken).ConfigureAwait(false);
@@ -143,6 +162,19 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
         _lastGoodLiveSnapshot = snapshot;
         SnapshotUpdated?.Invoke(this, snapshot);
         return snapshot;
+    }
+
+    private static async Task<UsageSnapshot> ReadRateLimitsAsync(
+        IJsonRpcClient client,
+        CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(LiveRequestTimeout);
+
+        var now = DateTimeOffset.UtcNow;
+        var rateLimits = await client.SendRequestAsync("account/rateLimits/read", null, timeout.Token).ConfigureAwait(false);
+        Debug.WriteLine("[pulsemeter] account/rateLimits/read raw result: " + rateLimits.GetRawText());
+        return CodexUsageParser.ParseRateLimits(rateLimits, now, "AppServer");
     }
 
     private async Task<UsageSnapshot> TryMergeResetCreditExpiryAsync(UsageSnapshot snapshot, CancellationToken cancellationToken)
@@ -197,9 +229,11 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
         }
     }
 
-    private async Task<IJsonRpcClient> EnsureClientAsync(CancellationToken cancellationToken)
+    private async Task<IJsonRpcClient> EnsureClientAsync(
+        CancellationToken cancellationToken,
+        bool forceReconnect = false)
     {
-        if (_client is not null && _process is not null && !_process.HasExited)
+        if (!forceReconnect && _client is not null && _process is not null && !_process.HasExited)
         {
             return _client;
         }
@@ -207,17 +241,12 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
         await _connectLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_client is not null && _process is not null && !_process.HasExited)
+            if (!forceReconnect && _client is not null && _process is not null && !_process.HasExited)
             {
                 return _client;
             }
 
-            if (_client is not null)
-            {
-                await _client.DisposeAsync().ConfigureAwait(false);
-            }
-
-            _process?.Dispose();
+            await DisposeConnectionAsync().ConfigureAwait(false);
             _process = _processFactory.Start();
             _client = _jsonRpcClientFactory.Create(_process.Output, _process.Input);
             _client.NotificationReceived += OnNotificationReceived;
@@ -232,7 +261,7 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
                 {
                     name = "pulsemeter",
                     title = "PulseMeter",
-                    version = "0.1.0"
+                    version = ClientVersion
                 },
                 capabilities = new
                 {
@@ -249,6 +278,32 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
         {
             _connectLock.Release();
         }
+    }
+
+    private async Task ResetConnectionAsync()
+    {
+        await _connectLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            await DisposeConnectionAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            _connectLock.Release();
+        }
+    }
+
+    private async Task DisposeConnectionAsync()
+    {
+        if (_client is not null)
+        {
+            _client.NotificationReceived -= OnNotificationReceived;
+            await _client.DisposeAsync().ConfigureAwait(false);
+            _client = null;
+        }
+
+        _process?.Dispose();
+        _process = null;
     }
 
     private async Task TryObserveLoadedThreadsAsync(IJsonRpcClient client, CancellationToken cancellationToken)

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0
+
+- Added confirmation of suspicious live quota regressions and last-confirmed-value fallback when readings disagree.
+- Reused the local Codex app-server connection during normal refreshes to reduce unnecessary process churn.
+- Improved expanded navigation with direct section jumps, top-aligned destinations, a persistent Customize menu, and keyboard access.
+- Improved window sizing and placement across multiple monitors and changing work areas.
+- Grouped repeated token-count updates into clearer Burn Analysis moments and removed duplicate cumulative events.
+- Added an adaptive weekly-only compact HUD while preserving the normal two-limit layout.
+- Updated the dashboard and compact HUD screenshots for the current interface.
+
 ## 0.2.1
 
 - Redesigned the compact tray to show each limit and its reset time in a clear two-line group.

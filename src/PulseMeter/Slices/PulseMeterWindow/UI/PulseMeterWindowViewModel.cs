@@ -298,7 +298,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
 
     public string ProjectUsageEstimateText => ProjectUsage.ProjectUsageEstimateText;
 
-    public string ExpandCollapseGlyph => IsExpanded ? "Ã¢â€“Â²" : "Ã¢â€“Â¼";
+    public string ExpandCollapseGlyph => IsExpanded ? "\u25B2" : "\u25BC";
 
     public string ExpandCollapseTooltip => IsExpanded ? "Collapse details" : "Expand details";
 
@@ -437,7 +437,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
 
     public string SyncFeedbackText => IsRefreshing ? "Syncing now..." : _syncFeedbackText;
 
-    public string SyncStatusText => _snapshot.SyncStatus switch
+    public string SyncStatusText => EffectiveSyncStatus switch
     {
         SyncStatus.Mocked => "Mock",
         SyncStatus.Live => "Live",
@@ -445,6 +445,24 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         SyncStatus.Unavailable => "Unavailable",
         _ => "Unknown"
     };
+
+    private SyncStatus EffectiveSyncStatus => _snapshot.SyncStatus == SyncStatus.Live && IsLiveSnapshotOverdue
+        ? SyncStatus.Stale
+        : _snapshot.SyncStatus;
+
+    private bool IsLiveSnapshotOverdue
+    {
+        get
+        {
+            if (_snapshot.LastUpdatedUtc is not DateTimeOffset updated)
+            {
+                return false;
+            }
+
+            var overdueAfter = TimeSpan.FromTicks(Math.Max(AutoSyncInterval.Ticks * 2, TimeSpan.FromMinutes(3).Ticks));
+            return DateTimeOffset.UtcNow - updated > overdueAfter;
+        }
+    }
 
     public bool HasThreadContext => _snapshot.RecentActiveThread is not null;
 
@@ -573,6 +591,8 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(CompactQuotaSummaryText));
         OnPropertyChanged(nameof(ExpandedQuotaSummaryText));
         OnPropertyChanged(nameof(LastUpdatedText));
+        OnPropertyChanged(nameof(StatusBadgeText));
+        OnPropertyChanged(nameof(SyncStatusText));
         RefreshResetCredits(DateTimeOffset.UtcNow, updateFromSnapshot: false);
         OnPropertyChanged(nameof(HasThreadContext));
         OnPropertyChanged(nameof(ThreadContextText));
@@ -583,6 +603,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         RefreshAccountDashboardProperties();
         OnPropertyChanged(nameof(TodayUsageText));
         OnPropertyChanged(nameof(TodayUsageValueText));
+        RefreshTopChromeViewModels();
     }
 
     public PulseMeterWindowState CaptureWindowState()

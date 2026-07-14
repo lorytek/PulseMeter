@@ -40,7 +40,7 @@
         <Border.Style>
             <Style TargetType="Border">
                 <Setter Property="Background" Value="#FFFFFF" />
-                <Setter Property="BorderBrush" Value="#E5E7EB" />
+                <Setter Property="BorderBrush" Value="#008CBA" />
                 <Setter Property="CornerRadius" Value="12" />
                 <Setter Property="Padding" Value="14,6,12,6" />
                 <Style.Triggers>

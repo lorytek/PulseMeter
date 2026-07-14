@@ -93,8 +93,8 @@ public sealed class NavigationRailViewModel : INotifyPropertyChanged
         : "Expand navigation";
 
     public string NavigationPanelToggleGlyph => IsNavigationPanelExpanded
-        ? "\u00E2\u20AC\u00B9"
-        : "\u00E2\u20AC\u00BA";
+        ? "\u2039"
+        : "\u203A";
 
     public void ToggleNavigationPanel()
     {

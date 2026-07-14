@@ -1,5 +1,5 @@
 ﻿param(
-    [string]$Version = "0.2.1",
+    [string]$Version = "0.3.0",
     [switch]$SkipTests,
     [switch]$FrameworkDependent
 )
@@ -13,6 +13,7 @@ $releaseRoot = Join-Path $root "artifacts\release"
 $output = Join-Path $releaseRoot "PulseMeter-win-x64-portable"
 $version = $Version.TrimStart("v")
 $zipPath = Join-Path $releaseRoot "PulseMeter-$version-win-x64-portable.zip"
+$checksumPath = "$zipPath.sha256"
 $selfContained = if ($FrameworkDependent) { "false" } else { "true" }
 
 if (-not $SkipTests) {
@@ -101,7 +102,15 @@ if (Test-Path -LiteralPath $zipPath) {
     Remove-Item -LiteralPath $zipPath -Force
 }
 
+if (Test-Path -LiteralPath $checksumPath) {
+    Remove-Item -LiteralPath $checksumPath -Force
+}
+
 Compress-Archive -Path (Join-Path $output "*") -DestinationPath $zipPath -Force
+$checksum = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+Set-Content -LiteralPath $checksumPath -Value "$checksum  $(Split-Path -Leaf $zipPath)" -Encoding ASCII
 
 Write-Host "Created release package:"
 Write-Host "  $zipPath"
+Write-Host "Created SHA-256 checksum:"
+Write-Host "  $checksumPath"

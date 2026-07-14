@@ -15,6 +15,9 @@ public sealed class DataBarViewModel : INotifyPropertyChanged
 
     public ObservableCollection<QuotaDisplayRow> CompactQuotaRows { get; } = new();
 
+    public bool IsWeeklyOnlyCompactLayout =>
+        CompactQuotaRows.Count == 1 && CompactQuotaRows[0].IsWeekly;
+
     public bool IsExpanded
     {
         get => _isExpanded;
@@ -48,6 +51,8 @@ public sealed class DataBarViewModel : INotifyPropertyChanged
         {
             CompactQuotaRows.Add(row);
         }
+
+        OnPropertyChanged(nameof(IsWeeklyOnlyCompactLayout));
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)

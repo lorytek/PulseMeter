@@ -189,7 +189,7 @@
                 <StackPanel x:Name="BurnAnalysisEventsPanel"
                             Grid.Row="0"
                             Grid.Column="2">
-                    <TextBlock Text="Largest burn events"
+                    <TextBlock Text="Largest burn moments"
                                Foreground="#374151"
                                FontSize="14"
                                FontWeight="SemiBold" />
@@ -198,7 +198,7 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="96" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Event"
+                        <TextBlock Text="Moment"
                                    Foreground="#6B7280"
                                    FontSize="11"
                                    FontWeight="SemiBold" />
@@ -247,7 +247,7 @@
                                                    FontSize="13"
                                                    FontWeight="SemiBold"
                                                    HorizontalAlignment="Right" />
-                                        <TextBlock Text="{Binding AgeText}"
+                                        <TextBlock Text="{Binding MomentText}"
                                                    Foreground="#6B7280"
                                                    FontSize="11.5"
                                                    HorizontalAlignment="Right" />

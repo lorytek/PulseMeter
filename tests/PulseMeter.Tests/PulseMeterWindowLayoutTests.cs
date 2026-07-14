@@ -374,7 +374,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("Text=\"&#xE946;\"", usageAttributionSection);
         Assert.Contains("ToolTip=\"Share is of total burned tokens in the last 30 days.\"", usageAttributionSection);
         Assert.Contains("Text=\"Tokens\"", usageAttributionSection);
-        Assert.Contains("Text=\"Event\"", usageAttributionSection);
+        Assert.Contains("Text=\"Moment\"", usageAttributionSection);
         Assert.Contains("x:Name=\"BurnAnalysisTablesGrid\"", usageAttributionSection);
         Assert.Contains("SizeChanged=\"BurnAnalysisTablesGrid_SizeChanged\"", usageAttributionSection);
         Assert.Contains("x:Name=\"BurnAnalysisChatsColumn\"", usageAttributionSection);
@@ -414,7 +414,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.True(shareHeaderStart < shareInfoIconStart);
         Assert.DoesNotContain("ToolTip=\"Share is of total burned tokens in the last 30 days.\"", usageAttributionSection[shareHeaderStart..shareInfoIconStart]);
         var topChatsStart = usageAttributionSection.IndexOf("Text=\"Top chats by token burn\"", StringComparison.Ordinal);
-        var burnEventsStart = usageAttributionSection.IndexOf("Text=\"Largest burn events\"", StringComparison.Ordinal);
+        var burnEventsStart = usageAttributionSection.IndexOf("Text=\"Largest burn moments\"", StringComparison.Ordinal);
         var topChatsSection = usageAttributionSection[topChatsStart..burnEventsStart];
         var burnEventsSection = usageAttributionSection[burnEventsStart..];
         Assert.DoesNotContain("Text=\"Burn\"", topChatsSection);
@@ -694,6 +694,24 @@ public sealed class PulseMeterWindowLayoutTests
     }
 
     [Fact]
+    public void CompactHeader_UsesInlineResetDetailsOnlyForWeeklyOnlyQuotaState()
+    {
+        var xaml = ReadPulseMeterMarkup();
+        var quotaStart = xaml.IndexOf("x:Name=\"CompactQuotaSummaryItemsControl\"", StringComparison.Ordinal);
+        var controlsStart = xaml.IndexOf("x:Name=\"CompactHeaderControls\"", StringComparison.Ordinal);
+        var quotaBlock = xaml[quotaStart..controlsStart];
+
+        Assert.Contains("x:Name=\"CompactQuotaDetails\"", quotaBlock);
+        Assert.Contains("x:Name=\"CompactQuotaResetPanel\"", quotaBlock);
+        Assert.Contains("VerticalAlignment=\"Center\"", quotaBlock);
+        Assert.Contains("DataContext.IsWeeklyOnlyCompactLayout", quotaBlock);
+        Assert.Contains("<Setter Property=\"Orientation\" Value=\"Vertical\" />", quotaBlock);
+        Assert.Contains("<Setter Property=\"Orientation\" Value=\"Horizontal\" />", quotaBlock);
+        Assert.Contains("<Setter Property=\"Margin\" Value=\"10,0,0,0\" />", quotaBlock);
+        Assert.Contains("<Setter Property=\"Visibility\" Value=\"Collapsed\" />", quotaBlock);
+    }
+
+    [Fact]
     public void CompactHeader_UsesSubtleQuotaUnderlinesMatchedToTheirStatusDots()
     {
         var xaml = ReadPulseMeterMarkup();
@@ -746,6 +764,7 @@ public sealed class PulseMeterWindowLayoutTests
         var quotaBlock = xaml[quotaStart..controlsStart];
 
         Assert.Contains("<Setter Property=\"Padding\" Value=\"14,6,12,6\" />", surfaceBlock);
+        Assert.Contains("<Setter Property=\"BorderBrush\" Value=\"#008CBA\" />", surfaceBlock);
         Assert.Contains("Height=\"52\"", compactBlock);
         Assert.Contains("Width=\"382\"", compactBlock);
         Assert.Contains("x:Name=\"CompactQuotaSeparatorLine\"", quotaBlock);
@@ -1254,6 +1273,24 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("var fittedSize = GetFittedWindowSize(viewModel, workArea)", boundsBlock);
         Assert.Contains("ApplyViewModelSize(viewModel, fittedSize)", boundsBlock);
         Assert.Contains("ApplyWindowPosition(viewModel, fittedSize, workArea)", boundsBlock);
+    }
+
+    [Fact]
+    public void PulseMeterWindow_AppliesSavedPositionBeforeResolvingStartupMonitor()
+    {
+        var code = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml.cs"));
+        var sourceInitializedStart = code.IndexOf("private void OnSourceInitialized", StringComparison.Ordinal);
+        var sourceInitializedBlock = code[sourceInitializedStart..Math.Min(code.Length, sourceInitializedStart + 700)];
+        var dataContextStart = code.IndexOf("private void OnDataContextChanged", StringComparison.Ordinal);
+        var dataContextBlock = code[dataContextStart..Math.Min(code.Length, dataContextStart + 800)];
+
+        Assert.NotEqual(-1, sourceInitializedStart);
+        Assert.True(
+            sourceInitializedBlock.IndexOf("ApplySavedViewModelPosition();", StringComparison.Ordinal) <
+            sourceInitializedBlock.IndexOf("ApplyViewModelBounds();", StringComparison.Ordinal));
+        Assert.Contains("Left = left", code);
+        Assert.Contains("Top = top", code);
+        Assert.Contains("if (_windowSource is not null)", dataContextBlock);
     }
 
     [Fact]

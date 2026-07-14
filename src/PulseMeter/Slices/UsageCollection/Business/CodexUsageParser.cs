@@ -134,7 +134,7 @@ public static class CodexUsageParser
             ResetCredits = snapshot.ResetCredits,
             RecentActiveThread = snapshot.RecentActiveThread,
             SyncStatus = syncStatus,
-            LastUpdatedUtc = DateTimeOffset.UtcNow,
+            LastUpdatedUtc = snapshot.LastUpdatedUtc,
             Source = source,
             StatusMessage = statusMessage,
             RawRateLimitsJson = snapshot.RawRateLimitsJson

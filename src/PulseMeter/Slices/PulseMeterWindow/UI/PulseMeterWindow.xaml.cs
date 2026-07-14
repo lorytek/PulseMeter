@@ -220,6 +220,29 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
     {
         _windowSource = (HwndSource?)PresentationSource.FromVisual(this);
         _windowSource?.AddHook(WndProc);
+        ApplySavedViewModelPosition();
+        ApplyViewModelBounds();
+    }
+
+    private void ApplySavedViewModelPosition()
+    {
+        if (DataContext is not PulseMeterWindowViewModel viewModel
+            || viewModel.WindowLeft is not double left
+            || viewModel.WindowTop is not double top)
+        {
+            return;
+        }
+
+        _isApplyingWindowPlacement = true;
+        try
+        {
+            Left = left;
+            Top = top;
+        }
+        finally
+        {
+            _isApplyingWindowPlacement = false;
+        }
     }
 
     private void OnClosed(object? sender, EventArgs e)
@@ -343,7 +366,10 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
             _boundViewModel.PropertyChanged += OnViewModelPropertyChanged;
         }
 
-        ApplyViewModelBounds();
+        if (_windowSource is not null)
+        {
+            ApplyViewModelBounds();
+        }
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)

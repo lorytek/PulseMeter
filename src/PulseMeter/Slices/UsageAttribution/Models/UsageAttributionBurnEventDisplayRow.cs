@@ -7,5 +7,5 @@ public sealed record UsageAttributionBurnEventDisplayRow(
     string EstimatedTokensText,
     string RawLocalTokensText,
     string BreakdownText,
-    string AgeText,
+    string MomentText,
     string TooltipText);

@@ -57,7 +57,19 @@
                                         VerticalAlignment="Center"
                                         Background="#E5E7EB"
                                         Visibility="{Binding ShowCompactSeparator, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                                <StackPanel VerticalAlignment="Center">
+                                <StackPanel x:Name="CompactQuotaDetails"
+                                            VerticalAlignment="Center">
+                                    <StackPanel.Style>
+                                        <Style TargetType="StackPanel">
+                                            <Setter Property="Orientation" Value="Vertical" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataContext.IsWeeklyOnlyCompactLayout, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                             Value="True">
+                                                    <Setter Property="Orientation" Value="Horizontal" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Style>
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="{Binding Label}"
                                                    Foreground="#374151"
@@ -75,8 +87,20 @@
                                                    FontSize="13"
                                                    VerticalAlignment="Center" />
                                     </StackPanel>
-                                    <StackPanel Margin="0,3,0,0"
-                                                Orientation="Horizontal">
+                                    <StackPanel x:Name="CompactQuotaResetPanel"
+                                                Orientation="Horizontal"
+                                                VerticalAlignment="Center">
+                                        <StackPanel.Style>
+                                            <Style TargetType="StackPanel">
+                                                <Setter Property="Margin" Value="0,3,0,0" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding DataContext.IsWeeklyOnlyCompactLayout, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                 Value="True">
+                                                        <Setter Property="Margin" Value="10,0,0,0" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </StackPanel.Style>
                                         <TextBlock Text="Resets "
                                                    Foreground="#6B7280"
                                                    FontFamily="Segoe UI"
@@ -90,7 +114,19 @@
                                             Height="1"
                                             Margin="0,3,0,0"
                                             Background="{Binding RingBrush}"
-                                            Opacity="0.45" />
+                                            Opacity="0.45">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding DataContext.IsWeeklyOnlyCompactLayout, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                 Value="True">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                    </Border>
                                 </StackPanel>
                             </StackPanel>
                         </DataTemplate>
