@@ -37,19 +37,23 @@ Want to help share PulseMeter? See [DISCOVERABILITY.md](DISCOVERABILITY.md).
 
 ## Screenshots
 
-![PulseMeter overview with attention signals, rate limits, and weekly pace](assets/pulsemeter-rate-limits-account-dashboard.png)
+![PulseMeter overview showing rate limits, weekly pace, and reset credits](assets/pulsemeter-rate-limits-account-dashboard.png)
 
 ****
 
-![PulseMeter burn analysis with top chats and grouped burn moments](assets/pulsemeter-reset-account-project-dashboard.png)
+![PulseMeter account and project usage estimates](assets/pulsemeter-account-project-usage.png)
 
 ****
 
-![PulseMeter project usage with local estimated attribution](assets/pulsemeter-account-project-usage.png)
+![PulseMeter burn analysis with top chats and largest burn moments](assets/pulsemeter-burn-analysis.png)
 
 ****
 
-![PulseMeter compact HUD with live rate-limit status](assets/pulsemeter-compact-hud.png)
+![PulseMeter daily token usage compared with the 30-day median](assets/pulsemeter-daily-usage.png)
+
+****
+
+![PulseMeter compact HUD showing weekly usage and reset time](assets/pulsemeter-compact-hud.png)
 
 ## Quick Start
 
