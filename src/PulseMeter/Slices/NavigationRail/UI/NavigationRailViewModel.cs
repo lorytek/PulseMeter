@@ -13,6 +13,7 @@ public sealed class NavigationRailViewModel : INotifyPropertyChanged
     private bool _isNavigationPanelExpanded = true;
     private bool _isRateLimitsVisible = true;
     private bool _isRateLimitsDailyVisible = true;
+    private bool _isRunwayForecastVisible = true;
     private bool _isResetCreditsVisible = true;
     private bool _isAccountUsageVisible = true;
     private bool _isProjectUsageVisible = true;
@@ -72,6 +73,12 @@ public sealed class NavigationRailViewModel : INotifyPropertyChanged
         set => SetVisibility(ref _isUsageAttributionVisible, value, NavigationSection.BurnAnalysis);
     }
 
+    public bool IsRunwayForecastVisible
+    {
+        get => _isRunwayForecastVisible;
+        set => SetVisibility(ref _isRunwayForecastVisible, value, NavigationSection.RunwayForecast);
+    }
+
     public bool IsDailyUsageVisible
     {
         get => _isDailyUsageVisible;
@@ -111,6 +118,7 @@ public sealed class NavigationRailViewModel : INotifyPropertyChanged
         var settings = visibility ?? new DashboardVisibilitySettings();
         IsRateLimitsVisible = settings.RateLimits;
         IsRateLimitsDailyVisible = settings.WeeklyPace;
+        IsRunwayForecastVisible = settings.RunwayForecast;
         IsResetCreditsVisible = settings.ResetCredits;
         IsAccountUsageVisible = settings.AccountUsage;
         IsProjectUsageVisible = settings.ProjectUsage;
@@ -123,6 +131,7 @@ public sealed class NavigationRailViewModel : INotifyPropertyChanged
         return new DashboardVisibilitySettings(
             IsRateLimitsVisible,
             IsRateLimitsDailyVisible,
+            IsRunwayForecastVisible,
             IsResetCreditsVisible,
             IsAccountUsageVisible,
             IsProjectUsageVisible,
@@ -152,6 +161,7 @@ public sealed class NavigationRailViewModel : INotifyPropertyChanged
             NavigationSection.Overview => true,
             NavigationSection.RateLimits => IsRateLimitsVisible,
             NavigationSection.WeeklyPace => IsRateLimitsDailyVisible,
+            NavigationSection.RunwayForecast => IsRunwayForecastVisible,
             NavigationSection.ResetCredits => IsResetCreditsVisible,
             NavigationSection.AccountUsage => IsAccountUsageVisible,
             NavigationSection.ProjectUsage => IsProjectUsageVisible,

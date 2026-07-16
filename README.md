@@ -11,7 +11,7 @@ PulseMeter is not affiliated with OpenAI.
 
 ## Download the App
 
-[Download PulseMeter 0.3.1 for Windows](https://github.com/lorytek/PulseMeter/releases/latest/download/PulseMeter-0.3.1-win-x64-portable.zip), extract the ZIP, and run `PulseMeter.exe`.
+[Download PulseMeter 0.4.0 for Windows](https://github.com/lorytek/PulseMeter/releases/latest/download/PulseMeter-0.4.0-win-x64-portable.zip), extract the ZIP, and run `PulseMeter.exe`.
 
 - A matching `.sha256` checksum file is attached to each GitHub release.
 - Windows 10 or Windows 11, 64-bit.
@@ -19,11 +19,13 @@ PulseMeter is not affiliated with OpenAI.
 
 Only run release zips you downloaded from a PulseMeter release page you trust. The `Source code (zip)` and `Source code (tar.gz)` links on GitHub Releases are automatic GitHub source archives for developers, not the portable Windows app.
 
-## New in 0.3.1
+## New in 0.4.0
 
-- Credit resets no longer leave PulseMeter stuck on stale pre-reset quota values.
-- A consumed reset credit can legitimately clear the short rolling limit while the weekly limit remains live.
-- Suspicious weekly drops, missing data without a consumed credit, and malformed empty responses remain protected by the confirmation guard.
+- Added Project Health with 7-day usage, change versus the prior 7 days, 30-day share, and focused project details.
+- Added Runway Forecast for the selected rate-limit track, using recent confirmed samples without combining unrelated models.
+- Redesigned rate-limit and Weekly Pace views with clearer reset timing, pace status, and daily allowance guidance.
+- Changed Burn Analysis to rank projects by estimated token burn and removed the retired Usage Explorer and burn-moment tables.
+- Improved Needs Attention, compact-window behavior, local privacy labels, sync stability, and multi-monitor navigation.
 
 ## Who This Is For
 
@@ -49,7 +51,7 @@ Want to help share PulseMeter? See [DISCOVERABILITY.md](DISCOVERABILITY.md).
 
 ****
 
-![PulseMeter burn analysis with top chats and largest burn moments](assets/pulsemeter-burn-analysis.png)
+![PulseMeter Burn Analysis ranking local projects by estimated token usage](assets/pulsemeter-burn-analysis.png)
 
 ****
 
@@ -61,7 +63,7 @@ Want to help share PulseMeter? See [DISCOVERABILITY.md](DISCOVERABILITY.md).
 
 ## Quick Start
 
-1. Download `PulseMeter-0.3.1-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
+1. Download `PulseMeter-0.4.0-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
 2. Extract the zip to a normal folder, for example `Documents\PulseMeter`.
 3. Run `PulseMeter.exe`.
 4. If Windows shows an unknown-publisher or SmartScreen warning, choose `More info`, then `Run anyway`.
@@ -86,12 +88,12 @@ That warning is expected for this build. It is still a trust decision: only run 
 - Remaining 5-hour and weekly Codex rate limits.
 - Compact tray reset times: local time for 5-hour limits and weekday plus time for weekly limits.
 - Reset-credit count and expiry dates when available.
-- Rate-limit daily allowance chunks.
+- Weekly Pace guidance showing the daily allowance needed to stay within the weekly limit.
 - Account usage summary and recent daily usage.
-- Estimated project usage for the last 30 days.
-- Burn Analysis showing top local chats by estimated token burn and largest grouped burn moments for the last 30 days.
+- Project Health showing 7-day usage, change versus the prior 7 days, 30-day share, and focused project details.
+- Burn Analysis ranking local projects by estimated token burn over the last 30 days.
 - Needs Attention automatic alert signals for local usage and rate-limit risk.
-- Limit Runway estimates when a 5-hour or weekly pool may run out before reset.
+- Runway Forecast estimates when the selected rate-limit pool may run out before reset.
 - Idle Drain Detector flags usage movement while Windows reports you were idle.
 - Live, stale, unavailable, or mock sync status.
 - A tray icon with show, hide, refresh, mock mode, and exit controls.
@@ -120,7 +122,7 @@ If Codex CLI is not found, is not signed in, or `codex app-server` is unavailabl
 - In live mode it may read `%USERPROFILE%\.codex\auth.json` only to request reset-credit expiry metadata from OpenAI.
 - It may read `%USERPROFILE%\.codex\state_5.sqlite`, `%USERPROFILE%\.codex\sessions`, and local rollout `token_count` records to estimate project usage and Burn Analysis shares.
 - It does not parse or display Codex message text for project usage or Burn Analysis estimates.
-- Burn Analysis displays project paths, thread titles/IDs, timestamps, and token counts only.
+- Burn Analysis groups local session token metadata by project and does not display chat titles or prompt text; project paths and thread IDs remain local attribution metadata.
 - Automatic alert signals use local usage and rate-limit numbers; they do not read prompt text or Codex message content.
 - Idle Drain alerts do not read prompt text or Codex message content.
 - Local app settings are stored under `%LOCALAPPDATA%\PulseMeter`.

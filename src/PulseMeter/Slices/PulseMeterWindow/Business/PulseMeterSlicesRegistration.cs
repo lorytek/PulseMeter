@@ -10,6 +10,7 @@ using PulseMeter.Slices.ProjectUsage;
 using PulseMeter.Slices.RateLimits;
 using PulseMeter.Slices.RateLimitsDaily;
 using PulseMeter.Slices.ResetCredits;
+using PulseMeter.Slices.RunwayForecast;
 using PulseMeter.Slices.UsageAttribution;
 using PulseMeter.Slices.UsageSignals;
 
@@ -24,6 +25,7 @@ internal static class PulseMeterSlicesRegistration
         services.AddNavigationRailSlice();
         services.AddRateLimitsSlice();
         services.AddRateLimitsDailySlice();
+        services.AddRunwayForecastSlice();
         services.AddNeedsAttentionSlice();
         services.AddBudgetAlertsSlice();
         services.AddResetCreditsSlice();

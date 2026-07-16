@@ -24,6 +24,7 @@ public sealed class MockCodexUsageService : IMockUsageService
         var weeklyReset = now.AddHours(19);
         var sparkFiveHourReset = now.AddHours(3).AddMinutes(20);
         var sparkWeeklyReset = now.AddDays(5).AddHours(7);
+        var postResetWeeklyReset = now.AddDays(4).AddHours(2);
         var backgroundReset = now.AddMinutes(27);
         var resetCreditExpiry = now.AddHours(18);
         var recentThreadUpdated = now.AddSeconds(-12);
@@ -96,6 +97,19 @@ public sealed class MockCodexUsageService : IMockUsageService
                 GroupLabel = "Background agent",
                 WindowLabel = "1h",
                 ResetCountdown = CountdownFormatter.FormatResetCountdown(backgroundReset.ToUnixTimeSeconds(), now)
+            },
+            new RateLimitBucket
+            {
+                LimitId = "mock-post-reset",
+                LimitName = "After credit reset",
+                UsedPercent = 4,
+                WindowDurationMins = 10080,
+                ResetsAtUnixSeconds = postResetWeeklyReset.ToUnixTimeSeconds(),
+                ResetsAtUtc = postResetWeeklyReset,
+                Label = "7d",
+                GroupLabel = "After credit reset",
+                WindowLabel = "7d",
+                ResetCountdown = CountdownFormatter.FormatResetCountdown(postResetWeeklyReset.ToUnixTimeSeconds(), now)
             }
         };
 
@@ -119,10 +133,63 @@ public sealed class MockCodexUsageService : IMockUsageService
             ],
             ProjectUsageRows =
             [
-                new ProjectUsageRow("PulseMeter", @"C:\Projects\PulseMeter", 1_820_000, 3_640_000, 9, 62.4),
-                new ProjectUsageRow("Searchability Audit", @"C:\Projects\Searchability", 510_000, 1_020_000, 4, 17.5),
-                new ProjectUsageRow("L2Engine", @"C:\Projects\L2Engine", 390_000, 780_000, 3, 13.4),
-                new ProjectUsageRow("Docs Polish", @"C:\Projects\Docs", 195_000, 390_000, 2, 6.7)
+                new ProjectUsageRow(
+                    "PulseMeter", @"C:\Projects\PulseMeter", 1_820_000, 3_640_000, 9, 58.6,
+                    EstimatedLast7Days: 1_120_000,
+                    EstimatedPrevious7Days: 420_000,
+                    ActiveDaysLast7: 5,
+                    SpikeDays: 2,
+                    LeadingChatDisplayName: "PulseMeter chat - today 10:24",
+                    LeadingChatEstimatedTokens: 620_000,
+                    SecondLeadingChatDisplayName: "PulseMeter chat - yesterday 16:08",
+                    SecondLeadingChatEstimatedTokens: 350_000,
+                    LargestBurnMomentChatDisplayName: "PulseMeter chat - today 10:24",
+                    LargestBurnMomentEstimatedTokens: 380_000,
+                    LargestBurnMomentAtUtc: now.AddMinutes(-36)),
+                new ProjectUsageRow(
+                    "Searchability Audit", @"C:\Projects\Searchability", 510_000, 1_020_000, 4, 16.4,
+                    EstimatedLast7Days: 286_000,
+                    EstimatedPrevious7Days: 454_000,
+                    ActiveDaysLast7: 3,
+                    SpikeDays: 1,
+                    LeadingChatDisplayName: "Searchability Audit chat - yesterday 14:12",
+                    LeadingChatEstimatedTokens: 180_000,
+                    LargestBurnMomentChatDisplayName: "Searchability Audit chat - yesterday 14:12",
+                    LargestBurnMomentEstimatedTokens: 144_000,
+                    LargestBurnMomentAtUtc: now.AddDays(-1).AddHours(-3)),
+                new ProjectUsageRow(
+                    "L2Engine", @"C:\Projects\L2Engine", 390_000, 780_000, 3, 12.6,
+                    EstimatedLast7Days: 80_000,
+                    EstimatedPrevious7Days: 310_000,
+                    ActiveDaysLast7: 2,
+                    SpikeDays: 0,
+                    LeadingChatDisplayName: "L2Engine chat - Monday 09:40",
+                    LeadingChatEstimatedTokens: 58_000,
+                    LargestBurnMomentChatDisplayName: "L2Engine chat - Monday 09:40",
+                    LargestBurnMomentEstimatedTokens: 42_000,
+                    LargestBurnMomentAtUtc: now.AddDays(-3)),
+                new ProjectUsageRow(
+                    "Docs Polish", @"C:\Projects\Docs", 195_000, 390_000, 2, 6.3,
+                    EstimatedLast7Days: 150_000,
+                    EstimatedPrevious7Days: 72_000,
+                    ActiveDaysLast7: 4,
+                    SpikeDays: 1,
+                    LeadingChatDisplayName: "Docs Polish chat - today 08:15",
+                    LeadingChatEstimatedTokens: 110_000,
+                    LargestBurnMomentChatDisplayName: "Docs Polish chat - today 08:15",
+                    LargestBurnMomentEstimatedTokens: 76_000,
+                    LargestBurnMomentAtUtc: now.AddHours(-2)),
+                new ProjectUsageRow(
+                    "Automation Lab", @"C:\Projects\AutomationLab", 188_000, 376_000, 2, 6.1,
+                    EstimatedLast7Days: 102_000,
+                    EstimatedPrevious7Days: 98_000,
+                    ActiveDaysLast7: 2,
+                    SpikeDays: 0,
+                    LeadingChatDisplayName: "Automation Lab chat - Sunday 11:03",
+                    LeadingChatEstimatedTokens: 78_000,
+                    LargestBurnMomentChatDisplayName: "Automation Lab chat - Sunday 11:03",
+                    LargestBurnMomentEstimatedTokens: 55_000,
+                    LargestBurnMomentAtUtc: now.AddDays(-2))
             ],
             UsageAttribution = new UsageAttributionSnapshot
             {
@@ -187,46 +254,21 @@ public sealed class MockCodexUsageService : IMockUsageService
                         15_000,
                         9_000,
                         now.AddDays(-2),
-                        now.AddDays(-2).AddMinutes(35))
-                ],
-                BurnEvents =
-                [
-                    new UsageAttributionBurnEvent(
-                        "Burn analysis implementation",
-                        "mock-thread-burn-analysis",
+                        now.AddDays(-2).AddMinutes(35)),
+                    new UsageAttributionSessionRow(
+                        "Reset-credit sync recovery",
+                        "mock-thread-reset-credit-sync",
                         "PulseMeter",
                         @"C:\Projects\PulseMeter",
-                        now.AddMinutes(-6),
-                        540_000,
-                        695_000,
-                        310_000,
-                        122_000,
-                        71_000,
-                        37_000),
-                    new UsageAttributionBurnEvent(
-                        "Searchability benchmark sweep",
-                        "mock-thread-searchability",
-                        "Searchability Audit",
-                        @"C:\Projects\Searchability",
-                        now.AddHours(-4).AddMinutes(-12),
-                        278_000,
-                        358_000,
-                        172_000,
-                        67_000,
-                        24_000,
-                        15_000),
-                    new UsageAttributionBurnEvent(
-                        "L2Engine routing review",
-                        "mock-thread-l2-routing",
-                        "L2Engine",
-                        @"C:\Projects\L2Engine",
-                        now.AddHours(-23),
-                        210_000,
-                        270_000,
-                        126_000,
-                        54_000,
-                        19_000,
-                        11_000)
+                        125_000,
+                        162_000,
+                        5.9,
+                        74_000,
+                        26_000,
+                        16_000,
+                        9_000,
+                        now.AddHours(-3),
+                        now.AddHours(-2).AddMinutes(-34))
                 ]
             },
             ResetCreditsAvailable = 3,
@@ -252,10 +294,11 @@ public sealed class MockCodexUsageService : IMockUsageService
             SyncStatus = SyncStatus.Mocked,
             LastUpdatedUtc = now,
             Source = "Mock",
-            StatusMessage = "Mock showcase data: includes demo limits, reset credits, project usage, automatic alert signals, runway, and idle-drain signals."
+            StatusMessage = "Mock showcase data: includes all alert signals, full attribution tables, and an After credit reset track for the weekly-only layout."
         };
 
         SnapshotUpdated?.Invoke(this, snapshot);
         return Task.FromResult(snapshot);
     }
+
 }

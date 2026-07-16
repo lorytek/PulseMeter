@@ -57,6 +57,19 @@ public sealed class PulseMeterWindowViewModelSyncTests
     }
 
     [Fact]
+    public async Task RefreshAsync_AppliesServicePublishedSnapshotOnlyOnce()
+    {
+        var service = new StubUsageService();
+        var usageSignalsTracker = new CountingUsageSignalsTracker();
+        var viewModel = new PulseMeterWindowViewModel(service, usageSignalsTracker: usageSignalsTracker);
+        service.SnapshotUpdated += (_, snapshot) => viewModel.ApplySnapshot(snapshot);
+
+        await viewModel.RefreshAsync();
+
+        Assert.Equal(1, usageSignalsTracker.ObserveCallCount);
+    }
+
+    [Fact]
     public async Task SyncNowCommand_ShowsInProgressAndSuccessFeedback()
     {
         var pendingSnapshot = new TaskCompletionSource<UsageSnapshot>();
@@ -421,21 +434,6 @@ public sealed class PulseMeterWindowViewModelSyncTests
                         50_000,
                         now.AddMinutes(-20),
                         now.AddMinutes(-12))
-                ],
-                BurnEvents =
-                [
-                    new UsageAttributionBurnEvent(
-                        "PulseMeter budget polish",
-                        "thread-123",
-                        "PulseMeter",
-                        @"C:\Projects\PulseMeter",
-                        now.AddMinutes(-12),
-                        600_000,
-                        830_000,
-                        300_000,
-                        120_000,
-                        90_000,
-                        40_000)
                 ]
             }
         });
@@ -444,13 +442,11 @@ public sealed class PulseMeterWindowViewModelSyncTests
         Assert.True(viewModel.IsUsageAttributionVisible);
         Assert.True(viewModel.ShouldShowUsageAttribution);
         Assert.Equal("1.3M attributed across 1 local chat", viewModel.UsageAttribution.SummaryText);
-        Assert.Equal("Estimated from local chats, scaled to account usage", viewModel.UsageAttribution.EvidenceText);
-        var session = Assert.Single(viewModel.UsageAttributionSessionRows);
-        Assert.Equal("PulseMeter budget polish", session.DisplayName);
-        Assert.Equal("1.3M", session.EstimatedTokensText);
-        Assert.Equal("42.3%", session.ShareText);
-        Assert.NotEmpty(viewModel.UsageAttributionBurnEventRows);
-
+        Assert.Equal("Estimated from local project activity, scaled to account usage", viewModel.UsageAttribution.EvidenceText);
+        var project = Assert.Single(viewModel.UsageAttribution.ProjectRows);
+        Assert.Equal("PulseMeter", project.DisplayName);
+        Assert.Equal("1.3M", project.EstimatedTokensText);
+        Assert.Equal("42.3%", project.ShareText);
         viewModel.IsUsageAttributionVisible = false;
 
         Assert.False(viewModel.ShouldShowUsageAttribution);
@@ -677,6 +673,21 @@ public sealed class PulseMeterWindowViewModelSyncTests
             };
             SnapshotUpdated?.Invoke(this, snapshot);
             return Task.FromResult(snapshot);
+        }
+    }
+
+    private sealed class CountingUsageSignalsTracker : IUsageSignalsTracker
+    {
+        public int ObserveCallCount { get; private set; }
+
+        public UsageSignalsSnapshot Observe(UsageSnapshot snapshot, DateTimeOffset nowUtc)
+        {
+            ObserveCallCount++;
+            return UsageSignalsSnapshot.Empty;
+        }
+
+        public void DismissIdleDrain()
+        {
         }
     }
 

@@ -6,8 +6,6 @@ public sealed class UsageAttributionSnapshot
 
     public IReadOnlyList<UsageAttributionSessionRow> Sessions { get; init; } = Array.Empty<UsageAttributionSessionRow>();
 
-    public IReadOnlyList<UsageAttributionBurnEvent> BurnEvents { get; init; } = Array.Empty<UsageAttributionBurnEvent>();
-
     public long AccountWindowTokens { get; init; }
 
     public long RawLocalTokens { get; init; }
@@ -20,5 +18,5 @@ public sealed class UsageAttributionSnapshot
 
     public string EvidenceText { get; init; } = "Estimated from local chats, scaled to account usage";
 
-    public bool HasAttribution => Sessions.Count > 0 || BurnEvents.Count > 0;
+    public bool HasAttribution => Sessions.Count > 0;
 }

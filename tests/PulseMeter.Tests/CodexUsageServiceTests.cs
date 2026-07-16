@@ -172,7 +172,7 @@ public sealed class CodexUsageServiceTests
     }
 
     [Fact]
-    public async Task GetSnapshotAsync_KeepsLastConfirmedValuesWhenFreshReadsRegressInsideSameWindow()
+    public async Task GetSnapshotAsync_AcceptsConfirmedUsageDropInsideSameWindow()
     {
         var reset = DateTimeOffset.UtcNow.AddHours(2);
         var baselineClient = new SequentialRateLimitJsonRpcClient(
@@ -187,9 +187,32 @@ public sealed class CodexUsageServiceTests
                 staleConfirmationClient));
 
         var baseline = await service.GetSnapshotAsync();
-        var rejected = await service.GetSnapshotAsync();
+        var refreshed = await service.GetSnapshotAsync();
 
         Assert.Equal(SyncStatus.Live, baseline.SyncStatus);
+        Assert.Equal(SyncStatus.Live, refreshed.SyncStatus);
+        Assert.Equal(5, Assert.Single(refreshed.Buckets).UsedPercent);
+        Assert.Equal(2, processFactory.StartCount);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_KeepsLastConfirmedValuesWhenFreshReadsDisagree()
+    {
+        var reset = DateTimeOffset.UtcNow.AddHours(2);
+        var baselineClient = new SequentialRateLimitJsonRpcClient(
+            RateLimitsJson(60, reset),
+            RateLimitsJson(5, reset.AddMinutes(3)));
+        var conflictingConfirmationClient = RateLimitsOnlyClient(RateLimitsJson(58, reset.AddMinutes(4)));
+        var processFactory = new StubProcessFactory();
+        await using var service = CreateService(
+            processFactory: processFactory,
+            jsonRpcClientFactory: new SequenceJsonRpcClientFactory(
+                baselineClient,
+                conflictingConfirmationClient));
+
+        var baseline = await service.GetSnapshotAsync();
+        var rejected = await service.GetSnapshotAsync();
+
         Assert.Equal(SyncStatus.Stale, rejected.SyncStatus);
         Assert.Equal(60, Assert.Single(rejected.Buckets).UsedPercent);
         Assert.Equal(baseline.LastUpdatedUtc, rejected.LastUpdatedUtc);
@@ -198,29 +221,108 @@ public sealed class CodexUsageServiceTests
     }
 
     [Fact]
-    public async Task GetSnapshotAsync_AcceptsShortWindowDisappearingWhenResetCreditWasConsumed()
+    public async Task GetSnapshotAsync_RejectsOneOffShortWindowOmissionWhenResetCreditWasConsumed()
     {
         var reset = DateTimeOffset.UtcNow.AddHours(2);
         var weeklyReset = DateTimeOffset.UtcNow.AddDays(2);
         var client = new SequentialRateLimitJsonRpcClient(
             RateLimitsJson(60, reset, 25, weeklyReset),
             RateLimitsJson(null, null, 25, weeklyReset));
+        var confirmationClient = RateLimitsOnlyClient(RateLimitsJson(60, reset, 25, weeklyReset));
         var processFactory = new StubProcessFactory();
         await using var service = CreateService(
             resetCreditService: new SequentialResetCreditService(2, 1),
             processFactory: processFactory,
-            jsonRpcClientFactory: new StubJsonRpcClientFactory(client));
+            jsonRpcClientFactory: new SequenceJsonRpcClientFactory(client, confirmationClient));
 
         var baseline = await service.GetSnapshotAsync();
+        var refreshed = await service.GetSnapshotAsync();
+
+        Assert.Equal(SyncStatus.Stale, refreshed.SyncStatus);
+        Assert.Equal(2, refreshed.Buckets.Count);
+        Assert.Equal(2, processFactory.StartCount);
+        Assert.Equal(2, baseline.ResetCreditsAvailable);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_AcceptsConfirmedShortWindowRemovalFromEndpoint()
+    {
+        var reset = DateTimeOffset.UtcNow.AddHours(2);
+        var weeklyReset = DateTimeOffset.UtcNow.AddDays(2);
+        var baselineClient = new SequentialRateLimitJsonRpcClient(
+            RateLimitsJson(60, reset, 25, weeklyReset),
+            RateLimitsJson(null, null, 25, weeklyReset));
+        var confirmationClient = RateLimitsOnlyClient(RateLimitsJson(null, null, 26, weeklyReset.AddMinutes(1)));
+        var processFactory = new StubProcessFactory();
+        await using var service = CreateService(
+            resetCreditService: new SequentialResetCreditService(2, 1),
+            processFactory: processFactory,
+            jsonRpcClientFactory: new SequenceJsonRpcClientFactory(baselineClient, confirmationClient));
+
+        await service.GetSnapshotAsync();
         var refreshed = await service.GetSnapshotAsync();
 
         Assert.Equal(SyncStatus.Live, refreshed.SyncStatus);
         var weekly = Assert.Single(refreshed.Buckets);
         Assert.Equal(10080, weekly.WindowDurationMins);
-        Assert.Equal(25, weekly.UsedPercent);
+        Assert.Equal(26, weekly.UsedPercent);
         Assert.Equal(1, refreshed.ResetCreditsAvailable);
-        Assert.Equal(1, processFactory.StartCount);
-        Assert.Equal(2, baseline.ResetCreditsAvailable);
+        Assert.Equal(2, processFactory.StartCount);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_RejectsOneOffAddedTopology()
+    {
+        var reset = DateTimeOffset.UtcNow.AddHours(2);
+        var weeklyReset = DateTimeOffset.UtcNow.AddDays(2);
+        var baselineClient = new SequentialRateLimitJsonRpcClient(
+            RateLimitsJson(60, reset),
+            RateLimitsJson(62, reset.AddMinutes(1), 25, weeklyReset));
+        var confirmationClient = RateLimitsOnlyClient(RateLimitsJson(64, reset.AddMinutes(2)));
+        var processFactory = new StubProcessFactory();
+        await using var service = CreateService(
+            processFactory: processFactory,
+            jsonRpcClientFactory: new SequenceJsonRpcClientFactory(baselineClient, confirmationClient));
+
+        await service.GetSnapshotAsync();
+        var refreshed = await service.GetSnapshotAsync();
+
+        Assert.Equal(SyncStatus.Stale, refreshed.SyncStatus);
+        Assert.Single(refreshed.Buckets);
+        Assert.Equal(60, refreshed.Buckets[0].UsedPercent);
+        Assert.Equal(2, processFactory.StartCount);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_AcceptsConfirmedAddedTopologyAndPreservesCandidateResetCreditMetadata()
+    {
+        var reset = DateTimeOffset.UtcNow.AddHours(2);
+        var weeklyReset = DateTimeOffset.UtcNow.AddDays(2);
+        var credit = new ResetCreditSnapshot(
+            DateTimeOffset.UtcNow.AddDays(-1),
+            DateTimeOffset.UtcNow.AddDays(5),
+            "available");
+        var baselineClient = new SequentialRateLimitJsonRpcClient(
+            RateLimitsJson(60, reset),
+            RateLimitsJson(62, reset.AddMinutes(1), 25, weeklyReset));
+        var confirmationClient = RateLimitsOnlyClient(
+            RateLimitsJson(64, reset.AddMinutes(2), 26, weeklyReset.AddMinutes(1)));
+        var processFactory = new StubProcessFactory();
+        await using var service = CreateService(
+            resetCreditService: new StaticResetCreditService(new ResetCreditFetchResult(2, [credit])),
+            processFactory: processFactory,
+            jsonRpcClientFactory: new SequenceJsonRpcClientFactory(baselineClient, confirmationClient));
+
+        await service.GetSnapshotAsync();
+        var refreshed = await service.GetSnapshotAsync();
+
+        Assert.Equal(SyncStatus.Live, refreshed.SyncStatus);
+        Assert.Equal(2, refreshed.Buckets.Count);
+        Assert.Equal(26, refreshed.Buckets.Single(bucket => bucket.WindowDurationMins == 10080).UsedPercent);
+        Assert.Equal(2, refreshed.ResetCreditsAvailable);
+        Assert.Equal(credit.ExpiresAtUtc, refreshed.ResetCreditsExpiresAtUtc);
+        Assert.Equal([credit], refreshed.ResetCredits);
+        Assert.Equal(2, processFactory.StartCount);
     }
 
     private static StubJsonRpcClient RateLimitsOnlyClient(string rateLimitsJson)
@@ -352,6 +454,14 @@ public sealed class CodexUsageServiceTests
         {
             return Task.FromResult<ResetCreditFetchResult?>(
                 new ResetCreditFetchResult(_availableCounts.Dequeue(), []));
+        }
+    }
+
+    private sealed class StaticResetCreditService(ResetCreditFetchResult result) : ICodexResetCreditService
+    {
+        public Task<ResetCreditFetchResult?> TryFetchAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<ResetCreditFetchResult?>(result);
         }
     }
 

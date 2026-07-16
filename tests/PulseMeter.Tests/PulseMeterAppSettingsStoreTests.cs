@@ -48,4 +48,32 @@ public sealed class PulseMeterAppSettingsStoreTests
         Assert.Equal(60, loaded.AutoSyncSeconds);
         Assert.True(loaded.IsAlwaysOnTop);
     }
+
+    [Fact]
+    public void Load_DefaultsNewRunwayForecastVisibilityForLegacyDashboardSettings()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "PulseMeter.Tests", Guid.NewGuid().ToString("N"), "settings.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, """
+            {
+              "autoSyncSeconds": 90,
+              "dashboardVisibility": {
+                "rateLimits": true,
+                "weeklyPace": true,
+                "resetCredits": true,
+                "accountUsage": true,
+                "projectUsage": true,
+                "usageExplorer": true,
+                "burnAnalysis": true,
+                "dailyUsage": true
+              }
+            }
+            """);
+        var store = new PulseMeterAppSettingsStore(path);
+
+        var loaded = store.Load();
+
+        Assert.NotNull(loaded?.DashboardVisibility);
+        Assert.True(loaded.DashboardVisibility.RunwayForecast);
+    }
 }

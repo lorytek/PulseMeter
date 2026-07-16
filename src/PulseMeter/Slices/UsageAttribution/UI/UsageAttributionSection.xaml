@@ -53,11 +53,9 @@
                 </TextBlock.Style>
             </TextBlock>
 
-            <Grid x:Name="BurnAnalysisTablesGrid"
-                  Margin="0,16,0,0"
-                  SizeChanged="BurnAnalysisTablesGrid_SizeChanged">
-                <Grid.Style>
-                    <Style TargetType="Grid">
+            <StackPanel Margin="0,16,0,0">
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
                         <Setter Property="Visibility" Value="Visible" />
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding HasAttribution}" Value="False">
@@ -65,27 +63,10 @@
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
-                </Grid.Style>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition x:Name="BurnAnalysisStackedGapRow"
-                                   Height="0" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition x:Name="BurnAnalysisChatsColumn"
-                                      Width="6*"
-                                      MinWidth="440" />
-                    <ColumnDefinition x:Name="BurnAnalysisGapColumn"
-                                      Width="28" />
-                    <ColumnDefinition x:Name="BurnAnalysisEventsColumn"
-                                      Width="5*"
-                                      MinWidth="400" />
-                </Grid.ColumnDefinitions>
+                </StackPanel.Style>
 
-                <StackPanel Grid.Row="0"
-                            Grid.Column="0">
-                    <TextBlock Text="Top chats by token burn"
+                <StackPanel>
+                    <TextBlock Text="Top projects by token burn"
                                Foreground="#374151"
                                FontSize="14"
                                FontWeight="SemiBold" />
@@ -96,7 +77,7 @@
                             <ColumnDefinition Width="118" />
                             <ColumnDefinition Width="82" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Chat"
+                        <TextBlock Text="Project"
                                    Foreground="#6B7280"
                                    FontSize="11"
                                    FontWeight="SemiBold" />
@@ -127,7 +108,7 @@
                             Margin="0,6,0,0"
                             Background="#E5E7EB" />
 
-                    <ItemsControl ItemsSource="{Binding SessionRows}">
+                    <ItemsControl ItemsSource="{Binding ProjectRows}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Grid MinHeight="42"
@@ -148,7 +129,7 @@
                                                    FontSize="13.5"
                                                    FontWeight="SemiBold"
                                                    TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Text="{Binding ProjectDisplayName}"
+                                        <TextBlock Text="{Binding ActivityText}"
                                                    Foreground="#6B7280"
                                                    FontSize="12"
                                                    TextTrimming="CharacterEllipsis" />
@@ -171,10 +152,6 @@
                                                    FontSize="13"
                                                    FontWeight="SemiBold"
                                                    HorizontalAlignment="Right" />
-                                        <TextBlock Text="{Binding AgeText}"
-                                                   Foreground="#6B7280"
-                                                   FontSize="11.5"
-                                                   HorizontalAlignment="Right" />
                                     </StackPanel>
 
                                     <Border Grid.Row="1"
@@ -185,83 +162,7 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </StackPanel>
-
-                <StackPanel x:Name="BurnAnalysisEventsPanel"
-                            Grid.Row="0"
-                            Grid.Column="2">
-                    <TextBlock Text="Largest burn moments"
-                               Foreground="#374151"
-                               FontSize="14"
-                               FontWeight="SemiBold" />
-                    <Grid Margin="0,10,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="96" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="Moment"
-                                   Foreground="#6B7280"
-                                   FontSize="11"
-                                   FontWeight="SemiBold" />
-                        <TextBlock Grid.Column="1"
-                                   Text="Tokens"
-                                   Foreground="#6B7280"
-                                   FontSize="11"
-                                   FontWeight="SemiBold"
-                                   HorizontalAlignment="Right" />
-                    </Grid>
-                    <Border Height="1"
-                            Margin="0,6,0,0"
-                            Background="#E5E7EB" />
-
-                    <ItemsControl ItemsSource="{Binding BurnEventRows}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Grid MinHeight="42"
-                                      ToolTip="{Binding TooltipText}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="96" />
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="*" />
-                                        <RowDefinition Height="1" />
-                                    </Grid.RowDefinitions>
-
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding SessionDisplayName}"
-                                                   Foreground="#111827"
-                                                   FontSize="13.5"
-                                                   FontWeight="SemiBold"
-                                                   TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Text="{Binding BreakdownText}"
-                                                   Foreground="#6B7280"
-                                                   FontSize="11.5"
-                                                   TextTrimming="CharacterEllipsis" />
-                                    </StackPanel>
-
-                                    <StackPanel Grid.Column="1"
-                                                HorizontalAlignment="Right"
-                                                VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding EstimatedTokensText}"
-                                                   Foreground="#111827"
-                                                   FontSize="13"
-                                                   FontWeight="SemiBold"
-                                                   HorizontalAlignment="Right" />
-                                        <TextBlock Text="{Binding MomentText}"
-                                                   Foreground="#6B7280"
-                                                   FontSize="11.5"
-                                                   HorizontalAlignment="Right" />
-                                    </StackPanel>
-
-                                    <Border Grid.Row="1"
-                                            Grid.ColumnSpan="2"
-                                            Background="#E5E7EB" />
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Grid>
+            </StackPanel>
         </StackPanel>
     </Border>
 </UserControl>

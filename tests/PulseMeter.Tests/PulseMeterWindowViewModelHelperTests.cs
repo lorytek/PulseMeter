@@ -108,7 +108,7 @@ public sealed class PulseMeterWindowViewModelHelperTests
     }
 
     [Fact]
-    public void UsageAttributionPresenter_FormatsBurnAnalysisRowsAndSummary()
+    public void UsageAttributionPresenter_BuildsProjectRowsAndSummary()
     {
         var now = new DateTimeOffset(2026, 7, 7, 12, 0, 0, TimeSpan.Zero);
         var snapshot = new UsageAttributionSnapshot
@@ -130,21 +130,6 @@ public sealed class PulseMeterWindowViewModelHelperTests
                     now.AddMinutes(-18),
                     now.AddMinutes(-12))
             ],
-            BurnEvents =
-            [
-                new UsageAttributionBurnEvent(
-                    "Implement attribution",
-                    "thread-1",
-                    "PulseMeter",
-                    @"C:\Projects\PulseMeter",
-                    now.AddMinutes(-12),
-                    600_000,
-                    830_000,
-                    300_000,
-                    120_000,
-                    90_000,
-                    40_000)
-            ],
             RawLocalTokens = 900_000,
             EstimatedAttributedTokens = 1_250_000,
             AccountWindowTokens = 3_000_000,
@@ -152,31 +137,16 @@ public sealed class PulseMeterWindowViewModelHelperTests
         };
         var presenter = new UsageAttributionPresenter();
 
-        var sessions = presenter.BuildSessionRows(snapshot, now);
-        var burnEvents = presenter.BuildBurnEventRows(snapshot, now);
+        var projects = presenter.BuildProjectRows([], snapshot);
 
         Assert.Equal("1.3M attributed across 1 local chat", presenter.SummaryText(snapshot));
         Assert.Equal("Estimated from local chats, scaled to account usage", presenter.EvidenceText(snapshot));
         Assert.True(presenter.HasAttribution(snapshot));
-        var session = Assert.Single(sessions);
-        Assert.Equal("Implement attribution", session.DisplayName);
-        Assert.Equal("PulseMeter", session.ProjectDisplayName);
-        Assert.Equal("1.3M", session.EstimatedTokensText);
-        Assert.Equal("42.3%", session.ShareText);
-        Assert.Equal("local raw 900.0K", session.RawLocalTokensText);
-        Assert.Equal("500.0K in / 200.0K out / 100.0K cached / 50.0K reasoning", session.BreakdownText);
-        Assert.Equal("12m ago", session.AgeText);
-        Assert.Contains("Chat id: thread-1", session.TooltipText);
-        Assert.Contains("Project: PulseMeter", session.TooltipText);
-        Assert.Contains(@"Path: C:\Projects\PulseMeter", session.TooltipText);
-
-        var burnEvent = Assert.Single(burnEvents);
-        Assert.Equal("830.0K", burnEvent.EstimatedTokensText);
-        Assert.Equal(
-            now.AddMinutes(-12).ToLocalTime().ToString("dd MMM HH:mm", System.Globalization.CultureInfo.InvariantCulture),
-            burnEvent.MomentText);
-        Assert.Equal("300.0K in / 120.0K out / 90.0K cached / 40.0K reasoning", burnEvent.BreakdownText);
-        Assert.Contains("Chat id: thread-1", burnEvent.TooltipText);
+        var project = Assert.Single(projects);
+        Assert.Equal("PulseMeter", project.DisplayName);
+        Assert.Equal("1.3M", project.EstimatedTokensText);
+        Assert.Equal("42.3%", project.ShareText);
+        Assert.Equal("Local project activity", project.ActivityText);
         Assert.Equal("No local burn analysis yet.", presenter.EmptyStateText(UsageAttributionSnapshot.Empty));
     }
 

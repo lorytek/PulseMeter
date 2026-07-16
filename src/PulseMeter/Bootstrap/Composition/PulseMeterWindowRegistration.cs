@@ -10,6 +10,7 @@ using PulseMeter.Slices.ProjectUsage;
 using PulseMeter.Slices.RateLimits;
 using PulseMeter.Slices.RateLimitsDaily;
 using PulseMeter.Slices.ResetCredits;
+using PulseMeter.Slices.RunwayForecast;
 using PulseMeter.Slices.UsageAttribution;
 using PulseMeter.Platform.Persistence;
 using PulseMeter.Platform.Windows;
@@ -45,6 +46,7 @@ internal static class PulseMeterWindowRegistration
                 navigationRail: navigationRail,
                 rateLimits: sp.GetRequiredService<RateLimitsSectionViewModel>(),
                 rateLimitsDaily: sp.GetRequiredService<RateLimitsDailySectionViewModel>(),
+                runwayForecast: sp.GetRequiredService<RunwayForecastSectionViewModel>(),
                 needsAttention: sp.GetRequiredService<NeedsAttentionSectionViewModel>(),
                 accountUsage: sp.GetRequiredService<AccountUsageSectionViewModel>(),
                 resetCreditsSection: sp.GetRequiredService<ResetCreditsSectionViewModel>(),

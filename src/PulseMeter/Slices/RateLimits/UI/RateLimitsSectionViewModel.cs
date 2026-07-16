@@ -10,6 +10,9 @@ public sealed class RateLimitsSectionViewModel : INotifyPropertyChanged
     private readonly IRateLimitsPresenter _presenter;
     private RateLimitOption? _selectedLimitOption;
     private UsageSignalsSnapshot _signals = UsageSignalsSnapshot.Empty;
+    private DateTimeOffset _lastUpdatedAt = DateTimeOffset.UtcNow;
+    private bool _isAheadOfWeeklyPace;
+    private string _weeklyPaceDetailText = string.Empty;
 
     public RateLimitsSectionViewModel(IRateLimitsPresenter presenter)
     {
@@ -25,6 +28,10 @@ public sealed class RateLimitsSectionViewModel : INotifyPropertyChanged
     public ObservableCollection<RateLimitBucket> SelectedBuckets { get; } = new();
 
     public ObservableCollection<QuotaDisplayRow> SelectedQuotaRows { get; } = new();
+
+    public bool HasMultipleSelectedQuotaRows => SelectedQuotaRows.Count > 1;
+
+    public int SelectedQuotaColumnCount => HasMultipleSelectedQuotaRows ? 2 : 1;
 
     public RateLimitOption? SelectedLimitOption
     {
@@ -59,6 +66,7 @@ public sealed class RateLimitsSectionViewModel : INotifyPropertyChanged
 
     public void ApplyBuckets(IEnumerable<RateLimitBucket> buckets, DateTimeOffset now)
     {
+        _lastUpdatedAt = now;
         var selectedKey = SelectedLimitOption?.Key;
         _buckets = buckets.ToList();
         var options = _presenter.BuildOptions(_buckets);
@@ -78,11 +86,20 @@ public sealed class RateLimitsSectionViewModel : INotifyPropertyChanged
     public void ApplyUsageSignals(UsageSignalsSnapshot signals)
     {
         _signals = signals;
+        RefreshQuotaRows(_lastUpdatedAt);
         RefreshRunwayHintProperties();
+    }
+
+    public void ApplyWeeklyPace(bool isAheadOfPace, string detailText)
+    {
+        _isAheadOfWeeklyPace = isAheadOfPace;
+        _weeklyPaceDetailText = detailText;
+        RefreshQuotaRows(_lastUpdatedAt);
     }
 
     public void Refresh(DateTimeOffset now)
     {
+        _lastUpdatedAt = now;
         RefreshQuotaRows(now);
     }
 
@@ -105,10 +122,17 @@ public sealed class RateLimitsSectionViewModel : INotifyPropertyChanged
     private void RefreshQuotaRows(DateTimeOffset now)
     {
         SelectedQuotaRows.Clear();
-        foreach (var row in _presenter.BuildQuotaRows(SelectedBuckets, now))
+        foreach (var row in _presenter.BuildQuotaRows(SelectedBuckets, now).Take(2))
         {
-            SelectedQuotaRows.Add(row);
+            var rowWithRunway = QuotaDisplayBuilder.ApplyRunwayForecast(row, FindRunwaySignal(row));
+            SelectedQuotaRows.Add(QuotaDisplayBuilder.ApplyWeeklyPace(
+                rowWithRunway,
+                _isAheadOfWeeklyPace,
+                _weeklyPaceDetailText));
         }
+
+        OnPropertyChanged(nameof(HasMultipleSelectedQuotaRows));
+        OnPropertyChanged(nameof(SelectedQuotaColumnCount));
 
         CompactQuotaRows.Clear();
         foreach (var row in _presenter.BuildCompactRows(SelectedQuotaRows))
@@ -119,6 +143,18 @@ public sealed class RateLimitsSectionViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(CompactTitleText));
         OnPropertyChanged(nameof(CompactQuotaSummaryText));
         OnPropertyChanged(nameof(ExpandedQuotaSummaryText));
+    }
+
+    private LimitRunwaySignal? FindRunwaySignal(QuotaDisplayRow row)
+    {
+        if (row.IsWeekly)
+        {
+            return null;
+        }
+
+        return _signals.RunwaySignals.FirstOrDefault(signal =>
+            signal.BucketId.Equals(row.BucketId, StringComparison.OrdinalIgnoreCase)
+            && signal.LimitKey.Equals(row.LimitKey, StringComparison.OrdinalIgnoreCase));
     }
 
     private LimitRunwaySignal? SelectedRunwaySignal

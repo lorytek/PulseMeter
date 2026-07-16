@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0
+
+- Added Project Health comparisons for recent usage, prior-period change, 30-day share, and focused project details.
+- Added a selected-track Runway Forecast based on recent confirmed rate-limit samples.
+- Redesigned rate-limit and Weekly Pace presentation with clearer reset timing and pace guidance.
+- Changed Burn Analysis from chat-level tables to a compact project-level token-burn ranking.
+- Moved Needs Attention to the top of the dashboard and improved navigation, compact-window behavior, and multi-monitor handling.
+- Added privacy-safe local chat labels and removed the retired Usage Explorer and burn-moment interfaces.
+- Improved live sync confirmation, reset-credit handling, and local publishing under Windows Smart App Control.
+
 ## 0.3.1
 
 - Fixed live sync remaining stale after a reset credit legitimately cleared the short rolling quota window.

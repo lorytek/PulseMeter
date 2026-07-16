@@ -8,8 +8,7 @@
     <Border x:Name="NeedsAttentionPanel"
             Margin="0,12,0,0"
             Padding="16"
-            Style="{DynamicResource LightCardStyle}"
-            Visibility="{Binding HasNeedsAttention, Converter={StaticResource BooleanToVisibilityConverter}}">
+            Style="{DynamicResource LightCardStyle}">
         <StackPanel>
             <Grid>
                 <TextBlock Text="NEEDS ATTENTION"
@@ -22,8 +21,39 @@
                            FontSize="13" />
             </Grid>
 
+            <StackPanel Margin="0,14,0,0"
+                        Orientation="Horizontal">
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasNeedsAttention}" Value="False">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
+                <Ellipse Width="10"
+                         Height="10"
+                         Margin="0,3,10,0"
+                         Fill="#22C55E" />
+                <TextBlock Text="All clear - no items need attention right now."
+                           Foreground="#4B5563"
+                           FontSize="14" />
+            </StackPanel>
+
             <ItemsControl Margin="0,14,0,0"
                           ItemsSource="{Binding NeedsAttentionItems}">
+                <ItemsControl.Style>
+                    <Style TargetType="ItemsControl">
+                        <Setter Property="Visibility" Value="Visible" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasNeedsAttention}" Value="False">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ItemsControl.Style>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <Grid MinHeight="48">

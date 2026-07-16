@@ -39,6 +39,8 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
 
     public IPulseMeterWindowStateStore? WindowStateStore { get; set; }
 
+    IntPtr IPulseMeterWindow.Handle => _windowSource?.Handle ?? IntPtr.Zero;
+
     [DllImport("user32.dll")]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
@@ -170,6 +172,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         {
             (NavigationSection.RateLimits, (FrameworkElement)RateLimitsSection),
             (NavigationSection.WeeklyPace, (FrameworkElement)WeeklyPaceSection),
+            (NavigationSection.RunwayForecast, (FrameworkElement)RunwayForecastSection),
             (NavigationSection.ResetCredits, (FrameworkElement)ResetCreditsSection),
             (NavigationSection.AccountUsage, (FrameworkElement)AccountUsageSection),
             (NavigationSection.ProjectUsage, (FrameworkElement)ProjectUsageSection),
@@ -192,6 +195,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         {
             NavigationSection.RateLimits => RateLimitsSection,
             NavigationSection.WeeklyPace => WeeklyPaceSection,
+            NavigationSection.RunwayForecast => RunwayForecastSection,
             NavigationSection.ResetCredits => ResetCreditsSection,
             NavigationSection.AccountUsage => AccountUsageSection,
             NavigationSection.ProjectUsage => ProjectUsageSection,

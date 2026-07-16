@@ -11,6 +11,7 @@ using PulseMeter.Slices.ProjectUsage;
 using PulseMeter.Slices.RateLimits;
 using PulseMeter.Slices.RateLimitsDaily;
 using PulseMeter.Slices.ResetCredits;
+using PulseMeter.Slices.RunwayForecast;
 using PulseMeter.Slices.PulseMeterWindow;
 using PulseMeter.Platform.Persistence;
 using PulseMeter.Platform.Windows;
@@ -51,6 +52,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         Source = "Starting",
         StatusMessage = "Starting PulseMeter."
     };
+    private UsageSnapshot? _lastAppliedSnapshot;
     private UsageSignalsSnapshot _usageSignals = UsageSignalsSnapshot.Empty;
 
     public PulseMeterWindowViewModel(
@@ -64,6 +66,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         NavigationRailViewModel? navigationRail = null,
         RateLimitsSectionViewModel? rateLimits = null,
         RateLimitsDailySectionViewModel? rateLimitsDaily = null,
+        RunwayForecastSectionViewModel? runwayForecast = null,
         NeedsAttentionSectionViewModel? needsAttention = null,
         AccountUsageSectionViewModel? accountUsage = null,
         DailyUsageSectionViewModel? dailyUsage = null,
@@ -83,6 +86,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         NavigationRail = navigationRail ?? new NavigationRailViewModel();
         RateLimits = rateLimits ?? new RateLimitsSectionViewModel(new RateLimitsPresenter());
         RateLimitsDaily = rateLimitsDaily ?? new RateLimitsDailySectionViewModel(new RateLimitsDailyPresenter());
+        RunwayForecast = runwayForecast ?? new RunwayForecastSectionViewModel(new RunwayForecastPresenter());
         NeedsAttention = needsAttention ?? new NeedsAttentionSectionViewModel(new NeedsAttentionPresenter());
         ResetCreditsSection = resetCreditsSection ?? new ResetCreditsSectionViewModel(new ResetCreditsPresenter(resetCreditStateStore));
         AccountUsage = accountUsage ?? new AccountUsageSectionViewModel(new AccountUsagePresenter());
@@ -116,6 +120,8 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
 
     public RateLimitsDailySectionViewModel RateLimitsDaily { get; }
 
+    public RunwayForecastSectionViewModel RunwayForecast { get; }
+
     public NeedsAttentionSectionViewModel NeedsAttention { get; }
 
     public ResetCreditsSectionViewModel ResetCreditsSection { get; }
@@ -141,10 +147,6 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     public ObservableCollection<DailyUsageDisplayRow> DailyUsageRows => DailyUsage.DailyUsageRows;
 
     public ObservableCollection<ProjectUsageDisplayRow> ProjectUsageRows => ProjectUsage.ProjectUsageRows;
-
-    public ObservableCollection<UsageAttributionSessionDisplayRow> UsageAttributionSessionRows => UsageAttribution.SessionRows;
-
-    public ObservableCollection<UsageAttributionBurnEventDisplayRow> UsageAttributionBurnEventRows => UsageAttribution.BurnEventRows;
 
     public ObservableCollection<RateLimitBucket> SelectedBuckets => RateLimits.SelectedBuckets;
 
@@ -266,6 +268,12 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     {
         get => NavigationRail.IsUsageAttributionVisible;
         set => NavigationRail.IsUsageAttributionVisible = value;
+    }
+
+    public bool IsRunwayForecastVisible
+    {
+        get => NavigationRail.IsRunwayForecastVisible;
+        set => NavigationRail.IsRunwayForecastVisible = value;
     }
 
     public bool IsDailyUsageVisible
@@ -554,6 +562,12 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
 
     public void ApplySnapshot(UsageSnapshot snapshot)
     {
+        if (ReferenceEquals(_lastAppliedSnapshot, snapshot))
+        {
+            return;
+        }
+
+        _lastAppliedSnapshot = snapshot;
         var nowUtc = DateTimeOffset.UtcNow;
         UpdateAccountUsageFreshnessWarnings(snapshot);
         _snapshot = snapshot;
@@ -569,6 +583,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
 
         RebuildLimitOptions();
         RateLimits.ApplyUsageSignals(_usageSignals);
+        RunwayForecast.ApplySignals(_usageSignals, SelectedLimitOption?.Key, nowUtc);
         RefreshResetCredits(DateTimeOffset.UtcNow, updateFromSnapshot: true);
 
         DailyBuckets.Clear();
@@ -599,6 +614,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ThreadTokenText));
         RebuildDailyUsageRows();
         RefreshUsageAttributionRows(DateTimeOffset.UtcNow);
+        RunwayForecast.Refresh(DateTimeOffset.UtcNow);
         NeedsAttention.Refresh(DateTimeOffset.UtcNow);
         RefreshAccountDashboardProperties();
         OnPropertyChanged(nameof(TodayUsageText));
@@ -757,7 +773,10 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         try
         {
             var snapshot = await _usageService.GetSnapshotAsync();
-            ApplySnapshot(snapshot);
+            if (!ReferenceEquals(_lastAppliedSnapshot, snapshot))
+            {
+                ApplySnapshot(snapshot);
+            }
             SetSyncFeedback(BuildRefreshFeedback(snapshot));
         }
         catch (Exception ex)
@@ -819,6 +838,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         if (e.PropertyName == nameof(RateLimitsSectionViewModel.SelectedLimitOption))
         {
             RefreshDailyRateLimitRows();
+            RunwayForecast.SelectLimit(SelectedLimitOption?.Key, DateTimeOffset.UtcNow);
             OnPropertyChanged(nameof(SelectedLimitOption));
         }
 
@@ -852,6 +872,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         {
             OnPropertyChanged(nameof(ShouldShowUsageAttribution));
         }
+
     }
 
     private void OnDailyUsagePropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -897,6 +918,9 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     private void RefreshDailyRateLimitRows()
     {
         RateLimitsDaily.ApplySelectedBuckets(SelectedBuckets, DateTimeOffset.UtcNow);
+        RateLimits.ApplyWeeklyPace(
+            RateLimitsDaily.IsAheadOfWeeklyPace,
+            RateLimitsDaily.WeeklyPaceDetailText);
 
         OnPropertyChanged(nameof(HasDailyRateLimitRows));
         OnPropertyChanged(nameof(RateLimitsDailySummaryText));
@@ -925,12 +949,10 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
 
     private void RebuildUsageAttributionRows(DateTimeOffset nowUtc)
     {
-        UsageAttribution.ApplySnapshot(_snapshot.UsageAttribution, nowUtc);
+        UsageAttribution.ApplySnapshot(_snapshot.UsageAttribution, nowUtc, _snapshot.ProjectUsageRows);
 
         OnPropertyChanged(nameof(HasUsageAttribution));
         OnPropertyChanged(nameof(ShouldShowUsageAttribution));
-        OnPropertyChanged(nameof(UsageAttributionSessionRows));
-        OnPropertyChanged(nameof(UsageAttributionBurnEventRows));
     }
 
     private void RefreshUsageAttributionRows(DateTimeOffset nowUtc)
@@ -1051,6 +1073,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         return new UsageSignalsSnapshot
         {
             RunwaySignals = usageSignals.RunwaySignals,
+            RunwayForecasts = usageSignals.RunwayForecasts,
             IdleDrainIncident = usageSignals.IdleDrainIncident,
             ShowAllAttentionSignals = usageSignals.ShowAllAttentionSignals,
             AttentionSignals = usageSignals.AttentionSignals

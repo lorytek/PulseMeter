@@ -3,16 +3,19 @@
 public sealed class PublishScriptTests
 {
     [Fact]
-    public void LocalShortcut_UsesTheDotnetHostForUnsignedLocalBuilds()
+    public void LocalShortcut_UsesTheFirstLauncherThatPassesTheWindowsProbe()
     {
         var script = File.ReadAllText(FindWorkspaceFile("scripts", "publish-local.ps1"));
 
         Assert.Contains("$localHostOutput = Join-Path $artifactsRoot \"PulseMeter-local-host-$timestamp\"", script);
         Assert.Contains("$localHostDll = Join-Path $localHostOutput \"PulseMeter.dll\"", script);
         Assert.Contains("$dotnetExe = Join-Path $env:ProgramFiles \"dotnet\\dotnet.exe\"", script);
-        Assert.Contains("$shortcut.TargetPath = $dotnetExe", script);
-        Assert.Contains("$shortcut.Arguments = [string]::Concat('\"', $localHostDll, '\"')", script);
-        Assert.Contains("$shortcut.WorkingDirectory = $localHostOutput", script);
+        Assert.Contains("$launcherTarget = $appExe", script);
+        Assert.Contains("Test-PulseMeterLaunch $appExe \"\" $output", script);
+        Assert.Contains("$launcherTarget = $dotnetExe", script);
+        Assert.Contains("$launcherArguments = [string]::Concat('\"', $localHostDll, '\"')", script);
+        Assert.Contains("$shortcut.TargetPath = $launcherTarget", script);
+        Assert.Contains("Both published PulseMeter launchers were blocked. Existing shortcuts were not changed.", script);
         Assert.DoesNotContain("launch-pulsemeter.vbs", script);
         Assert.DoesNotContain("wscript.exe", script);
         Assert.DoesNotContain("CreateObject(\"WScript.Shell\")", script);
@@ -51,7 +54,17 @@ public sealed class PublishScriptTests
         Assert.Contains("Published local self-contained app", script);
         Assert.Contains("--self-contained false", script);
         Assert.Contains("/p:UseAppHost=false", script);
-        Assert.Contains("Published local Smart App Control-compatible launcher", script);
+        Assert.Contains("Published local framework-dependent launcher", script);
+    }
+
+    [Fact]
+    public void LocalPublish_StopsOnlyPreviouslyPublishedPulseMeterLaunchers()
+    {
+        var script = File.ReadAllText(FindWorkspaceFile("scripts", "publish-local.ps1"));
+
+        Assert.Contains("PulseMeter-local-host-*\\PulseMeter.dll", script);
+        Assert.Contains("PulseMeter-win-x64-*\\PulseMeter.exe", script);
+        Assert.DoesNotContain("[string]::Concat('*', $root, '*PulseMeter*')", script);
     }
 
     [Fact]

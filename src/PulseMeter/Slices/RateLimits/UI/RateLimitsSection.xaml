@@ -6,137 +6,194 @@
     </UserControl.Resources>
 
     <Border x:Name="RateLimitsPanel"
-                                    Padding="16"
-                                    Style="{DynamicResource LightCardStyle}"
-                                    Visibility="{Binding DataContext.IsRateLimitsVisible, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <StackPanel>
-                                    <TextBlock Text="RATE LIMITS"
+            Padding="26,22,26,24"
+            Style="{DynamicResource LightCardStyle}"
+            Visibility="{Binding DataContext.IsRateLimitsVisible, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}">
+        <StackPanel>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="RATE LIMITS"
+                           Foreground="#111827"
+                           FontSize="20"
+                           FontWeight="Bold"
+                           VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <TextBlock Margin="0,0,14,0"
+                               Text="Track"
+                               Foreground="#374151"
+                               FontSize="14"
+                               VerticalAlignment="Center" />
+                    <ComboBox Width="170"
+                              ItemsSource="{Binding LimitOptions}"
+                              SelectedItem="{Binding SelectedLimitOption, Mode=TwoWay}"
+                              DisplayMemberPath="DisplayName"
+                              Style="{DynamicResource LightComboBoxStyle}" />
+                </StackPanel>
+            </Grid>
+
+            <Grid Margin="0,22,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="1" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border x:Name="QuotaColumnDivider"
+                        Grid.Column="1"
+                        Margin="0,10"
+                        Background="#D1D5DB"
+                        Visibility="{Binding HasMultipleSelectedQuotaRows, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                <ItemsControl Grid.ColumnSpan="3"
+                              ItemsSource="{Binding SelectedQuotaRows}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Columns="{Binding DataContext.SelectedQuotaColumnCount, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="28,0"
+                                  MaxWidth="520"
+                                  HorizontalAlignment="Center">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <StackPanel Orientation="Horizontal"
+                                            HorizontalAlignment="Center">
+                                    <TextBlock Text="{Binding RowIconGlyph}"
+                                               FontFamily="Segoe MDL2 Assets"
+                                               Foreground="#475569"
+                                               FontSize="22"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock Margin="12,0,10,0"
+                                               Text="{Binding RowTitleText}"
                                                Foreground="#111827"
-                                               FontSize="20"
-                                               FontWeight="Bold" />
-
-                                    <Grid Margin="0,14,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="200" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
-
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="56" />
-                                                <ColumnDefinition Width="136" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Text="Track"
-                                                       Foreground="#374151"
-                                                       FontSize="14"
-                                                       VerticalAlignment="Center" />
-                                            <ComboBox Grid.Column="1"
-                                                      ItemsSource="{Binding LimitOptions}"
-                                                      SelectedItem="{Binding SelectedLimitOption, Mode=TwoWay}"
-                                                      DisplayMemberPath="DisplayName"
-                                                      Style="{DynamicResource LightComboBoxStyle}" />
-                                        </Grid>
-
-                                        <ItemsControl Grid.Column="1"
-                                                      Margin="34,-10,0,0"
-                                                      ItemsSource="{Binding SelectedQuotaRows}">
-                                            <ItemsControl.ItemsPanel>
-                                                <ItemsPanelTemplate>
-                                                    <WrapPanel />
-                                                </ItemsPanelTemplate>
-                                            </ItemsControl.ItemsPanel>
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <StackPanel Width="184"
-                                                                Margin="0,0,44,4"
-                                                                HorizontalAlignment="Center">
-                                                        <TextBlock Margin="0,0,0,6"
-                                                                   Text="{Binding RingSubtitleText}"
-                                                                   Foreground="#6B7280"
-                                                                   FontSize="13"
-                                                                   FontWeight="SemiBold"
-                                                                   TextAlignment="Center"
-                                                                   HorizontalAlignment="Center" />
-                                                        <Viewbox Width="132"
-                                                                 Height="132"
-                                                                 HorizontalAlignment="Center">
-                                                            <Grid Width="112"
-                                                                  Height="112">
-                                                                <Path Stroke="#E5E7EB"
-                                                                      StrokeThickness="7">
-                                                                    <Path.Data>
-                                                                        <EllipseGeometry Center="56,56"
-                                                                                         RadiusX="43"
-                                                                                         RadiusY="43" />
-                                                                    </Path.Data>
-                                                                </Path>
-                                                                <Path Data="{Binding RingArcData}"
-                                                                      Stroke="{Binding RingBrush}"
-                                                                      StrokeThickness="7"
-                                                                      StrokeStartLineCap="Round"
-                                                                      StrokeEndLineCap="Round"
-                                                                      StrokeLineJoin="Round" />
-                                                                <StackPanel HorizontalAlignment="Center"
-                                                                            VerticalAlignment="Center">
-                                                                    <TextBlock Text="{Binding RingPercentText}"
-                                                                               Foreground="#111827"
-                                                                               FontSize="28"
-                                                                               FontWeight="Bold"
-                                                                               TextAlignment="Center"
-                                                                               HorizontalAlignment="Center" />
-                                                                </StackPanel>
-                                                            </Grid>
-                                                        </Viewbox>
-                                                        <TextBlock Margin="0,8,0,0"
-                                                                   Text="{Binding ResetDisplayText}"
-                                                                   Foreground="#6B7280"
-                                                                   FontSize="13"
-                                                                   FontWeight="SemiBold"
-                                                                   TextAlignment="Center"
-                                                                   HorizontalAlignment="Center" />
-                                                    </StackPanel>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-
-                                        <Border x:Name="RunwayHintPanel"
-                                                Grid.Row="1"
-                                                Grid.ColumnSpan="2"
-                                                Margin="0,12,0,0"
-                                                Padding="10,7"
-                                                Background="#F9FAFB"
-                                                BorderBrush="#E5E7EB"
-                                                BorderThickness="1"
-                                                CornerRadius="6"
-                                                Visibility="{Binding HasRunwayHint, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding RunwayHintText}"
-                                                           Foreground="#374151"
-                                                           FontSize="13"
-                                                           FontWeight="SemiBold"
-                                                           VerticalAlignment="Center" />
-                                                <Border Style="{DynamicResource LightEvidencePillStyle}"
-                                                        Margin="8,0,0,0">
-                                                    <TextBlock Text="{Binding RunwayEvidenceText}"
-                                                               Style="{DynamicResource LightEvidencePillTextStyle}" />
-                                                </Border>
-                                            </StackPanel>
-                                        </Border>
-
-                                        <TextBlock Grid.Row="2"
-                                                   Grid.ColumnSpan="2"
-                                                   Margin="0,12,0,0"
-                                                   Text="{Binding DataContext.StatusMessage, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                   Foreground="#DC2626"
+                                               FontSize="18"
+                                               FontWeight="Bold"
+                                               VerticalAlignment="Center" />
+                                    <Border Padding="8,3"
+                                            Background="Transparent"
+                                            BorderBrush="{Binding StatusBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="5"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding StatusText}"
+                                                   Foreground="{Binding StatusBrush}"
                                                    FontSize="12"
-                                                   TextWrapping="Wrap"
-                                                   Visibility="{Binding DataContext.HasStatusMessage, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                                    </Grid>
+                                                   FontWeight="SemiBold" />
+                                    </Border>
                                 </StackPanel>
-                            </Border>
+                                <Viewbox Grid.Row="1"
+                                         Width="224"
+                                         Height="224"
+                                         Margin="0,18,0,0"
+                                         HorizontalAlignment="Center"
+                                         Stretch="Uniform">
+                                    <Grid Width="112"
+                                          Height="112">
+                                        <Path Stroke="#E5E7EB"
+                                              StrokeThickness="3.5"
+                                              Stretch="None">
+                                            <Path.Data>
+                                                <EllipseGeometry Center="56,56"
+                                                                 RadiusX="43"
+                                                                 RadiusY="43" />
+                                            </Path.Data>
+                                        </Path>
+                                        <Path Data="{Binding RingArcData}"
+                                              Stroke="{Binding RingBrush}"
+                                              StrokeThickness="3.5"
+                                              Stretch="None"
+                                              StrokeStartLineCap="Round"
+                                              StrokeEndLineCap="Round"
+                                              StrokeLineJoin="Round" />
+                                        <Path Data="{Binding CriticalRingArcData}"
+                                              Stroke="#EF4444"
+                                              StrokeThickness="3.5"
+                                              Stretch="None"
+                                              StrokeStartLineCap="Round"
+                                              StrokeEndLineCap="Round"
+                                              StrokeLineJoin="Round"
+                                              Visibility="{Binding HasCriticalRingArc, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                        <Canvas IsHitTestVisible="False">
+                                            <Ellipse Canvas.Left="{Binding RingKnobHaloLeft}"
+                                                     Canvas.Top="{Binding RingKnobHaloTop}"
+                                                     Width="12"
+                                                     Height="12"
+                                                     Fill="{Binding RingBrush}"
+                                                     Opacity="0.24" />
+                                            <Ellipse Canvas.Left="{Binding RingKnobLeft}"
+                                                     Canvas.Top="{Binding RingKnobTop}"
+                                                     Width="7"
+                                                     Height="7"
+                                                     Fill="{Binding RingBrush}"
+                                                     Stroke="#FFFFFF"
+                                                     StrokeThickness="0.8" />
+                                        </Canvas>
+                                        <StackPanel HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding RingPercentText}"
+                                                       Foreground="#111827"
+                                                       FontSize="33"
+                                                       FontWeight="Bold"
+                                                       TextAlignment="Center" />
+                                            <TextBlock Text="left"
+                                                       Foreground="#64748B"
+                                                       FontSize="15"
+                                                       TextAlignment="Center" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Viewbox>
+                                <StackPanel Grid.Row="2"
+                                            Margin="0,8,0,0"
+                                            HorizontalAlignment="Center">
+                                    <TextBlock Text="{Binding ResetTimeText}"
+                                               Foreground="#111827"
+                                               FontSize="15"
+                                               FontWeight="Bold"
+                                               TextAlignment="Center" />
+                                    <TextBlock Margin="0,3,0,0"
+                                               Text="{Binding ResetCountdownText}"
+                                               Foreground="#64748B"
+                                               FontSize="14"
+                                               TextAlignment="Center" />
+                                </StackPanel>
+                                <StackPanel Grid.Row="3"
+                                            Margin="0,20,0,0"
+                                            Orientation="Horizontal"
+                                            HorizontalAlignment="Center"
+                                            Visibility="{Binding IsPaceDetailVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <TextBlock Text="{Binding PaceIconGlyph}"
+                                               FontFamily="Segoe MDL2 Assets"
+                                               Foreground="{Binding PaceBrush}"
+                                               FontSize="18"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock Margin="10,0,0,0"
+                                               Text="{Binding PaceText}"
+                                               Foreground="{Binding PaceBrush}"
+                                               FontSize="13"
+                                               FontWeight="SemiBold"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Grid>
+
+            <TextBlock Margin="0,16,0,0"
+                       Text="{Binding DataContext.StatusMessage, RelativeSource={RelativeSource AncestorType=Window}}"
+                       Foreground="#DC2626"
+                       FontSize="12"
+                       TextWrapping="Wrap"
+                       Visibility="{Binding DataContext.HasStatusMessage, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}" />
+        </StackPanel>
+    </Border>
 </UserControl>

@@ -130,6 +130,7 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
             or nameof(PulseMeterWindowViewModel.IsAlwaysOnTop)
             or nameof(PulseMeterWindowViewModel.IsRateLimitsVisible)
             or nameof(PulseMeterWindowViewModel.IsRateLimitsDailyVisible)
+            or nameof(PulseMeterWindowViewModel.IsRunwayForecastVisible)
             or nameof(PulseMeterWindowViewModel.IsResetCreditsVisible)
             or nameof(PulseMeterWindowViewModel.IsAccountUsageVisible)
             or nameof(PulseMeterWindowViewModel.IsProjectUsageVisible)
@@ -161,9 +162,14 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
             return;
         }
 
-        var codexFocused = _foregroundWindowService.IsCodexForeground();
-        if (codexFocused)
+        var foregroundState = _foregroundWindowService.GetCodexForegroundState(_pulseMeterWindow.Handle);
+        if (foregroundState.IsCodexForeground)
         {
+            if (foregroundState.IsOnSameMonitor && _viewModel.IsExpanded)
+            {
+                _viewModel.Collapse();
+            }
+
             if (!_pulseMeterWindow.IsVisible)
             {
                 _pulseMeterWindow.Show();

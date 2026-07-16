@@ -10,15 +10,16 @@ public sealed class PulseMeterWindowViewModelSelectionTests
     public void ApplySnapshot_CreatesLimitOptionsAndUsesSelectedGroupForQuotaRows()
     {
         var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
+        var resetsAt = DateTimeOffset.UtcNow.AddDays(1);
 
         viewModel.ApplySnapshot(new UsageSnapshot
         {
             Buckets =
             [
-                Bucket("codex", "General", "5h", 4),
-                Bucket("codex", "General", "7d", 49),
-                Bucket("codex_bengalfox", "GPT-5.3-Codex-Spark", "5h", 0),
-                Bucket("codex_bengalfox", "GPT-5.3-Codex-Spark", "7d", 0)
+                Bucket("codex", "General", "5h", 4, resetsAtUtc: resetsAt),
+                Bucket("codex", "General", "7d", 49, resetsAtUtc: resetsAt),
+                Bucket("codex_bengalfox", "GPT-5.3-Codex-Spark", "5h", 0, resetsAtUtc: resetsAt),
+                Bucket("codex_bengalfox", "GPT-5.3-Codex-Spark", "7d", 0, resetsAtUtc: resetsAt)
             ],
             Source = "AppServer",
             SyncStatus = SyncStatus.Live,
@@ -30,11 +31,15 @@ public sealed class PulseMeterWindowViewModelSelectionTests
         Assert.Equal(["5h", "7d"], viewModel.SelectedBuckets.Select(bucket => bucket.WindowLabel));
         Assert.Equal(["5h", "Weekly"], viewModel.CompactQuotaRows.Select(row => row.Label));
         Assert.Equal(["96% left", "51% left"], viewModel.CompactQuotaRows.Select(row => row.RemainingPercentText));
+        Assert.Equal(2, viewModel.RunwayForecast.Rows.Count);
+        Assert.All(viewModel.RunwayForecast.Rows, row => Assert.Equal("General", row.TrackText));
 
         viewModel.SelectedLimitOption = viewModel.LimitOptions.Single(option => option.DisplayName == "GPT-5.3-Spark");
 
         Assert.Equal(["5h", "7d"], viewModel.SelectedBuckets.Select(bucket => bucket.WindowLabel));
         Assert.Equal(["100% left", "100% left"], viewModel.SelectedQuotaRows.Select(row => row.RemainingPercentText));
+        Assert.Equal(2, viewModel.RunwayForecast.Rows.Count);
+        Assert.All(viewModel.RunwayForecast.Rows, row => Assert.Equal("GPT-5.3-Codex-Spark", row.TrackText));
     }
 
     [Fact]
@@ -188,6 +193,9 @@ public sealed class PulseMeterWindowViewModelSelectionTests
         Assert.Equal("Daily allowance to stay within your weekly limit.", viewModel.RateLimitsDailySummaryText);
         Assert.False(viewModel.HasRateLimitsDailyWarning);
         Assert.Equal(string.Empty, viewModel.RateLimitsDailyWarningText);
+        var onPaceWeekly = Assert.Single(viewModel.SelectedQuotaRows, row => row.IsWeekly);
+        Assert.Equal("On pace", onPaceWeekly.StatusText);
+        Assert.Equal("Within weekly pace", onPaceWeekly.PaceText);
         Assert.All(viewModel.DailyRateLimitRows, row => Assert.DoesNotMatch("^Day \\d$", row.Label));
         Assert.Equal("#1F73FF", viewModel.DailyRateLimitRows[0].LabelBrush);
         Assert.All(viewModel.DailyRateLimitRows.Skip(1), row => Assert.Equal("#6B7280", row.LabelBrush));
@@ -228,6 +236,10 @@ public sealed class PulseMeterWindowViewModelSelectionTests
         Assert.All(viewModel.DailyRateLimitRows.Where((_, index) => index != 2), row => Assert.Equal("#6B7280", row.LabelBrush));
         Assert.True(viewModel.HasRateLimitsDailyWarning);
         Assert.Equal("Daily allowance exceeded; now consuming Day 3.", viewModel.RateLimitsDailyWarningText);
+        var aheadOfPaceWeekly = Assert.Single(viewModel.SelectedQuotaRows, row => row.IsWeekly);
+        Assert.Equal("Ahead of pace", aheadOfPaceWeekly.StatusText);
+        Assert.Equal("Weekly usage is ahead of pace", aheadOfPaceWeekly.PaceText);
+        Assert.Equal("#F59E0B", aheadOfPaceWeekly.RingBrush);
         Assert.All(viewModel.DailyRateLimitRows, row => Assert.NotEqual(string.Empty, row.RingArcData));
     }
 

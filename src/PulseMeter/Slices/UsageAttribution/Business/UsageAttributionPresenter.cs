@@ -4,9 +4,9 @@ namespace PulseMeter.Slices.UsageAttribution.Business;
 
 public interface IUsageAttributionPresenter
 {
-    IReadOnlyList<UsageAttributionSessionDisplayRow> BuildSessionRows(UsageAttributionSnapshot snapshot, DateTimeOffset now);
-
-    IReadOnlyList<UsageAttributionBurnEventDisplayRow> BuildBurnEventRows(UsageAttributionSnapshot snapshot, DateTimeOffset now);
+    IReadOnlyList<UsageAttributionProjectDisplayRow> BuildProjectRows(
+        IReadOnlyList<ProjectUsageRow> projectRows,
+        UsageAttributionSnapshot snapshot);
 
     bool HasAttribution(UsageAttributionSnapshot snapshot);
 
@@ -19,35 +19,43 @@ public interface IUsageAttributionPresenter
 
 public sealed class UsageAttributionPresenter : IUsageAttributionPresenter
 {
-    public IReadOnlyList<UsageAttributionSessionDisplayRow> BuildSessionRows(UsageAttributionSnapshot snapshot, DateTimeOffset now)
+    public IReadOnlyList<UsageAttributionProjectDisplayRow> BuildProjectRows(
+        IReadOnlyList<ProjectUsageRow> projectRows,
+        UsageAttributionSnapshot snapshot)
     {
-        return snapshot.Sessions
-            .Select(row => new UsageAttributionSessionDisplayRow(
-                row.DisplayName,
-                row.ProjectDisplayName,
-                row.ProjectPath,
-                MeterDisplayFormatter.FormatTokens(row.EstimatedTokens),
-                $"{row.SharePercent:0.#}%",
-                $"local raw {MeterDisplayFormatter.FormatTokens(row.RawLocalTokens)}",
-                FormatBreakdown(row.InputTokens, row.OutputTokens, row.CachedInputTokens, row.ReasoningTokens),
-                FormatAge(row.LastEventAtUtc ?? row.ThreadUpdatedAtUtc, now),
-                Math.Clamp(row.SharePercent, 0, 100),
-                FormatTooltip(row.ThreadId, row.DisplayName, row.ProjectDisplayName, row.ProjectPath, row.LastEventAtUtc ?? row.ThreadUpdatedAtUtc, "Updated")))
-            .ToList();
-    }
+        if (projectRows.Count > 0)
+        {
+            return projectRows
+                .OrderByDescending(row => row.EstimatedTokens)
+                .Take(5)
+                .Select(row => BuildProjectRow(
+                    row.DisplayName,
+                    row.FullPath,
+                    row.EstimatedTokens,
+                    row.SharePercent,
+                    row.ActiveDaysLast7 > 0
+                        ? $"{row.ActiveDaysLast7} active {(row.ActiveDaysLast7 == 1 ? "day" : "days")} in the last 7 days"
+                        : "No activity in the last 7 days"))
+                .ToList();
+        }
 
-    public IReadOnlyList<UsageAttributionBurnEventDisplayRow> BuildBurnEventRows(UsageAttributionSnapshot snapshot, DateTimeOffset now)
-    {
-        return snapshot.BurnEvents
-            .Select(row => new UsageAttributionBurnEventDisplayRow(
-                row.SessionDisplayName,
-                row.ProjectDisplayName,
-                row.ProjectPath,
-                MeterDisplayFormatter.FormatTokens(row.EstimatedTokens),
-                $"local raw {MeterDisplayFormatter.FormatTokens(row.RawLocalTokens)}",
-                FormatBreakdown(row.InputTokens, row.OutputTokens, row.CachedInputTokens, row.ReasoningTokens),
-                FormatMomentTime(row.TimestampUtc),
-                FormatTooltip(row.ThreadId, row.SessionDisplayName, row.ProjectDisplayName, row.ProjectPath, row.TimestampUtc, "Moment")))
+        return snapshot.Sessions
+            .GroupBy(row => row.ProjectPath, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new
+            {
+                DisplayName = group.First().ProjectDisplayName,
+                FullPath = group.Key,
+                EstimatedTokens = group.Sum(row => row.EstimatedTokens),
+                SharePercent = group.Sum(row => row.SharePercent)
+            })
+            .OrderByDescending(row => row.EstimatedTokens)
+            .Take(5)
+            .Select(row => BuildProjectRow(
+                row.DisplayName,
+                row.FullPath,
+                row.EstimatedTokens,
+                row.SharePercent,
+                "Local project activity"))
             .ToList();
     }
 
@@ -79,93 +87,20 @@ public sealed class UsageAttributionPresenter : IUsageAttributionPresenter
             : "No local burn analysis yet.";
     }
 
-    private static string FormatBreakdown(long? inputTokens, long? outputTokens, long? cachedInputTokens, long? reasoningTokens)
-    {
-        var parts = new List<string>();
-        if (inputTokens is long input)
-        {
-            parts.Add($"{MeterDisplayFormatter.FormatTokens(input)} in");
-        }
-
-        if (outputTokens is long output)
-        {
-            parts.Add($"{MeterDisplayFormatter.FormatTokens(output)} out");
-        }
-
-        if (cachedInputTokens is long cached)
-        {
-            parts.Add($"{MeterDisplayFormatter.FormatTokens(cached)} cached");
-        }
-
-        if (reasoningTokens is long reasoning)
-        {
-            parts.Add($"{MeterDisplayFormatter.FormatTokens(reasoning)} reasoning");
-        }
-
-        return parts.Count == 0 ? "breakdown unavailable" : string.Join(" / ", parts);
-    }
-
-    private static string FormatMomentTime(DateTimeOffset timestamp)
-    {
-        return timestamp.ToLocalTime().ToString("dd MMM HH:mm", System.Globalization.CultureInfo.InvariantCulture);
-    }
-
-    private static string FormatAge(DateTimeOffset? timestampUtc, DateTimeOffset now)
-    {
-        if (timestampUtc is null)
-        {
-            return "time unknown";
-        }
-
-        var elapsed = now.ToUniversalTime() - timestampUtc.Value.ToUniversalTime();
-        if (elapsed < TimeSpan.Zero)
-        {
-            elapsed = TimeSpan.Zero;
-        }
-
-        if (elapsed.TotalMinutes < 1)
-        {
-            return "just now";
-        }
-
-        if (elapsed.TotalHours < 1)
-        {
-            return $"{(int)Math.Round(elapsed.TotalMinutes)}m ago";
-        }
-
-        if (elapsed.TotalDays < 1)
-        {
-            return $"{(int)Math.Round(elapsed.TotalHours)}h ago";
-        }
-
-        return $"{(int)Math.Round(elapsed.TotalDays)}d ago";
-    }
-
-    private static string FormatTooltip(
-        string? threadId,
+    private static UsageAttributionProjectDisplayRow BuildProjectRow(
         string displayName,
-        string projectDisplayName,
-        string projectPath,
-        DateTimeOffset? timestampUtc,
-        string timestampLabel)
+        string fullPath,
+        long estimatedTokens,
+        double sharePercent,
+        string activityText)
     {
-        var lines = new List<string>
-        {
-            $"Chat: {displayName}",
-            $"Project: {projectDisplayName}",
-            $"Path: {projectPath}"
-        };
-
-        if (!string.IsNullOrWhiteSpace(threadId))
-        {
-            lines.Insert(0, $"Chat id: {threadId}");
-        }
-
-        if (timestampUtc is DateTimeOffset timestamp)
-        {
-            lines.Add($"{timestampLabel}: {timestamp.ToUniversalTime():dd MMM yyyy HH:mm} UTC");
-        }
-
-        return string.Join(Environment.NewLine, lines);
+        var tokensText = MeterDisplayFormatter.FormatTokens(estimatedTokens);
+        return new UsageAttributionProjectDisplayRow(
+            displayName,
+            fullPath,
+            tokensText,
+            $"{sharePercent:0.#}%",
+            activityText,
+            $"{displayName}\n{fullPath}\nEstimated 30-day token burn: {tokensText}");
     }
 }
