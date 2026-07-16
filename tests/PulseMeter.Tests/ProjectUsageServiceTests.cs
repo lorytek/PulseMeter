@@ -90,6 +90,45 @@ public sealed class ProjectUsageServiceTests
     }
 
     [Fact]
+    public async Task GetProjectUsageAsync_SkipsRepeatedCumulativeSnapshotsWhenCalculatingShares()
+    {
+        var codexHome = CreateCodexHome();
+        var now = new DateTimeOffset(2026, 7, 3, 12, 0, 0, TimeSpan.Zero);
+        var pulseMeterRollout = WriteRollout(
+            codexHome,
+            "pulsemeter.jsonl",
+            (now.AddMinutes(-2), 700, 700),
+            (now.AddMinutes(-1), 700, 700));
+        var l2Rollout = WriteRollout(codexHome, "l2.jsonl", (now, 300, 300));
+        CreateStateDatabase(
+            codexHome,
+            Thread("thread-pulsemeter", @"C:\Projects\PulseMeter", pulseMeterRollout, now),
+            Thread("thread-l2", @"C:\Projects\L2Engine", l2Rollout, now));
+        var service = new ProjectUsageService(codexHome);
+
+        var rows = await service.GetProjectUsageAsync(
+            [new DailyUsageBucket { StartDate = "2026-07-03", Tokens = 10_000 }],
+            now);
+
+        Assert.Collection(
+            rows,
+            row =>
+            {
+                Assert.Equal("PulseMeter", row.DisplayName);
+                Assert.Equal(700, row.RawLocalTokens);
+                Assert.Equal(70, row.SharePercent);
+                Assert.Equal(7_000, row.EstimatedTokens);
+            },
+            row =>
+            {
+                Assert.Equal("L2Engine", row.DisplayName);
+                Assert.Equal(300, row.RawLocalTokens);
+                Assert.Equal(30, row.SharePercent);
+                Assert.Equal(3_000, row.EstimatedTokens);
+            });
+    }
+
+    [Fact]
     public async Task GetProjectUsageAsync_ReturnsEmptyWhenAccountUsageOrStateIsUnavailable()
     {
         var codexHome = CreateCodexHome();
@@ -105,6 +144,46 @@ public sealed class ProjectUsageServiceTests
 
         Assert.Empty(rowsWithoutState);
         Assert.Empty(rowsWithoutAccountTotal);
+    }
+
+    [Fact]
+    public async Task GetProjectUsageAsync_ComputesRecentProjectHealthEvidence()
+    {
+        var codexHome = CreateCodexHome();
+        var now = new DateTimeOffset(2026, 7, 7, 12, 0, 0, TimeSpan.Zero);
+        var firstPulseMeterRollout = WriteRollout(
+            codexHome,
+            "pulsemeter-first.jsonl",
+            (now, 200),
+            (now.AddDays(-8), 50));
+        var secondPulseMeterRollout = WriteRollout(codexHome, "pulsemeter-second.jsonl", now.AddDays(-2), 100);
+        var docsRollout = WriteRollout(
+            codexHome,
+            "docs.jsonl",
+            (now, 30),
+            (now.AddDays(-8), 100));
+        CreateStateDatabase(
+            codexHome,
+            Thread("thread-pulse-primary", @"C:\Projects\PulseMeter", firstPulseMeterRollout, now),
+            Thread("thread-pulse-secondary", @"C:\Projects\PulseMeter", secondPulseMeterRollout, now),
+            Thread("thread-docs", @"C:\Projects\Docs", docsRollout, now));
+        var service = new ProjectUsageService(codexHome);
+
+        var rows = await service.GetProjectUsageAsync(
+            [new DailyUsageBucket { StartDate = "2026-07-07", Tokens = 480 }],
+            now);
+
+        var pulseMeter = Assert.Single(rows, row => row.DisplayName == "PulseMeter");
+        Assert.Equal(350, pulseMeter.EstimatedTokens);
+        Assert.Equal(300, pulseMeter.EstimatedLast7Days);
+        Assert.Equal(50, pulseMeter.EstimatedPrevious7Days);
+        Assert.Equal(2, pulseMeter.ActiveDaysLast7);
+        Assert.Equal(1, pulseMeter.SpikeDays);
+        Assert.StartsWith("PulseMeter chat -", pulseMeter.LeadingChatDisplayName);
+        Assert.Equal(200, pulseMeter.LeadingChatEstimatedTokens);
+        Assert.StartsWith("PulseMeter chat -", pulseMeter.LargestBurnMomentChatDisplayName);
+        Assert.Equal(200, pulseMeter.LargestBurnMomentEstimatedTokens);
+        Assert.Equal(now, pulseMeter.LargestBurnMomentAtUtc);
     }
 
     private static string CreateCodexHome()
@@ -139,6 +218,34 @@ public sealed class ProjectUsageServiceTests
             "\"output_tokens\":0," +
             $"\"total_tokens\":{item.TotalTokens}" +
             "}}}}");
+        File.WriteAllLines(path, lines);
+        return path;
+    }
+
+    private static string WriteRollout(
+        string codexHome,
+        string fileName,
+        params (DateTimeOffset Timestamp, long TotalTokens, long? CumulativeTotalTokens)[] events)
+    {
+        var sessions = Path.Combine(codexHome, "sessions");
+        Directory.CreateDirectory(sessions);
+        var path = Path.Combine(sessions, fileName);
+        var lines = events.Select(item =>
+        {
+            var cumulativeUsage = item.CumulativeTotalTokens is long cumulative
+                ? $",\"total_token_usage\":{{\"total_tokens\":{cumulative}}}"
+                : string.Empty;
+
+            return "{" +
+                $"\"timestamp\":\"{item.Timestamp:O}\"," +
+                "\"type\":\"event_msg\"," +
+                "\"payload\":{\"type\":\"token_count\",\"info\":{\"last_token_usage\":{" +
+                $"\"input_tokens\":{item.TotalTokens}," +
+                "\"cached_input_tokens\":0," +
+                "\"output_tokens\":0," +
+                $"\"total_tokens\":{item.TotalTokens}" +
+                "}" + cumulativeUsage + "}}}";
+        });
         File.WriteAllLines(path, lines);
         return path;
     }

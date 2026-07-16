@@ -37,9 +37,12 @@ public sealed class NeedsAttentionSectionViewModel : INotifyPropertyChanged
 
     public bool HasNeedsAttention => NeedsAttentionItems.Count > 0;
 
-    public string NeedsAttentionSummaryText => NeedsAttentionItems.Count == 1
-        ? "1 signal"
-        : $"{NeedsAttentionItems.Count} signals";
+    public string NeedsAttentionSummaryText => NeedsAttentionItems.Count switch
+    {
+        0 => "All clear",
+        1 => "1 signal",
+        _ => $"{NeedsAttentionItems.Count} signals"
+    };
 
     public void ApplySignals(UsageSignalsSnapshot signals)
     {
@@ -75,6 +78,7 @@ public sealed class NeedsAttentionSectionViewModel : INotifyPropertyChanged
         _signals = new UsageSignalsSnapshot
         {
             RunwaySignals = _signals.RunwaySignals,
+            RunwayForecasts = _signals.RunwayForecasts,
             ShowAllAttentionSignals = _signals.ShowAllAttentionSignals,
             AttentionSignals = _signals.AttentionSignals
                 .Where(signal => signal.DismissSignalId != "idle-drain")

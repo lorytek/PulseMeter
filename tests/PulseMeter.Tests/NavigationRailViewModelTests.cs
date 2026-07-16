@@ -36,6 +36,7 @@ public sealed class NavigationRailViewModelTests
         var visibility = new DashboardVisibilitySettings(
             RateLimits: false,
             WeeklyPace: true,
+            RunwayForecast: false,
             ResetCredits: false,
             AccountUsage: true,
             ProjectUsage: false,
@@ -67,5 +68,11 @@ public sealed class NavigationRailViewModelTests
         viewModel.IsDailyUsageVisible = false;
 
         Assert.Equal(NavigationSection.AccountUsage, viewModel.SelectedSection);
+    }
+
+    [Fact]
+    public void RemovedUsageExplorerIsNotANavigationDestination()
+    {
+        Assert.DoesNotContain("UsageExplorer", Enum.GetNames<NavigationSection>());
     }
 }

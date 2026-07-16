@@ -115,6 +115,16 @@
                     </StackPanel>
                 </Button>
 
+                <Button CommandParameter="{x:Static navModels:NavigationSection.RunwayForecast}"
+                        ToolTip="Go to runway forecast" AutomationProperties.Name="Go to runway forecast"
+                        Visibility="{Binding IsRunwayForecastVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        Click="SectionButton_Click" Style="{StaticResource NavigationSectionButtonStyle}">
+                    <StackPanel Style="{StaticResource NavigationItemContentStyle}">
+                        <TextBlock Text="&#xE823;" FontFamily="Segoe MDL2 Assets" FontSize="17" />
+                        <TextBlock Margin="8,0,0,0" Text="Runway forecast" FontSize="13.5" Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </StackPanel>
+                </Button>
+
                 <Button CommandParameter="{x:Static navModels:NavigationSection.ResetCredits}"
                         ToolTip="Go to reset credits" AutomationProperties.Name="Go to reset credits"
                         Visibility="{Binding IsResetCreditsVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
@@ -192,6 +202,7 @@
                         <TextBlock Text="Visible sections" FontSize="14" FontWeight="SemiBold" Foreground="#111827" />
                         <CheckBox x:Name="RateLimitsVisibilityCheckBox" Margin="0,12,0,0" Content="Rate limits" IsChecked="{Binding IsRateLimitsVisible, Mode=TwoWay}" AutomationProperties.Name="Show rate limits" />
                         <CheckBox Margin="0,8,0,0" Content="Weekly pace" IsChecked="{Binding IsRateLimitsDailyVisible, Mode=TwoWay}" AutomationProperties.Name="Show weekly pace" />
+                        <CheckBox Margin="0,8,0,0" Content="Runway forecast" IsChecked="{Binding IsRunwayForecastVisible, Mode=TwoWay}" AutomationProperties.Name="Show runway forecast" />
                         <CheckBox Margin="0,8,0,0" Content="Reset credits" IsChecked="{Binding IsResetCreditsVisible, Mode=TwoWay}" AutomationProperties.Name="Show reset credits" />
                         <CheckBox Margin="0,8,0,0" Content="Account usage" IsChecked="{Binding IsAccountUsageVisible, Mode=TwoWay}" AutomationProperties.Name="Show account usage" />
                         <CheckBox Margin="0,8,0,0" Content="Project usage" IsChecked="{Binding IsProjectUsageVisible, Mode=TwoWay}" AutomationProperties.Name="Show project usage" />

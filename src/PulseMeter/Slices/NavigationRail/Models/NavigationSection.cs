@@ -5,6 +5,7 @@ public enum NavigationSection
     Overview,
     RateLimits,
     WeeklyPace,
+    RunwayForecast,
     ResetCredits,
     AccountUsage,
     ProjectUsage,

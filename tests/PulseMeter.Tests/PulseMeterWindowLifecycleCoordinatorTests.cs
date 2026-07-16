@@ -44,7 +44,7 @@ public sealed class PulseMeterWindowLifecycleCoordinatorTests
         usageService.RaiseSnapshot(new UsageSnapshot { Source = "AppServer", SyncStatus = SyncStatus.Live });
         Assert.Equal("Source: Live source", viewModel.SourceText);
 
-        foreground.IsCodexForegroundResult = true;
+        foreground.State = new CodexForegroundState(IsCodexForeground: true, IsOnSameMonitor: true);
         viewModel.MarkHiddenByUser();
         timerFactory.Timers[2].RaiseTick();
         Assert.Equal(1, window.ShowCount);
@@ -53,6 +53,66 @@ public sealed class PulseMeterWindowLifecycleCoordinatorTests
         window.IsVisible = false;
         timerFactory.Timers[2].RaiseTick();
         Assert.True(window.IsVisible);
+    }
+
+    [Fact]
+    public async Task ForegroundTick_CollapsesExpandedWindowWhenCodexIsOnSameMonitor()
+    {
+        var usageService = new StubUsageService();
+        var viewModel = new PulseMeterWindowViewModel(usageService, TimeSpan.FromSeconds(90));
+        var window = new StubPulseMeterWindow();
+        var foreground = new StubForegroundWindowService
+        {
+            State = new CodexForegroundState(IsCodexForeground: true, IsOnSameMonitor: true)
+        };
+        var timerFactory = new StubPulseMeterTimerFactory();
+        var coordinator = new PulseMeterWindowLifecycleCoordinator(
+            usageService,
+            viewModel,
+            window,
+            new StubTrayIconService(),
+            foreground,
+            new StubAppSettingsStore(),
+            new StubWindowStateStore(),
+            timerFactory,
+            new ImmediateUiDispatcher());
+
+        await coordinator.StartAsync();
+        viewModel.ToggleExpanded();
+
+        timerFactory.Timers[2].RaiseTick();
+
+        Assert.False(viewModel.IsExpanded);
+        Assert.True(window.IsVisible);
+    }
+
+    [Fact]
+    public async Task ForegroundTick_KeepsExpandedWindowWhenCodexIsOnDifferentMonitor()
+    {
+        var usageService = new StubUsageService();
+        var viewModel = new PulseMeterWindowViewModel(usageService, TimeSpan.FromSeconds(90));
+        var foreground = new StubForegroundWindowService
+        {
+            State = new CodexForegroundState(IsCodexForeground: true, IsOnSameMonitor: false)
+        };
+        var timerFactory = new StubPulseMeterTimerFactory();
+        var coordinator = new PulseMeterWindowLifecycleCoordinator(
+            usageService,
+            viewModel,
+            new StubPulseMeterWindow(),
+            new StubTrayIconService(),
+            foreground,
+            new StubAppSettingsStore(),
+            new StubWindowStateStore(),
+            timerFactory,
+            new ImmediateUiDispatcher());
+
+        await coordinator.StartAsync();
+        viewModel.ToggleExpanded();
+
+        timerFactory.Timers[2].RaiseTick();
+
+        Assert.True(viewModel.IsExpanded);
     }
 
     [Fact]
@@ -169,6 +229,8 @@ public sealed class PulseMeterWindowLifecycleCoordinatorTests
 
     private sealed class StubPulseMeterWindow : IPulseMeterWindow
     {
+        public IntPtr Handle { get; } = new(123);
+
         public bool IsVisible { get; set; }
 
         public WindowState WindowState { get; set; }
@@ -214,11 +276,11 @@ public sealed class PulseMeterWindowLifecycleCoordinatorTests
 
     private sealed class StubForegroundWindowService : IForegroundWindowService
     {
-        public bool IsCodexForegroundResult { get; set; }
+        public CodexForegroundState State { get; set; }
 
-        public bool IsCodexForeground()
+        public CodexForegroundState GetCodexForegroundState(IntPtr referenceWindowHandle)
         {
-            return IsCodexForegroundResult;
+            return State;
         }
     }
 

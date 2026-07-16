@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using PulseMeter.Shared.Projects;
 using PulseMeter.Slices.UsageCollection.Models;
 using PulseMeter.Slices.UsageAttribution.Models;
 
@@ -20,15 +21,15 @@ public sealed class UsageAttributionService : IUsageAttributionService
     private const int UsageWindowDays = 30;
     private readonly string _codexHome;
     private readonly int _maxSessions;
-    private readonly int _maxBurnEvents;
+    private readonly object _rolloutCacheLock = new();
+    private readonly Dictionary<string, RolloutCacheEntry> _rolloutCache = new(StringComparer.OrdinalIgnoreCase);
 
-    public UsageAttributionService(string? codexHome = null, int maxSessions = 5, int maxBurnEvents = 5)
+    public UsageAttributionService(string? codexHome = null, int maxSessions = 5)
     {
         _codexHome = codexHome ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".codex");
         _maxSessions = Math.Max(1, maxSessions);
-        _maxBurnEvents = Math.Max(1, maxBurnEvents);
     }
 
     public Task<UsageAttributionSnapshot> GetUsageAttributionAsync(
@@ -62,6 +63,11 @@ public sealed class UsageAttributionService : IUsageAttributionService
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            if (!LocalProjectPathNormalizer.IsUserProjectPath(thread.Cwd))
+            {
+                continue;
+            }
+
             var rolloutPath = ResolveRolloutPath(thread.RolloutPath);
             var events = ReadRolloutEvents(rolloutPath, cutoffDate, cancellationToken);
             if (events.Count == 0)
@@ -71,33 +77,23 @@ public sealed class UsageAttributionService : IUsageAttributionService
 
             sessionAggregates.Add(new SessionAggregate(thread, events));
         }
-
         var rawTotal = sessionAggregates.Sum(session => session.RawLocalTokens);
         if (rawTotal <= 0)
         {
             return UsageAttributionSnapshot.Empty;
         }
 
-        var titleCounts = BuildTitleCounts(sessionAggregates);
         var scale = accountTotal / (double)rawTotal;
         var sessions = sessionAggregates
-            .Select(session => ToSessionRow(session, scale, rawTotal, titleCounts))
+            .Select(session => ToSessionRow(session, scale, rawTotal))
             .OrderByDescending(row => row.EstimatedTokens)
             .ThenBy(row => row.DisplayName, StringComparer.OrdinalIgnoreCase)
             .Take(_maxSessions)
             .ToList();
 
-        var burnEvents = sessionAggregates
-            .SelectMany(session => BuildBurnMoments(session, scale, titleCounts))
-            .OrderByDescending(row => row.RawLocalTokens)
-            .ThenByDescending(row => row.TimestampUtc)
-            .Take(_maxBurnEvents)
-            .ToList();
-
         return new UsageAttributionSnapshot
         {
             Sessions = sessions,
-            BurnEvents = burnEvents,
             AccountWindowTokens = accountTotal,
             RawLocalTokens = rawTotal,
             EstimatedAttributedTokens = sessions.Sum(row => row.EstimatedTokens),
@@ -182,7 +178,7 @@ public sealed class UsageAttributionService : IUsageAttributionService
             : Path.Combine(_codexHome, rolloutPath);
     }
 
-    private static IReadOnlyList<UsageAttributionEvent> ReadRolloutEvents(
+    private IReadOnlyList<UsageAttributionEvent> ReadRolloutEvents(
         string rolloutPath,
         DateOnly cutoffDate,
         CancellationToken cancellationToken)
@@ -190,6 +186,18 @@ public sealed class UsageAttributionService : IUsageAttributionService
         if (string.IsNullOrWhiteSpace(rolloutPath) || !File.Exists(rolloutPath))
         {
             return Array.Empty<UsageAttributionEvent>();
+        }
+
+        var fileInfo = new FileInfo(rolloutPath);
+        lock (_rolloutCacheLock)
+        {
+            if (_rolloutCache.TryGetValue(rolloutPath, out var cached)
+                && cached.CutoffDate == cutoffDate
+                && cached.Length == fileInfo.Length
+                && cached.LastWriteTimeUtc == fileInfo.LastWriteTimeUtc)
+            {
+                return cached.Events;
+            }
         }
 
         var events = new List<UsageAttributionEvent>();
@@ -218,6 +226,15 @@ public sealed class UsageAttributionService : IUsageAttributionService
         }
         catch (UnauthorizedAccessException)
         {
+        }
+
+        lock (_rolloutCacheLock)
+        {
+            _rolloutCache[rolloutPath] = new RolloutCacheEntry(
+                cutoffDate,
+                fileInfo.Length,
+                fileInfo.LastWriteTimeUtc,
+                events);
         }
 
         return events;
@@ -276,11 +293,10 @@ public sealed class UsageAttributionService : IUsageAttributionService
     private static UsageAttributionSessionRow ToSessionRow(
         SessionAggregate session,
         double scale,
-        long rawTotal,
-        IReadOnlyDictionary<string, int> titleCounts)
+        long rawTotal)
     {
         return new UsageAttributionSessionRow(
-            DisplayNameFor(session.Thread, titleCounts),
+            DisplayNameFor(session.Thread),
             session.Thread.Id,
             GetProjectDisplayName(session.Thread.Cwd),
             NormalizeProjectPath(session.Thread.Cwd),
@@ -293,53 +309,6 @@ public sealed class UsageAttributionService : IUsageAttributionService
             SumNullable(session.Events.Select(item => item.ReasoningTokens)),
             session.Thread.UpdatedAtUtc,
             session.Events.Max(item => item.TimestampUtc));
-    }
-
-    private static UsageAttributionBurnEvent ToBurnEvent(
-        ThreadRow thread,
-        UsageAttributionEvent usageEvent,
-        double scale,
-        IReadOnlyDictionary<string, int> titleCounts)
-    {
-        return new UsageAttributionBurnEvent(
-            DisplayNameFor(thread, titleCounts),
-            thread.Id,
-            GetProjectDisplayName(thread.Cwd),
-            NormalizeProjectPath(thread.Cwd),
-            usageEvent.TimestampUtc,
-            usageEvent.TotalTokens,
-            ScaleTokens(usageEvent.TotalTokens, scale),
-            usageEvent.InputTokens,
-            usageEvent.OutputTokens,
-            usageEvent.CachedInputTokens,
-            usageEvent.ReasoningTokens);
-    }
-
-    private static IEnumerable<UsageAttributionBurnEvent> BuildBurnMoments(
-        SessionAggregate session,
-        double scale,
-        IReadOnlyDictionary<string, int> titleCounts)
-    {
-        return session.Events
-            .GroupBy(item => StartOfUtcMinute(item.TimestampUtc))
-            .Select(group => ToBurnEvent(
-                session.Thread,
-                new UsageAttributionEvent(
-                    group.Key,
-                    group.Sum(item => item.TotalTokens),
-                    SumNullable(group.Select(item => item.InputTokens)),
-                    SumNullable(group.Select(item => item.OutputTokens)),
-                    SumNullable(group.Select(item => item.CachedInputTokens)),
-                    SumNullable(group.Select(item => item.ReasoningTokens)),
-                    null),
-                scale,
-                titleCounts));
-    }
-
-    private static DateTimeOffset StartOfUtcMinute(DateTimeOffset timestamp)
-    {
-        var utc = timestamp.ToUniversalTime();
-        return new DateTimeOffset(utc.Year, utc.Month, utc.Day, utc.Hour, utc.Minute, 0, TimeSpan.Zero);
     }
 
     private static long ScaleTokens(long rawTokens, double scale)
@@ -365,32 +334,9 @@ public sealed class UsageAttributionService : IUsageAttributionService
         return hasAny ? total : null;
     }
 
-    private static IReadOnlyDictionary<string, int> BuildTitleCounts(IEnumerable<SessionAggregate> sessions)
+    private static string DisplayNameFor(ThreadRow thread)
     {
-        return sessions
-            .Select(session => NormalizedTitle(session.Thread))
-            .Where(title => !string.IsNullOrWhiteSpace(title))
-            .GroupBy(title => title!, StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
-    }
-
-    private static string DisplayNameFor(ThreadRow thread, IReadOnlyDictionary<string, int> titleCounts)
-    {
-        var title = NormalizedTitle(thread);
-        if (!string.IsNullOrWhiteSpace(title))
-        {
-            return titleCounts.TryGetValue(title, out var count) && count > 1
-                ? $"{title} · {FormatChatSuffix(thread)}"
-                : title;
-        }
-
         return $"{FallbackChatPrefix(thread)} · {FormatChatSuffix(thread)}";
-    }
-
-    private static string? NormalizedTitle(ThreadRow thread)
-    {
-        var title = thread.Title?.Trim();
-        return string.IsNullOrWhiteSpace(title) || LooksLikePromptBody(title) ? null : title;
     }
 
     private static string FallbackChatPrefix(ThreadRow thread)
@@ -401,18 +347,6 @@ public sealed class UsageAttributionService : IUsageAttributionService
             : $"{project} chat";
     }
 
-    private static bool LooksLikePromptBody(string title)
-    {
-        return title.Length > 120
-            || title.Contains('\n', StringComparison.Ordinal)
-            || title.Contains('\r', StringComparison.Ordinal);
-    }
-
-    private static string ShortThreadId(string threadId)
-    {
-        var trimmed = threadId.Trim();
-        return trimmed.Length <= 12 ? trimmed : trimmed[^12..];
-    }
 
     private static string FormatChatSuffix(ThreadRow thread)
     {
@@ -421,7 +355,7 @@ public sealed class UsageAttributionService : IUsageAttributionService
             return updatedAt.ToUniversalTime().ToString("dd MMM HH:mm", CultureInfo.InvariantCulture);
         }
 
-        return string.IsNullOrWhiteSpace(thread.Id) ? "time unknown" : ShortThreadId(thread.Id);
+        return "time unknown";
     }
 
     private static long GetAccountTotalForWindow(IReadOnlyList<DailyUsageBucket> dailyBuckets, DateOnly cutoffDate)
@@ -445,37 +379,12 @@ public sealed class UsageAttributionService : IUsageAttributionService
 
     private static string NormalizeProjectPath(string path)
     {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return "(unknown project)";
-        }
-
-        var normalized = path.StartsWith(@"\\?\", StringComparison.Ordinal)
-            ? path[4..]
-            : path;
-
-        try
-        {
-            normalized = Path.GetFullPath(normalized);
-        }
-        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
-        {
-        }
-
-        return normalized.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return LocalProjectPathNormalizer.Normalize(path);
     }
 
     private static string GetProjectDisplayName(string path)
     {
-        var fullPath = NormalizeProjectPath(path);
-        if (fullPath == "(unknown project)")
-        {
-            return "Unknown project";
-        }
-
-        return Path.GetFileName(fullPath) is { Length: > 0 } name
-            ? name
-            : fullPath;
+        return LocalProjectPathNormalizer.GetDisplayName(path);
     }
 
     private static bool TryGetObject(JsonElement element, string name, out JsonElement value)
@@ -545,6 +454,12 @@ public sealed class UsageAttributionService : IUsageAttributionService
         long? CachedInputTokens,
         long? ReasoningTokens,
         long? CumulativeTotalTokens);
+
+    private sealed record RolloutCacheEntry(
+        DateOnly CutoffDate,
+        long Length,
+        DateTime LastWriteTimeUtc,
+        IReadOnlyList<UsageAttributionEvent> Events);
 
     private sealed class SessionAggregate
     {

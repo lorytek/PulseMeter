@@ -24,6 +24,8 @@ public sealed class ReleasePackagingTests
         Assert.Contains("LICENSE", script);
         Assert.Contains("RELEASE_NOTES.md", script);
         Assert.Contains("RELEASE_NOTES_v$version.md", script);
+        Assert.Contains("$assetsSource = Join-Path $root \"assets\"", script);
+        Assert.Contains("Copy-Item -LiteralPath $assetsSource -Destination (Join-Path $output \"assets\") -Recurse -Force", script);
         Assert.Contains("Apache License 2.0", script);
         Assert.Contains("PulseMeter is open source under the Apache License 2.0.", script);
         Assert.Contains("See LICENSE in this folder for the full Apache-2.0 terms.", script);
@@ -123,7 +125,8 @@ public sealed class ReleasePackagingTests
         Assert.Contains("It does not parse or display Codex message text", readme);
         Assert.Contains("Idle Drain alerts do not read prompt text or Codex message content", readme);
         Assert.Contains("Automatic alert signals use local usage and rate-limit numbers", readme);
-        Assert.Contains("Burn Analysis displays project paths, thread titles/IDs, timestamps, and token counts only.", privacy);
+        Assert.Contains("Burn Analysis groups local session token metadata by project and does not display chat titles or prompt text.", privacy);
+        Assert.Contains("Project paths and thread IDs remain local attribution metadata", privacy);
         Assert.Contains("do not require prompt text or Codex message content", privacy);
     }
 
@@ -144,22 +147,22 @@ public sealed class ReleasePackagingTests
     }
 
     [Fact]
-    public void Version031ReleaseDocs_DescribeResetCreditSyncFix()
+    public void Version040ReleaseDocs_DescribeAnalyticsAndForecastRelease()
     {
         var project = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "PulseMeter.csproj"));
         var packageScript = File.ReadAllText(FindWorkspaceFile("scripts", "package-release.ps1"));
         var checklist = File.ReadAllText(FindWorkspaceFile("RELEASE_CHECKLIST.md"));
         var changelog = File.ReadAllText(FindWorkspaceFile("CHANGELOG.md"));
-        var releaseNotes = File.ReadAllText(FindWorkspaceFile("RELEASE_NOTES_v0.3.1.md"));
+        var releaseNotes = File.ReadAllText(FindWorkspaceFile("RELEASE_NOTES_v0.4.0.md"));
 
-        Assert.Contains("<Version>0.3.1</Version>", project);
-        Assert.Contains("[string]$Version = \"0.3.1\"", packageScript);
-        Assert.Contains("PulseMeter-0.3.1-win-x64-portable.zip", checklist);
-        Assert.Contains("## 0.3.1", changelog);
-        Assert.Contains("PulseMeter 0.3.1", releaseNotes);
-        Assert.Contains("reset credit", releaseNotes, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("short rolling limit", releaseNotes);
-        Assert.Contains("weekly", releaseNotes, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("<Version>0.4.0</Version>", project);
+        Assert.Contains("[string]$Version = \"0.4.0\"", packageScript);
+        Assert.Contains("PulseMeter-0.4.0-win-x64-portable.zip", checklist);
+        Assert.Contains("## 0.4.0", changelog);
+        Assert.Contains("PulseMeter 0.4.0", releaseNotes);
+        Assert.Contains("Project Health", releaseNotes);
+        Assert.Contains("Runway Forecast", releaseNotes);
+        Assert.Contains("project-level Burn Analysis", releaseNotes, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Apache License 2.0", releaseNotes);
     }
 

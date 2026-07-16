@@ -114,7 +114,7 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
         {
             client = await EnsureClientAsync(cancellationToken, forceReconnect: true).ConfigureAwait(false);
             var confirmation = await ReadRateLimitsAsync(client, cancellationToken).ConfigureAwait(false);
-            if (RateLimitSnapshotGuard.IsSuspiciousRegression(_lastGoodLiveSnapshot, confirmation))
+            if (!RateLimitSnapshotGuard.IsConfirmedSnapshotChange(_lastGoodLiveSnapshot, snapshot, confirmation))
             {
                 var stale = CodexUsageParser.WithStatus(
                     _lastGoodLiveSnapshot,
@@ -125,7 +125,7 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
                 return stale;
             }
 
-            snapshot = confirmation;
+            snapshot = PreserveResetCreditMetadata(confirmation, snapshot);
         }
 
         var now = snapshot.LastUpdatedUtc ?? DateTimeOffset.UtcNow;
@@ -175,6 +175,33 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
         var rateLimits = await client.SendRequestAsync("account/rateLimits/read", null, timeout.Token).ConfigureAwait(false);
         Debug.WriteLine("[pulsemeter] account/rateLimits/read raw result: " + rateLimits.GetRawText());
         return CodexUsageParser.ParseRateLimits(rateLimits, now, "AppServer");
+    }
+
+    private static UsageSnapshot PreserveResetCreditMetadata(
+        UsageSnapshot confirmation,
+        UsageSnapshot candidate)
+    {
+        return new UsageSnapshot
+        {
+            Buckets = confirmation.Buckets,
+            LifetimeTokens = confirmation.LifetimeTokens,
+            PeakDailyTokens = confirmation.PeakDailyTokens,
+            LongestRunningTurnSec = confirmation.LongestRunningTurnSec,
+            CurrentStreakDays = confirmation.CurrentStreakDays,
+            LongestStreakDays = confirmation.LongestStreakDays,
+            DailyBuckets = confirmation.DailyBuckets,
+            ProjectUsageRows = confirmation.ProjectUsageRows,
+            UsageAttribution = confirmation.UsageAttribution,
+            ResetCreditsAvailable = candidate.ResetCreditsAvailable,
+            ResetCreditsExpiresAtUtc = candidate.ResetCreditsExpiresAtUtc,
+            ResetCredits = candidate.ResetCredits,
+            RecentActiveThread = confirmation.RecentActiveThread,
+            SyncStatus = confirmation.SyncStatus,
+            LastUpdatedUtc = confirmation.LastUpdatedUtc,
+            Source = confirmation.Source,
+            StatusMessage = confirmation.StatusMessage,
+            RawRateLimitsJson = confirmation.RawRateLimitsJson
+        };
     }
 
     private async Task<UsageSnapshot> TryMergeResetCreditExpiryAsync(UsageSnapshot snapshot, CancellationToken cancellationToken)

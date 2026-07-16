@@ -6,19 +6,41 @@ namespace PulseMeter.Platform.Windows;
 
 public interface IForegroundWindowService
 {
-    bool IsCodexForeground();
+    CodexForegroundState GetCodexForegroundState(IntPtr referenceWindowHandle);
 }
+
+public readonly record struct CodexForegroundState(bool IsCodexForeground, bool IsOnSameMonitor);
 
 public sealed class ForegroundWindowService : IForegroundWindowService
 {
-    public bool IsCodexForeground()
+    private const uint MonitorDefaultToNearest = 0x00000002;
+
+    public CodexForegroundState GetCodexForegroundState(IntPtr referenceWindowHandle)
     {
         var handle = GetForegroundWindow();
         if (handle == IntPtr.Zero)
         {
-            return false;
+            return default;
         }
 
+        var isCodexForeground = IsCodexWindow(handle);
+        if (!isCodexForeground)
+        {
+            return default;
+        }
+
+        var foregroundMonitor = MonitorFromWindow(handle, MonitorDefaultToNearest);
+        var referenceMonitor = referenceWindowHandle == IntPtr.Zero
+            ? IntPtr.Zero
+            : MonitorFromWindow(referenceWindowHandle, MonitorDefaultToNearest);
+
+        return new CodexForegroundState(
+            IsCodexForeground: true,
+            IsOnSameMonitor: foregroundMonitor != IntPtr.Zero && foregroundMonitor == referenceMonitor);
+    }
+
+    private static bool IsCodexWindow(IntPtr handle)
+    {
         GetWindowThreadProcessId(handle, out var processId);
 
         try
@@ -49,6 +71,9 @@ public sealed class ForegroundWindowService : IForegroundWindowService
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);

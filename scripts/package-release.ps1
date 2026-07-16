@@ -1,5 +1,5 @@
 ﻿param(
-    [string]$Version = "0.3.1",
+    [string]$Version = "0.4.0",
     [switch]$SkipTests,
     [switch]$FrameworkDependent
 )
@@ -91,6 +91,11 @@ foreach ($doc in @("README.md", "PRIVACY.md", "SECURITY.md", "CHANGELOG.md", "LI
     if (Test-Path -LiteralPath $source) {
         Copy-Item -LiteralPath $source -Destination (Join-Path $output $doc) -Force
     }
+}
+
+$assetsSource = Join-Path $root "assets"
+if (Test-Path -LiteralPath $assetsSource) {
+    Copy-Item -LiteralPath $assetsSource -Destination (Join-Path $output "assets") -Recurse -Force
 }
 
 $releaseNotes = Join-Path $root "RELEASE_NOTES_v$version.md"

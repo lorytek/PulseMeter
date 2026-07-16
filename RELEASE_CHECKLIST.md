@@ -7,12 +7,12 @@ Use this before publishing PulseMeter publicly.
 - [ ] Confirm community files are present: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `.github/CODEOWNERS`, issue templates, pull request template, `llms.txt`, `.gitleaks.toml`, Dependabot, and security workflow.
 - [ ] Run `dotnet test PulseMeter.slnx -c Release`.
 - [ ] Run `dotnet build PulseMeter.slnx -c Release`.
-- [ ] Run `powershell -ExecutionPolicy Bypass -File .\scripts\package-release.ps1 -Version 0.3.1`.
+- [ ] Run `powershell -ExecutionPolicy Bypass -File .\scripts\package-release.ps1 -Version 0.4.0`.
 - [ ] Smoke-test the zip from `artifacts\release` on a clean Windows account or VM.
 - [ ] Confirm README, privacy, and security docs match the shipped behavior.
 - [ ] Confirm release notes clearly mark this as an unsigned alpha build.
 - [ ] Confirm GitHub private vulnerability reporting is enabled if available for the repository.
-- [ ] Attach `PulseMeter-0.3.1-win-x64-portable.zip` and its `.sha256` checksum file to the GitHub release.
+- [ ] Attach `PulseMeter-0.4.0-win-x64-portable.zip` and its `.sha256` checksum file to the GitHub release.
 
 ## Current Public-Release Caveats
 

@@ -11,6 +11,7 @@ public sealed record PulseMeterAppSettings(
 public sealed record DashboardVisibilitySettings(
     bool RateLimits = true,
     bool WeeklyPace = true,
+    bool RunwayForecast = true,
     bool ResetCredits = true,
     bool AccountUsage = true,
     bool ProjectUsage = true,

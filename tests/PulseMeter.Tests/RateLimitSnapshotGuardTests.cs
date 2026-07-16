@@ -55,7 +55,7 @@ public sealed class RateLimitSnapshotGuardTests
     }
 
     [Fact]
-    public void IsSuspiciousRegression_AllowsShortWindowToDisappearWhenResetCreditWasConsumed()
+    public void IsSuspiciousRegression_FlagsShortWindowDisappearingWhenResetCreditWasConsumed()
     {
         var reset = DateTimeOffset.UtcNow.AddHours(2);
         var weeklyReset = DateTimeOffset.UtcNow.AddDays(2);
@@ -74,7 +74,7 @@ public sealed class RateLimitSnapshotGuardTests
             Buckets = [Bucket("codex", 25, weeklyReset, windowMinutes: 10080)]
         };
 
-        Assert.False(RateLimitSnapshotGuard.IsSuspiciousRegression(previous, candidate));
+        Assert.True(RateLimitSnapshotGuard.IsSuspiciousRegression(previous, candidate));
     }
 
     [Fact]
@@ -98,6 +98,132 @@ public sealed class RateLimitSnapshotGuardTests
         };
 
         Assert.True(RateLimitSnapshotGuard.IsSuspiciousRegression(previous, candidate));
+    }
+
+    [Fact]
+    public void IsSuspiciousRegression_FlagsAddedBucket()
+    {
+        var reset = DateTimeOffset.UtcNow.AddHours(2);
+        var previous = new UsageSnapshot
+        {
+            Buckets = [Bucket("codex", 60, reset)]
+        };
+        var candidate = new UsageSnapshot
+        {
+            Buckets =
+            [
+                Bucket("codex", 62, reset.AddMinutes(1)),
+                Bucket("codex", 25, DateTimeOffset.UtcNow.AddDays(2), windowMinutes: 10080)
+            ]
+        };
+
+        Assert.True(RateLimitSnapshotGuard.IsSuspiciousRegression(previous, candidate));
+    }
+
+    [Fact]
+    public void IsConfirmedSnapshotChange_AcceptsAddedMatchingValidTopologyWithConsistentValues()
+    {
+        var reset = DateTimeOffset.UtcNow.AddDays(2);
+        var primaryReset = DateTimeOffset.UtcNow.AddHours(2);
+        var previous = new UsageSnapshot
+        {
+            Buckets = [Bucket("codex", 60, primaryReset)]
+        };
+        var candidate = new UsageSnapshot
+        {
+            Buckets =
+            [
+                Bucket("codex", 62, primaryReset.AddMinutes(1)),
+                Bucket("codex", 25, reset, windowMinutes: 10080)
+            ]
+        };
+        var confirmation = new UsageSnapshot
+        {
+            Buckets =
+            [
+                Bucket("codex", 64, primaryReset.AddMinutes(2)),
+                Bucket("codex", 28, reset.AddMinutes(1), windowMinutes: 10080)
+            ]
+        };
+
+        Assert.True(RateLimitSnapshotGuard.IsConfirmedSnapshotChange(previous, candidate, confirmation));
+    }
+
+    [Fact]
+    public void IsConfirmedSnapshotChange_AcceptsRemovedMatchingValidTopology()
+    {
+        var reset = DateTimeOffset.UtcNow.AddHours(2);
+        var weeklyReset = DateTimeOffset.UtcNow.AddDays(2);
+        var previous = new UsageSnapshot
+        {
+            Buckets =
+            [
+                Bucket("codex", 60, reset),
+                Bucket("codex", 25, weeklyReset, windowMinutes: 10080)
+            ]
+        };
+        var candidate = new UsageSnapshot
+        {
+            Buckets = [Bucket("codex", 25, weeklyReset, windowMinutes: 10080)]
+        };
+        var confirmation = new UsageSnapshot
+        {
+            Buckets = [Bucket("codex", 26, weeklyReset.AddMinutes(1), windowMinutes: 10080)]
+        };
+
+        Assert.True(RateLimitSnapshotGuard.IsConfirmedSnapshotChange(previous, candidate, confirmation));
+    }
+
+    [Fact]
+    public void IsConfirmedSnapshotChange_AcceptsMatchingUsageDropWithoutTopologyChange()
+    {
+        var reset = DateTimeOffset.UtcNow.AddHours(2);
+        var previous = Snapshot(60, reset);
+        var candidate = Snapshot(5, reset.AddMinutes(3));
+        var confirmation = Snapshot(6, reset.AddMinutes(4));
+
+        Assert.True(RateLimitSnapshotGuard.IsConfirmedSnapshotChange(previous, candidate, confirmation));
+    }
+
+    [Fact]
+    public void IsConfirmedSnapshotChange_RejectsConflictingUsageDropWithoutTopologyChange()
+    {
+        var reset = DateTimeOffset.UtcNow.AddHours(2);
+        var previous = Snapshot(60, reset);
+        var candidate = Snapshot(5, reset.AddMinutes(3));
+        var confirmation = Snapshot(58, reset.AddMinutes(4));
+
+        Assert.False(RateLimitSnapshotGuard.IsConfirmedSnapshotChange(previous, candidate, confirmation));
+    }
+
+    [Fact]
+    public void IsConfirmedSnapshotChange_RejectsEmptyOrMalformedConfirmation()
+    {
+        var reset = DateTimeOffset.UtcNow.AddDays(2);
+        var previous = new UsageSnapshot
+        {
+            Buckets = [Bucket("codex", 60, DateTimeOffset.UtcNow.AddHours(2))]
+        };
+        var candidate = new UsageSnapshot
+        {
+            Buckets = [Bucket("codex", 25, reset, windowMinutes: 10080)]
+        };
+        var emptyConfirmation = new UsageSnapshot();
+        var malformedConfirmation = new UsageSnapshot
+        {
+            Buckets =
+            [
+                new RateLimitBucket
+                {
+                    LimitId = "codex",
+                    UsedPercent = 25,
+                    WindowDurationMins = 10080
+                }
+            ]
+        };
+
+        Assert.False(RateLimitSnapshotGuard.IsConfirmedSnapshotChange(previous, candidate, emptyConfirmation));
+        Assert.False(RateLimitSnapshotGuard.IsConfirmedSnapshotChange(previous, candidate, malformedConfirmation));
     }
 
     private static UsageSnapshot Snapshot(

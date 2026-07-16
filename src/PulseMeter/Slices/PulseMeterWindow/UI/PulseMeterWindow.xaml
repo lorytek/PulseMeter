@@ -11,6 +11,7 @@
         xmlns:rateLimits="clr-namespace:PulseMeter.Slices.RateLimits.UI"
         xmlns:rateLimitsDaily="clr-namespace:PulseMeter.Slices.RateLimitsDaily.UI"
         xmlns:resetCredits="clr-namespace:PulseMeter.Slices.ResetCredits.UI"
+        xmlns:runwayForecast="clr-namespace:PulseMeter.Slices.RunwayForecast.UI"
         xmlns:usageAttribution="clr-namespace:PulseMeter.Slices.UsageAttribution.UI"
         Title="PulseMeter"
         Width="{Binding WindowWidth}"
@@ -105,6 +106,9 @@
 
                             <rateLimitsDaily:RateLimitsDailySection DataContext="{Binding RateLimitsDaily}"
                                                                      x:Name="WeeklyPaceSection" />
+
+                            <runwayForecast:RunwayForecastSection DataContext="{Binding RunwayForecast}"
+                                                                   x:Name="RunwayForecastSection" />
 
                             <resetCredits:ResetCreditsSection DataContext="{Binding ResetCreditsSection}"
                                                               x:Name="ResetCreditsSection" />

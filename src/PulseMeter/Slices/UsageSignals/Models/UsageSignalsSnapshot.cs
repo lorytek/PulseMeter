@@ -6,6 +6,8 @@ public sealed class UsageSignalsSnapshot
 
     public IReadOnlyList<LimitRunwaySignal> RunwaySignals { get; init; } = Array.Empty<LimitRunwaySignal>();
 
+    public IReadOnlyList<LimitRunwayForecast> RunwayForecasts { get; init; } = Array.Empty<LimitRunwayForecast>();
+
     public IdleDrainIncident? IdleDrainIncident { get; init; }
 
     public IReadOnlyList<UsageAttentionSignal> AttentionSignals { get; init; } = Array.Empty<UsageAttentionSignal>();

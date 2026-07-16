@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using PulseMeter.Slices.UsageCollection;
 using Microsoft.Data.Sqlite;
+using PulseMeter.Shared.Projects;
 
 namespace PulseMeter.Slices.UsageCollection.Business;
 
@@ -43,6 +44,9 @@ public sealed class ProjectUsageService : IProjectUsageService
         CancellationToken cancellationToken)
     {
         var cutoffDate = GetCutoffDate(now);
+        var today = DateOnly.FromDateTime(now.ToLocalTime().DateTime);
+        var recentWeekStart = today.AddDays(-6);
+        var previousWeekStart = today.AddDays(-13);
         var accountTotal = GetAccountTotalForWindow(dailyBuckets, cutoffDate);
         if (accountTotal <= 0)
         {
@@ -60,9 +64,14 @@ public sealed class ProjectUsageService : IProjectUsageService
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            if (!LocalProjectPathNormalizer.IsUserProjectPath(thread.Cwd))
+            {
+                continue;
+            }
+
             var rolloutPath = ResolveRolloutPath(thread.RolloutPath);
-            var rawTokens = ReadRolloutTokens(rolloutPath, cutoffDate, cancellationToken);
-            if (rawTokens <= 0)
+            var tokenRecords = ReadRolloutTokens(rolloutPath, cutoffDate, cancellationToken);
+            if (tokenRecords.Count == 0)
             {
                 continue;
             }
@@ -74,7 +83,7 @@ public sealed class ProjectUsageService : IProjectUsageService
                 aggregates.Add(fullPath, aggregate);
             }
 
-            aggregate.RawLocalTokens += rawTokens;
+            aggregate.AddUsage(thread.Id, tokenRecords, recentWeekStart, previousWeekStart);
             aggregate.ThreadCount++;
         }
 
@@ -152,14 +161,15 @@ public sealed class ProjectUsageService : IProjectUsageService
             : Path.Combine(_codexHome, rolloutPath);
     }
 
-    private static long ReadRolloutTokens(string rolloutPath, DateOnly cutoffDate, CancellationToken cancellationToken)
+    private static IReadOnlyList<RolloutTokenRecord> ReadRolloutTokens(string rolloutPath, DateOnly cutoffDate, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(rolloutPath) || !File.Exists(rolloutPath))
         {
-            return 0;
+            return Array.Empty<RolloutTokenRecord>();
         }
 
-        long total = 0;
+        var tokenRecords = new List<RolloutTokenRecord>();
+        var cumulativeTotals = new HashSet<long>();
         try
         {
             foreach (var line in File.ReadLines(rolloutPath))
@@ -171,22 +181,25 @@ public sealed class ProjectUsageService : IProjectUsageService
                     continue;
                 }
 
-                total += ReadTokenCountLine(line, cutoffDate);
+                if (ReadTokenCountLine(line, cutoffDate) is { } tokenRecord
+                    && (tokenRecord.CumulativeTotalTokens is not long cumulativeTotal
+                        || cumulativeTotals.Add(cumulativeTotal)))
+                {
+                    tokenRecords.Add(tokenRecord);
+                }
             }
         }
         catch (IOException)
         {
-            return total;
         }
         catch (UnauthorizedAccessException)
         {
-            return total;
         }
 
-        return total;
+        return tokenRecords;
     }
 
-    private static long ReadTokenCountLine(string line, DateOnly cutoffDate)
+    private static RolloutTokenRecord? ReadTokenCountLine(string line, DateOnly cutoffDate)
     {
         try
         {
@@ -194,7 +207,7 @@ public sealed class ProjectUsageService : IProjectUsageService
             var root = document.RootElement;
             if (!StringEquals(root, "type", "event_msg"))
             {
-                return 0;
+                return null;
             }
 
             if (!TryGetObject(root, "payload", out var payload)
@@ -202,20 +215,30 @@ public sealed class ProjectUsageService : IProjectUsageService
                 || !TryGetObject(payload, "info", out var info)
                 || !TryGetObject(info, "last_token_usage", out var usage))
             {
-                return 0;
+                return null;
             }
 
             var timestamp = ReadTimestamp(root);
             if (timestamp is null || DateOnly.FromDateTime(timestamp.Value.ToLocalTime().DateTime) < cutoffDate)
             {
-                return 0;
+                return null;
             }
 
-            return ReadLong(usage, "total_tokens") ?? 0;
+            var lastTokenUsage = ReadLong(usage, "total_tokens") ?? ReadLong(usage, "totalTokens");
+            if (lastTokenUsage is null or <= 0)
+            {
+                return null;
+            }
+
+            var cumulativeTotalTokens = TryGetObject(info, "total_token_usage", out var totalUsage)
+                ? ReadLong(totalUsage, "total_tokens") ?? ReadLong(totalUsage, "totalTokens")
+                : null;
+
+            return new RolloutTokenRecord(timestamp.Value.ToUniversalTime(), lastTokenUsage.Value, cumulativeTotalTokens);
         }
         catch (JsonException)
         {
-            return 0;
+            return null;
         }
     }
 
@@ -227,10 +250,19 @@ public sealed class ProjectUsageService : IProjectUsageService
     {
         var sharePercent = aggregate.RawLocalTokens / (double)totalRawTokens * 100;
         var estimatedTokens = (long)Math.Round(accountTotal * (aggregate.RawLocalTokens / (double)totalRawTokens));
+        var scale = accountTotal / (double)totalRawTokens;
         var baseDisplayName = GetBaseDisplayName(aggregate.FullPath);
         var displayName = baseNameCounts.TryGetValue(baseDisplayName, out var count) && count > 1
             ? $"{baseDisplayName} ({GetParentDisplayName(aggregate.FullPath)})"
             : baseDisplayName;
+        var leadingChats = aggregate.RecentThreadUsage.Values
+            .OrderByDescending(item => item.RawTokens)
+            .ThenBy(item => item.ThreadId, StringComparer.Ordinal)
+            .Take(2)
+            .ToList();
+        var leadingChat = leadingChats.FirstOrDefault();
+        var secondLeadingChat = leadingChats.Skip(1).FirstOrDefault();
+        var largestMoment = aggregate.LargestRecentMoment;
 
         return new ProjectUsageRow(
             displayName,
@@ -238,7 +270,48 @@ public sealed class ProjectUsageService : IProjectUsageService
             estimatedTokens,
             aggregate.RawLocalTokens,
             aggregate.ThreadCount,
-            Math.Round(sharePercent, 1));
+            Math.Round(sharePercent, 1),
+            ScaleTokens(aggregate.RawLast7Days, scale),
+            ScaleTokens(aggregate.RawPrevious7Days, scale),
+            aggregate.ActiveDaysLast7.Count,
+            CountSpikeDays(aggregate.DailyTokens),
+            leadingChat is null ? string.Empty : FormatChatDisplayName(displayName, leadingChat.LatestTimestampUtc ?? DateTimeOffset.UnixEpoch),
+            leadingChat is null ? 0 : ScaleTokens(leadingChat.RawTokens, scale),
+            secondLeadingChat is null ? string.Empty : FormatChatDisplayName(displayName, secondLeadingChat.LatestTimestampUtc ?? DateTimeOffset.UnixEpoch),
+            secondLeadingChat is null ? 0 : ScaleTokens(secondLeadingChat.RawTokens, scale),
+            largestMoment is null ? string.Empty : FormatChatDisplayName(displayName, largestMoment.TimestampUtc),
+            largestMoment is null ? 0 : ScaleTokens(largestMoment.TotalTokens, scale),
+            largestMoment?.TimestampUtc);
+    }
+
+    private static long ScaleTokens(long rawTokens, double scale)
+    {
+        return (long)Math.Round(rawTokens * scale);
+    }
+
+    private static string FormatChatDisplayName(string projectDisplayName, DateTimeOffset timestampUtc)
+    {
+        return $"{projectDisplayName} chat - {timestampUtc.ToLocalTime():dd MMM HH:mm}";
+    }
+
+    private static int CountSpikeDays(IReadOnlyDictionary<DateOnly, long> dailyTokens)
+    {
+        var activeDays = dailyTokens.Values
+            .Where(tokens => tokens > 0)
+            .OrderBy(tokens => tokens)
+            .ToList();
+        if (activeDays.Count == 0)
+        {
+            return 0;
+        }
+
+        var middle = activeDays.Count / 2;
+        var median = activeDays.Count % 2 == 1
+            ? activeDays[middle]
+            : (long)Math.Round((activeDays[middle - 1] + activeDays[middle]) / 2d);
+        return median <= 0
+            ? 0
+            : activeDays.Count(tokens => tokens >= median * 1.5);
     }
 
     private static long GetAccountTotalForWindow(IReadOnlyList<DailyUsageBucket> dailyBuckets, DateOnly cutoffDate)
@@ -262,24 +335,7 @@ public sealed class ProjectUsageService : IProjectUsageService
 
     private static string NormalizeProjectPath(string path)
     {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return "(unknown project)";
-        }
-
-        var normalized = path.StartsWith(@"\\?\", StringComparison.Ordinal)
-            ? path[4..]
-            : path;
-
-        try
-        {
-            normalized = Path.GetFullPath(normalized);
-        }
-        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
-        {
-        }
-
-        return normalized.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return LocalProjectPathNormalizer.Normalize(path);
     }
 
     private static string GetBaseDisplayName(string fullPath)
@@ -358,6 +414,8 @@ public sealed class ProjectUsageService : IProjectUsageService
 
     private sealed record ThreadRow(string Id, string RolloutPath, string Cwd);
 
+    private sealed record RolloutTokenRecord(DateTimeOffset TimestampUtc, long LastTokenUsage, long? CumulativeTotalTokens);
+
     private sealed class ProjectUsageAggregate
     {
         public ProjectUsageAggregate(string fullPath)
@@ -370,5 +428,73 @@ public sealed class ProjectUsageService : IProjectUsageService
         public long RawLocalTokens { get; set; }
 
         public int ThreadCount { get; set; }
+
+        public long RawLast7Days { get; private set; }
+
+        public long RawPrevious7Days { get; private set; }
+
+        public HashSet<DateOnly> ActiveDaysLast7 { get; } = new();
+
+        public Dictionary<DateOnly, long> DailyTokens { get; } = new();
+
+        public Dictionary<string, ProjectThreadUsage> RecentThreadUsage { get; } = new(StringComparer.Ordinal);
+
+        public ProjectBurnMoment? LargestRecentMoment { get; private set; }
+
+        public void AddUsage(
+            string threadId,
+            IReadOnlyList<RolloutTokenRecord> tokenRecords,
+            DateOnly recentWeekStart,
+            DateOnly previousWeekStart)
+        {
+            foreach (var tokenRecord in tokenRecords)
+            {
+                RawLocalTokens += tokenRecord.LastTokenUsage;
+                var localDate = DateOnly.FromDateTime(tokenRecord.TimestampUtc.ToLocalTime().DateTime);
+                DailyTokens[localDate] = DailyTokens.GetValueOrDefault(localDate) + tokenRecord.LastTokenUsage;
+
+                if (localDate >= recentWeekStart)
+                {
+                    RawLast7Days += tokenRecord.LastTokenUsage;
+                    ActiveDaysLast7.Add(localDate);
+                    if (!RecentThreadUsage.TryGetValue(threadId, out var threadUsage))
+                    {
+                        threadUsage = new ProjectThreadUsage(threadId);
+                        RecentThreadUsage.Add(threadId, threadUsage);
+                    }
+
+                    threadUsage.RawTokens += tokenRecord.LastTokenUsage;
+                    if (threadUsage.LatestTimestampUtc is null
+                        || tokenRecord.TimestampUtc > threadUsage.LatestTimestampUtc.Value)
+                    {
+                        threadUsage.LatestTimestampUtc = tokenRecord.TimestampUtc;
+                    }
+                    if (LargestRecentMoment is null || tokenRecord.LastTokenUsage > LargestRecentMoment.TotalTokens)
+                    {
+                        LargestRecentMoment = new ProjectBurnMoment(threadId, tokenRecord.TimestampUtc, tokenRecord.LastTokenUsage);
+                    }
+                }
+                else if (localDate >= previousWeekStart)
+                {
+                    RawPrevious7Days += tokenRecord.LastTokenUsage;
+                }
+            }
+        }
     }
+
+    private sealed class ProjectThreadUsage
+    {
+        public ProjectThreadUsage(string threadId)
+        {
+            ThreadId = threadId;
+        }
+
+        public string ThreadId { get; }
+
+        public long RawTokens { get; set; }
+
+        public DateTimeOffset? LatestTimestampUtc { get; set; }
+    }
+
+    private sealed record ProjectBurnMoment(string ThreadId, DateTimeOffset TimestampUtc, long TotalTokens);
 }
