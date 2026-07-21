@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using PulseMeter.Platform.Persistence;
 using PulseMeter.Slices.ResetCredits;
 
 namespace PulseMeter.Slices.ResetCredits.Business;
@@ -30,48 +31,11 @@ public sealed class ResetCreditStateStore : IResetCreditStateStore
 
     public ResetCreditTrackerState? Load()
     {
-        try
-        {
-            if (!File.Exists(_filePath))
-            {
-                return null;
-            }
-
-            var json = File.ReadAllText(_filePath);
-            return JsonSerializer.Deserialize<ResetCreditTrackerState>(json, JsonOptions);
-        }
-        catch (IOException)
-        {
-            return null;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return null;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
+        return AtomicJsonFileStore.Load<ResetCreditTrackerState>(_filePath, JsonOptions);
     }
 
     public void Save(ResetCreditTrackerState state)
     {
-        try
-        {
-            var directory = Path.GetDirectoryName(_filePath);
-            if (!string.IsNullOrWhiteSpace(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            var json = JsonSerializer.Serialize(state, JsonOptions);
-            File.WriteAllText(_filePath, json);
-        }
-        catch (IOException)
-        {
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
+        AtomicJsonFileStore.Save(_filePath, state, JsonOptions);
     }
 }

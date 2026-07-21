@@ -40,8 +40,12 @@ public sealed class CodexJsonRpcClient : IJsonRpcClient
     private readonly CancellationTokenSource _readLoopCts = new();
     private readonly ConcurrentDictionary<int, TaskCompletionSource<JsonElement>> _pending = new();
     private readonly SemaphoreSlim _writeLock = new(1, 1);
+    private readonly object _lifecycleLock = new();
     private int _nextId;
+    private int _disposed;
     private Task? _readLoop;
+    private Task? _disposeTask;
+    private Exception? _readLoopFailure;
 
     public CodexJsonRpcClient(StreamReader reader, StreamWriter writer)
     {
@@ -52,13 +56,21 @@ public sealed class CodexJsonRpcClient : IJsonRpcClient
 
     public event EventHandler<JsonRpcNotificationEventArgs>? NotificationReceived;
 
+    internal int PendingRequestCount => _pending.Count;
+
     public void Start()
     {
-        _readLoop ??= Task.Run(ReadLoopAsync);
+        lock (_lifecycleLock)
+        {
+            ThrowIfDisposed();
+            _readLoop ??= Task.Run(ReadLoopAsync);
+        }
     }
 
     public async Task<JsonElement> SendRequestAsync(string method, object? parameters = null, CancellationToken cancellationToken = default)
     {
+        ThrowIfUnavailable();
+
         var id = Interlocked.Increment(ref _nextId);
         var tcs = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -67,7 +79,15 @@ public sealed class CodexJsonRpcClient : IJsonRpcClient
             throw new InvalidOperationException("Duplicate JSON-RPC request id.");
         }
 
-        await WriteMessageAsync(new JsonRpcOutboundMessage(method, id, parameters), cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await WriteMessageAsync(new JsonRpcOutboundMessage(method, id, parameters), cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            _pending.TryRemove(id, out _);
+            throw;
+        }
 
         using var registration = cancellationToken.Register(() =>
         {
@@ -82,26 +102,37 @@ public sealed class CodexJsonRpcClient : IJsonRpcClient
 
     public Task SendNotificationAsync(string method, object? parameters = null, CancellationToken cancellationToken = default)
     {
+        ThrowIfUnavailable();
         return WriteMessageAsync(new JsonRpcOutboundMessage(method, null, parameters), cancellationToken);
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
-        _readLoopCts.Cancel();
-
-        if (_readLoop is not null)
+        lock (_lifecycleLock)
         {
-            try
+            if (_disposeTask is null)
             {
-                await _readLoop.ConfigureAwait(false);
+                Interlocked.Exchange(ref _disposed, 1);
+                FailPending(new ObjectDisposedException(nameof(CodexJsonRpcClient)));
+                _readLoopCts.Cancel();
+                _disposeTask = DisposeCoreAsync(_readLoop);
             }
-            catch (OperationCanceledException)
-            {
-            }
+
+            return new ValueTask(_disposeTask);
+        }
+    }
+
+    private async Task DisposeCoreAsync(Task? readLoop)
+    {
+        await _writeLock.WaitAsync().ConfigureAwait(false);
+        _writeLock.Release();
+
+        if (readLoop is not null)
+        {
+            await readLoop.ConfigureAwait(false);
         }
 
         _readLoopCts.Dispose();
-        _writeLock.Dispose();
     }
 
     private async Task WriteMessageAsync(JsonRpcOutboundMessage message, CancellationToken cancellationToken)
@@ -111,6 +142,7 @@ public sealed class CodexJsonRpcClient : IJsonRpcClient
         await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            ThrowIfUnavailable();
             await _writer.WriteLineAsync(json.AsMemory(), cancellationToken).ConfigureAwait(false);
             await _writer.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -122,21 +154,31 @@ public sealed class CodexJsonRpcClient : IJsonRpcClient
 
     private async Task ReadLoopAsync()
     {
-        while (!_readLoopCts.IsCancellationRequested)
+        try
         {
-            var line = await _reader.ReadLineAsync(_readLoopCts.Token).ConfigureAwait(false);
-            if (line is null)
+            while (!_readLoopCts.IsCancellationRequested)
             {
-                FailPending(new IOException("codex app-server closed stdout."));
-                return;
-            }
+                var line = await _reader.ReadLineAsync(_readLoopCts.Token).ConfigureAwait(false);
+                if (line is null)
+                {
+                    FailReadLoop(new IOException("codex app-server closed stdout."));
+                    return;
+                }
 
-            if (string.IsNullOrWhiteSpace(line))
-            {
-                continue;
-            }
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
 
-            DispatchLine(line);
+                DispatchLine(line);
+            }
+        }
+        catch (OperationCanceledException) when (_readLoopCts.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            FailReadLoop(exception);
         }
     }
 
@@ -203,6 +245,31 @@ public sealed class CodexJsonRpcClient : IJsonRpcClient
             {
                 pending.TrySetException(exception);
             }
+        }
+    }
+
+    private void FailReadLoop(Exception exception)
+    {
+        Interlocked.CompareExchange(ref _readLoopFailure, exception, null);
+        FailPending(exception);
+    }
+
+    private void ThrowIfUnavailable()
+    {
+        ThrowIfDisposed();
+
+        var readLoopFailure = Volatile.Read(ref _readLoopFailure);
+        if (readLoopFailure is not null)
+        {
+            throw new IOException("codex app-server read loop has terminated.", readLoopFailure);
+        }
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            throw new ObjectDisposedException(nameof(CodexJsonRpcClient));
         }
     }
 

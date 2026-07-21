@@ -123,7 +123,7 @@ internal static class QuotaDisplayBuilder
             CreateResetCountdownText(bucket),
             statusText,
             statusBrush,
-            isWeekly ? "\uE787" : "\uE917",
+            isWeekly ? "\uE787" : "\uE823",
             CreatePaceText(isWeekly, statusText),
             statusBrush,
             statusText is "Critical" or "Warning" ? "\uE7BA" : "\uE73E",

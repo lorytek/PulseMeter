@@ -6,6 +6,7 @@ internal static class UsageSignalsRegistration
 {
     internal static IServiceCollection AddUsageSignalsSlice(this IServiceCollection services)
     {
+        services.AddSingleton<IRunwayObservationStateStore, RunwayObservationStateStore>();
         services.AddSingleton<IUsageSignalsTracker, UsageSignalsTracker>();
 
         return services;

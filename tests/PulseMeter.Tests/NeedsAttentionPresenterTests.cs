@@ -1,9 +1,11 @@
+using PulseMeter.Slices.NeedsAttention.Models;
+
 namespace PulseMeter.Tests;
 
 public sealed class NeedsAttentionPresenterTests
 {
     [Fact]
-    public void BuildItems_MapsSignalsInPriorityOrderAndLimitsToThree()
+    public void BuildItems_MapsEverySignalInPriorityOrder()
     {
         var presenter = new NeedsAttentionPresenter();
         var items = presenter.BuildItems(new UsageSignalsSnapshot
@@ -17,10 +19,11 @@ public sealed class NeedsAttentionPresenterTests
             ]
         });
 
-        Assert.Equal(3, items.Count);
+        Assert.Equal(4, items.Count);
         Assert.Equal("IDLE", items[0].BadgeText);
         Assert.Equal("RUNWAY", items[1].BadgeText);
         Assert.Equal("LIMIT", items[2].BadgeText);
+        Assert.Equal("TODAY", items[3].BadgeText);
         Assert.True(items[0].CanDismiss);
         Assert.True(items[0].CanCopyDiagnostic);
     }
@@ -35,6 +38,42 @@ public sealed class NeedsAttentionPresenterTests
         Assert.Empty(items);
     }
 
+    [Fact]
+    public void BuildItems_MapsSemanticKindsToReviewTargetsRegardlessOfBadgeText()
+    {
+        var presenter = new NeedsAttentionPresenter();
+        var items = presenter.BuildItems(new UsageSignalsSnapshot
+        {
+            ShowAllAttentionSignals = true,
+            AttentionSignals =
+            [
+                Signal(1, "Renamed runway badge", "Runway", "", "#F97316", kind: UsageAttentionSignalKind.Runway),
+                Signal(2, "Renamed limit badge", "Limit", "", "#F97316", kind: UsageAttentionSignalKind.RateLimit),
+                Signal(3, "Renamed credit badge", "Credit", "", "#F97316", kind: UsageAttentionSignalKind.ResetCredit),
+                Signal(4, "Renamed today badge", "Today", "", "#F97316", kind: UsageAttentionSignalKind.DailyUsage),
+                Signal(5, "Renamed project badge", "Project", "", "#F97316", kind: UsageAttentionSignalKind.ProjectUsage),
+                Signal(6, "RUNWAY", "Sync", "", "#F97316", kind: UsageAttentionSignalKind.Sync),
+                Signal(7, "PROJECT", "Idle", "", "#F97316", kind: UsageAttentionSignalKind.Idle),
+                Signal(8, "LIMIT", "Budget", "", "#F97316", kind: UsageAttentionSignalKind.Budget),
+                Signal(9, "TODAY", "Unknown", "", "#F97316")
+            ]
+        });
+
+        Assert.Equal(NeedsAttentionReviewTarget.RunwayForecast, items[0].ReviewTarget);
+        Assert.Equal(NeedsAttentionReviewTarget.RateLimits, items[1].ReviewTarget);
+        Assert.Equal(NeedsAttentionReviewTarget.ResetCredits, items[2].ReviewTarget);
+        Assert.Equal(NeedsAttentionReviewTarget.DailyUsage, items[3].ReviewTarget);
+        Assert.Equal(NeedsAttentionReviewTarget.ProjectUsage, items[4].ReviewTarget);
+
+        Assert.All(items.Skip(5), item =>
+        {
+            Assert.Null(item.ReviewTarget);
+            Assert.False(item.CanReview);
+            Assert.Equal(string.Empty, item.ReviewAccessibleLabel);
+        });
+        Assert.Equal("Review coding runway", items[0].ReviewAccessibleLabel);
+    }
+
     private static UsageAttentionSignal Signal(
         int priority,
         string badgeText,
@@ -42,7 +81,8 @@ public sealed class NeedsAttentionPresenterTests
         string detail,
         string accentBrush,
         string? diagnosticText = null,
-        string? dismissSignalId = null)
+        string? dismissSignalId = null,
+        UsageAttentionSignalKind kind = UsageAttentionSignalKind.Unknown)
     {
         return new UsageAttentionSignal(
             priority,
@@ -51,6 +91,7 @@ public sealed class NeedsAttentionPresenterTests
             detail,
             accentBrush,
             diagnosticText,
-            dismissSignalId);
+            dismissSignalId,
+            kind);
     }
 }

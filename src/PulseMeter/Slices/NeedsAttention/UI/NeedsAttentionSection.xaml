@@ -11,15 +11,72 @@
             Style="{DynamicResource LightCardStyle}">
         <StackPanel>
             <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
                 <TextBlock Text="NEEDS ATTENTION"
                            Foreground="#111827"
                            FontSize="20"
                            FontWeight="Bold" />
-                <TextBlock HorizontalAlignment="Right"
-                           Text="{Binding NeedsAttentionSummaryText}"
-                           Foreground="#4B5563"
-                           FontSize="13" />
+                <StackPanel Grid.Column="1"
+                            HorizontalAlignment="Right"
+                            Orientation="Horizontal">
+                    <TextBlock x:Name="CopyFeedbackTextBlock"
+                               Margin="0,0,12,0"
+                               VerticalAlignment="Center"
+                               Text="{Binding CopyFeedbackText, NotifyOnTargetUpdated=True}"
+                               Foreground="{Binding CopyFeedbackBrush}"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               AutomationProperties.LiveSetting="Polite"
+                               TargetUpdated="CopyFeedbackText_OnTargetUpdated"
+                               Visibility="{Binding HasCopyFeedback, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <TextBlock VerticalAlignment="Center"
+                               Text="{Binding NeedsAttentionSummaryText}"
+                               Foreground="#4B5563"
+                               FontSize="13" />
+                    <Button x:Name="ToggleAttentionItemsButton"
+                            Margin="12,0,0,0"
+                            Padding="8,4"
+                            VerticalAlignment="Center"
+                            Content="{Binding ToggleAttentionItemsText}"
+                            Command="{Binding ToggleAttentionItemsCommand}"
+                            ToolTip="{Binding ToggleAttentionItemsAccessibleLabel}"
+                            AutomationProperties.Name="{Binding ToggleAttentionItemsAccessibleLabel}"
+                            FontSize="12"
+                            Style="{DynamicResource LightButtonStyle}"
+                            Visibility="{Binding HasHiddenAttentionItems, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                </StackPanel>
             </Grid>
+
+            <Border Margin="0,12,0,0"
+                    Padding="10,7"
+                    Background="#EFF6FF"
+                    BorderBrush="#BFDBFE"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Visibility="{Binding HasPendingDismissal, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <DockPanel LastChildFill="True">
+                    <Button DockPanel.Dock="Right"
+                            Margin="12,0,0,0"
+                            Padding="10,4"
+                            Content="Undo"
+                            Command="{Binding UndoDismissCommand}"
+                            ToolTip="Restore dismissed idle alert"
+                            AutomationProperties.Name="Undo dismissed idle alert"
+                            FontSize="12"
+                            Style="{DynamicResource LightButtonStyle}" />
+                    <TextBlock x:Name="DismissUndoTextBlock"
+                               VerticalAlignment="Center"
+                               Text="{Binding DismissUndoText, NotifyOnTargetUpdated=True}"
+                               Foreground="#1E3A8A"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               AutomationProperties.LiveSetting="Polite"
+                               TargetUpdated="CopyFeedbackText_OnTargetUpdated" />
+                </DockPanel>
+            </Border>
 
             <StackPanel Margin="0,14,0,0"
                         Orientation="Horizontal">
@@ -43,7 +100,7 @@
             </StackPanel>
 
             <ItemsControl Margin="0,14,0,0"
-                          ItemsSource="{Binding NeedsAttentionItems}">
+                          ItemsSource="{Binding VisibleNeedsAttentionItems}">
                 <ItemsControl.Style>
                     <Style TargetType="ItemsControl">
                         <Setter Property="Visibility" Value="Visible" />
@@ -60,6 +117,7 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="76" />
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="*" />
@@ -83,7 +141,7 @@
                             </Border>
 
                             <StackPanel Grid.Column="1"
-                                        Margin="0,6,0,6"
+                                        Margin="0,6,12,6"
                                         VerticalAlignment="Center">
                                 <TextBlock Text="{Binding Title}"
                                            Foreground="#111827"
@@ -96,34 +154,66 @@
                                            FontSize="13"
                                            TextWrapping="Wrap"
                                            Visibility="{Binding HasDetail, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                                <StackPanel Margin="0,8,0,0"
-                                            Orientation="Horizontal"
-                                            Visibility="{Binding HasActions, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                    <Button Padding="10,5"
-                                            Content="Copy"
-                                            Command="{Binding DataContext.CopyDiagnosticCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                            CommandParameter="{Binding}"
-                                            FontSize="12"
-                                            Style="{DynamicResource LightButtonStyle}"
-                                            Visibility="{Binding CanCopyDiagnostic, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                                    <Button Margin="6,0,0,0"
-                                            Padding="10,5"
-                                            Content="Dismiss"
-                                            Command="{Binding DataContext.DismissSignalCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                            CommandParameter="{Binding}"
-                                            FontSize="12"
-                                            Style="{DynamicResource LightButtonStyle}"
-                                            Visibility="{Binding CanDismiss, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="ActionPanel"
+                                        Grid.Column="2"
+                                        Margin="0,6,0,6"
+                                        Orientation="Horizontal"
+                                        VerticalAlignment="Center"
+                                        Visibility="{Binding HasActions, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <Button Padding="10,5"
+                                        Content="Copy"
+                                        ToolTip="{Binding CopyAccessibleLabel}"
+                                        AutomationProperties.Name="{Binding CopyAccessibleLabel}"
+                                        Command="{Binding DataContext.CopyDiagnosticCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                        CommandParameter="{Binding}"
+                                        FontSize="12"
+                                        Style="{DynamicResource LightButtonStyle}"
+                                        Visibility="{Binding CanCopyDiagnostic, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <Button Margin="6,0,0,0"
+                                        Padding="10,5"
+                                        Content="Dismiss"
+                                        ToolTip="Dismiss idle alert"
+                                        AutomationProperties.Name="Dismiss idle alert"
+                                        Command="{Binding DataContext.DismissSignalCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                        CommandParameter="{Binding}"
+                                        FontSize="12"
+                                        Style="{DynamicResource LightButtonStyle}"
+                                        Visibility="{Binding CanDismiss, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <Button Margin="6,0,0,0"
+                                        Padding="10,5"
+                                        Content="Review"
+                                        ToolTip="{Binding ReviewAccessibleLabel}"
+                                        AutomationProperties.Name="{Binding ReviewAccessibleLabel}"
+                                        Click="ReviewButton_Click"
+                                        FontSize="12"
+                                        Style="{DynamicResource LightButtonStyle}"
+                                        Visibility="{Binding CanReview, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             </StackPanel>
 
                             <Border Grid.Row="1"
-                                    Grid.ColumnSpan="2"
+                                    Grid.ColumnSpan="3"
                                     Background="#E5E7EB" />
                         </Grid>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+
+            <Button x:Name="CollapseAttentionItemsButton"
+                    Margin="0,12,0,0"
+                    Padding="10,5"
+                    HorizontalAlignment="Right"
+                    Content="Show top 3"
+                    Command="{Binding ToggleAttentionItemsCommand}"
+                    Click="CollapseAttentionItemsButton_Click"
+                    IsVisibleChanged="CollapseAttentionItemsButton_IsVisibleChanged"
+                    ToolTip="Show top 3 attention signals"
+                    AutomationProperties.Name="Show top 3 attention signals"
+                    FontSize="12"
+                    Style="{DynamicResource LightButtonStyle}"
+                    Visibility="{Binding IsShowingAll, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
         </StackPanel>
     </Border>
 </UserControl>

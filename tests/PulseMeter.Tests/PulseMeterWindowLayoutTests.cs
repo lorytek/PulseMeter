@@ -9,7 +9,7 @@ public sealed class PulseMeterWindowLayoutTests
 
         Assert.Contains("xmlns:rateLimits=\"clr-namespace:PulseMeter.Slices.RateLimits.UI\"", windowXaml);
         Assert.Contains("xmlns:rateLimitsDaily=\"clr-namespace:PulseMeter.Slices.RateLimitsDaily.UI\"", windowXaml);
-        Assert.Contains("xmlns:runwayForecast=\"clr-namespace:PulseMeter.Slices.RunwayForecast.UI\"", windowXaml);
+        Assert.DoesNotContain("xmlns:runwayForecast=\"clr-namespace:PulseMeter.Slices.RunwayForecast.UI\"", windowXaml);
         Assert.Contains("xmlns:resetCredits=\"clr-namespace:PulseMeter.Slices.ResetCredits.UI\"", windowXaml);
         Assert.Contains("xmlns:needsAttention=\"clr-namespace:PulseMeter.Slices.NeedsAttention.UI\"", windowXaml);
         Assert.Contains("xmlns:accountUsage=\"clr-namespace:PulseMeter.Slices.AccountUsage.UI\"", windowXaml);
@@ -18,7 +18,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("xmlns:dailyUsage=\"clr-namespace:PulseMeter.Slices.DailyUsage.UI\"", windowXaml);
         Assert.Contains("<rateLimits:RateLimitsSection", windowXaml);
         Assert.Contains("<rateLimitsDaily:RateLimitsDailySection", windowXaml);
-        Assert.Contains("<runwayForecast:RunwayForecastSection", windowXaml);
+        Assert.DoesNotContain("<runwayForecast:RunwayForecastSection", windowXaml);
         Assert.Contains("<resetCredits:ResetCreditsSection", windowXaml);
         Assert.Contains("<needsAttention:NeedsAttentionSection", windowXaml);
         Assert.Contains("<accountUsage:AccountUsageSection", windowXaml);
@@ -99,6 +99,27 @@ public sealed class PulseMeterWindowLayoutTests
     }
 
     [Fact]
+    public void ExpandedPulseMeter_ShowsActionableSyncIssuesOutsideCustomizableSections()
+    {
+        var windowXaml = ReadXamlFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml");
+        var rateLimitsXaml = ReadXamlFile("src", "PulseMeter", "Slices", "RateLimits", "RateLimitsSection.xaml");
+
+        var bannerStart = windowXaml.IndexOf("x:Name=\"SyncIssueBanner\"", StringComparison.Ordinal);
+        var scrollViewerStart = windowXaml.IndexOf("x:Name=\"ExpandedContentScrollViewer\"", StringComparison.Ordinal);
+
+        Assert.NotEqual(-1, bannerStart);
+        Assert.NotEqual(-1, scrollViewerStart);
+        Assert.True(bannerStart < scrollViewerStart);
+        Assert.Contains("Visibility=\"{Binding HasActionableSyncIssue", windowXaml);
+        Assert.Contains("Text=\"{Binding SyncIssueTitle}\"", windowXaml);
+        Assert.Contains("Text=\"{Binding SyncIssueText}\"", windowXaml);
+        Assert.Contains("Command=\"{Binding SyncNowCommand}\"", windowXaml[bannerStart..scrollViewerStart]);
+        Assert.Contains("AutomationProperties.LiveSetting=\"Assertive\"", windowXaml[bannerStart..scrollViewerStart]);
+        Assert.Contains("AutomationProperties.Name=\"Retry usage sync\"", windowXaml[bannerStart..scrollViewerStart]);
+        Assert.Contains("HasSectionStatusMessage", rateLimitsXaml);
+    }
+
+    [Fact]
     public void DataBarAndExpandedHeader_UseChildViewModelsForDisplayState()
     {
         var windowXaml = ReadXamlFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml");
@@ -120,11 +141,34 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("AddSingleton<ExpandedHeaderViewModel>", expandedHeaderRegistration);
         Assert.Contains("ItemsSource=\"{Binding CompactQuotaRows}\"", dataBarXaml);
         Assert.Contains("Text=\"{Binding StatusBadgeText}\"", dataBarXaml);
+        Assert.Contains("Background=\"{Binding StatusBadgeBrush}\"", dataBarXaml);
+        Assert.Contains("Foreground=\"{Binding StatusBadgeBrush}\"", dataBarXaml);
+        Assert.Contains("ToolTip=\"{Binding StatusSummaryText}\"", dataBarXaml);
+        Assert.Contains("AutomationProperties.Name=\"{Binding StatusSummaryText}\"", dataBarXaml);
+        Assert.Contains("AutomationProperties.Name=\"{Binding CompactAccessibleSummary}\"", dataBarXaml);
+        Assert.Contains("ToolTip=\"{Binding CompactAccessibleSummary}\"", dataBarXaml);
         Assert.Contains("ToolTip=\"{Binding ExpandCollapseTooltip}\"", dataBarXaml);
+        Assert.Contains("AutomationProperties.Name=\"{Binding ExpandCollapseTooltip}\"", dataBarXaml);
+        Assert.Contains("AutomationProperties.Name=\"Hide PulseMeter\"", dataBarXaml);
         Assert.Contains("Text=\"{Binding CompactTitleText}\"", expandedHeaderXaml);
         Assert.Contains("Text=\"{Binding StatusBadgeText}\"", expandedHeaderXaml);
+        Assert.Contains("Text=\"{Binding LastUpdatedText}\"", expandedHeaderXaml);
+        Assert.Contains("ToolTip=\"{Binding LastUpdatedDetailText}\"", expandedHeaderXaml);
+        Assert.Contains("AutomationProperties.Name=\"{Binding LastUpdatedDetailText}\"", expandedHeaderXaml);
+        Assert.Contains("AutomationProperties.Name=\"{Binding StatusSummaryText}\"", expandedHeaderXaml);
+        Assert.Contains("Background=\"{Binding StatusBadgeBrush}\"", expandedHeaderXaml);
         Assert.Contains("Command=\"{Binding SyncNowCommand}\"", expandedHeaderXaml);
+        Assert.Contains("Text=\"{Binding SyncButtonText}\"", expandedHeaderXaml);
+        Assert.Contains("ToolTip=\"{Binding SyncButtonTooltip}\"", expandedHeaderXaml);
+        Assert.Contains("AutomationProperties.Name=\"{Binding SyncButtonAccessibleLabel}\"", expandedHeaderXaml);
+        Assert.Contains("AutomationProperties.AcceleratorKey=\"F5\"", expandedHeaderXaml);
+        Assert.Contains("IsChecked=\"{Binding DataContext.IsAlwaysOnTop, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}\"", expandedHeaderXaml);
+        Assert.Contains("AutomationProperties.Name=\"Always on top\"", expandedHeaderXaml);
+        Assert.Contains("AutomationProperties.HelpText=\"Keep PulseMeter above other windows\"", expandedHeaderXaml);
+        Assert.Contains("Style=\"{DynamicResource LightIconToggleButtonStyle}\"", expandedHeaderXaml);
         Assert.Contains("ToolTip=\"{Binding ExpandCollapseTooltip}\"", expandedHeaderXaml);
+        Assert.Contains("AutomationProperties.Name=\"{Binding ExpandCollapseTooltip}\"", expandedHeaderXaml);
+        Assert.Contains("AutomationProperties.Name=\"Hide PulseMeter\"", expandedHeaderXaml);
     }
 
     [Fact]
@@ -133,14 +177,19 @@ public sealed class PulseMeterWindowLayoutTests
         var windowXaml = ReadXamlFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml");
         var stylesXaml = ReadXamlFile("src", "PulseMeter", "Shared", "Styles", "PulseMeterControls.xaml");
 
-        Assert.Contains("Source=\"/Shared/Styles/PulseMeterControls.xaml\"", windowXaml);
+        Assert.Contains("Source=\"/PulseMeter;component/Shared/Styles/PulseMeterControls.xaml\"", windowXaml);
         Assert.DoesNotContain("x:Key=\"LightCardStyle\"", windowXaml);
         Assert.DoesNotContain("x:Key=\"CompactIconButtonStyle\"", windowXaml);
         Assert.Contains("x:Key=\"LightCardStyle\"", stylesXaml);
         Assert.Contains("x:Key=\"CompactIconButtonStyle\"", stylesXaml);
+        Assert.Contains("x:Key=\"LightIconToggleButtonStyle\"", stylesXaml);
         Assert.Contains("x:Key=\"LightTextBoxStyle\"", stylesXaml);
+        Assert.Contains("<Trigger Property=\"IsKeyboardFocused\" Value=\"True\">", stylesXaml);
+        Assert.Contains("<Trigger Property=\"Validation.HasError\" Value=\"True\">", stylesXaml);
+        Assert.Contains("Path=(Validation.Errors)[0].ErrorContent", stylesXaml);
         Assert.Contains("x:Key=\"LightEvidencePillStyle\"", stylesXaml);
         Assert.Contains("x:Key=\"LightEvidencePillTextStyle\"", stylesXaml);
+        Assert.Contains("<KeyBinding Key=\"F5\" Command=\"{Binding SyncNowCommand}\" />", windowXaml);
     }
 
     [Fact]
@@ -332,7 +381,9 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("internal static class UsageCollectionRegistration", coreRegistration);
         Assert.Contains("internal static IServiceCollection AddUsageCollection", coreRegistration);
         Assert.Contains("AddSingleton<IUsageService, CodexUsageService>", coreRegistration);
-        Assert.Contains("AddSingleton<IUsageAttributionService, UsageAttributionService>", coreRegistration);
+        Assert.Contains("AddSingleton<SharedRolloutAnalyticsSource>", coreRegistration);
+        Assert.Contains("new ProjectUsageService(provider.GetRequiredService<SharedRolloutAnalyticsSource>())", coreRegistration);
+        Assert.Contains("new UsageAttributionService(provider.GetRequiredService<SharedRolloutAnalyticsSource>())", coreRegistration);
         Assert.Contains("AddSingleton<IJsonRpcClientFactory, JsonRpcClientFactory>", coreRegistration);
         Assert.Contains("internal static class PlatformRegistration", infrastructureRegistration);
         Assert.Contains("internal static IServiceCollection AddPulseMeterPlatform", infrastructureRegistration);
@@ -342,6 +393,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("internal static IServiceCollection AddPulseMeter", shellRegistration);
         Assert.Contains("AddSingleton(sp =>", shellRegistration);
         Assert.Contains("new PulseMeterWindowViewModel(", shellRegistration);
+        Assert.Contains("navigationRail.ApplyPanelState(appSettings?.IsNavigationPanelExpanded ?? true);", shellRegistration);
         Assert.Contains("AddSingleton<IPulseMeterWindow>", shellRegistration);
         Assert.Contains("AddSingleton<ITrayIconService, TrayIconService>", shellRegistration);
     }
@@ -454,7 +506,12 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("AddSingleton<AccountUsageSectionViewModel>", accountUsageRegistration);
         Assert.Contains("AddSingleton<DailyUsageSectionViewModel>", dailyUsageRegistration);
         Assert.Contains("Visibility=\"{Binding DataContext.IsAccountUsageVisible, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}\"", accountUsageSection);
-        Assert.Contains("Text=\"{Binding DataContext.AutoSyncSeconds, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}\"", accountUsageSection);
+        Assert.Contains("Path=\"DataContext.AutoSyncSeconds\"", accountUsageSection);
+        Assert.Contains("UpdateSourceTrigger=\"LostFocus\"", accountUsageSection);
+        Assert.DoesNotContain("UpdateSourceTrigger=\"PropertyChanged\"", accountUsageSection);
+        Assert.Contains("AutoSyncSecondsValidationRule", accountUsageSection);
+        Assert.Contains("PreviewKeyDown=\"AutoSyncSecondsTextBox_OnPreviewKeyDown\"", accountUsageSection);
+        Assert.Contains("Press Enter to apply; press Escape to cancel.", accountUsageSection);
         Assert.Contains("Visibility=\"{Binding DataContext.IsDailyUsageVisible, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}\"", dailyUsageSection);
         Assert.Contains("Visibility=\"{Binding IsDailyUsageExpanded, Converter={StaticResource BooleanToVisibilityConverter}}\"", dailyUsageSection);
         Assert.Contains("public void ToggleDailyUsageExpanded()", pulseMeterWindowViewModel);
@@ -499,6 +556,7 @@ public sealed class PulseMeterWindowLayoutTests
         var needsAttentionRegistration = ReadSliceRegistration("NeedsAttention", "NeedsAttentionRegistration.cs");
         var pulseMeterWindowViewModel = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindowViewModel.cs"));
         var needsAttentionSection = ReadXamlFile("src", "PulseMeter", "Slices", "NeedsAttention", "NeedsAttentionSection.xaml");
+        var needsAttentionSectionCode = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "NeedsAttention", "NeedsAttentionSection.xaml.cs"));
 
         Assert.True(File.Exists(FindWorkspaceFile("src", "PulseMeter", "Slices", "NeedsAttention", "NeedsAttentionSectionViewModel.cs")));
         Assert.Contains("<needsAttention:NeedsAttentionSection DataContext=\"{Binding NeedsAttention}\"", windowXaml);
@@ -508,9 +566,37 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.DoesNotContain("Visibility=\"{Binding HasNeedsAttention, Converter={StaticResource BooleanToVisibilityConverter}}\"", needsAttentionSection);
         Assert.Contains("Text=\"All clear - no items need attention right now.\"", needsAttentionSection);
         Assert.Contains("DataTrigger Binding=\"{Binding HasNeedsAttention}\" Value=\"False\"", needsAttentionSection);
-        Assert.Contains("ItemsSource=\"{Binding NeedsAttentionItems}\"", needsAttentionSection);
+        Assert.Contains("ItemsSource=\"{Binding VisibleNeedsAttentionItems}\"", needsAttentionSection);
+        Assert.Contains("Content=\"{Binding ToggleAttentionItemsText}\"", needsAttentionSection);
+        Assert.Contains("Command=\"{Binding ToggleAttentionItemsCommand}\"", needsAttentionSection);
+        Assert.Contains("AutomationProperties.Name=\"{Binding ToggleAttentionItemsAccessibleLabel}\"", needsAttentionSection);
+        Assert.Contains("Visibility=\"{Binding HasHiddenAttentionItems, Converter={StaticResource BooleanToVisibilityConverter}}\"", needsAttentionSection);
+        Assert.Contains("x:Name=\"ToggleAttentionItemsButton\"", needsAttentionSection);
+        Assert.Contains("x:Name=\"CollapseAttentionItemsButton\"", needsAttentionSection);
+        Assert.Contains("Content=\"Show top 3\"", needsAttentionSection);
+        Assert.Contains("Visibility=\"{Binding IsShowingAll, Converter={StaticResource BooleanToVisibilityConverter}}\"", needsAttentionSection);
+        Assert.Contains("Click=\"CollapseAttentionItemsButton_Click\"", needsAttentionSection);
+        Assert.Contains("IsVisibleChanged=\"CollapseAttentionItemsButton_IsVisibleChanged\"", needsAttentionSection);
+        Assert.Contains("_restoreAttentionToggleFocusAfterCollapse = true", needsAttentionSectionCode);
+        Assert.Contains("DispatcherPriority.ApplicationIdle", needsAttentionSectionCode);
+        Assert.Contains("ToggleAttentionItemsButton.Focus()", needsAttentionSectionCode);
+        Assert.Contains("Keyboard.Focus(ToggleAttentionItemsButton)", needsAttentionSectionCode);
         Assert.Contains("Command=\"{Binding DataContext.CopyDiagnosticCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}\"", needsAttentionSection);
+        Assert.Contains("AutomationProperties.Name=\"{Binding CopyAccessibleLabel}\"", needsAttentionSection);
+        Assert.Contains("AutomationProperties.LiveSetting=\"Polite\"", needsAttentionSection);
+        Assert.Contains("TargetUpdated=\"CopyFeedbackText_OnTargetUpdated\"", needsAttentionSection);
         Assert.Contains("Command=\"{Binding DataContext.DismissSignalCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}\"", needsAttentionSection);
+        Assert.Contains("AutomationProperties.Name=\"Dismiss idle alert\"", needsAttentionSection);
+        Assert.Contains("Visibility=\"{Binding HasPendingDismissal, Converter={StaticResource BooleanToVisibilityConverter}}\"", needsAttentionSection);
+        Assert.Contains("Content=\"Undo\"", needsAttentionSection);
+        Assert.Contains("Command=\"{Binding UndoDismissCommand}\"", needsAttentionSection);
+        Assert.Contains("AutomationProperties.Name=\"Undo dismissed idle alert\"", needsAttentionSection);
+        Assert.Contains("Content=\"Review\"", needsAttentionSection);
+        Assert.Contains("Click=\"ReviewButton_Click\"", needsAttentionSection);
+        Assert.Contains("AutomationProperties.Name=\"{Binding ReviewAccessibleLabel}\"", needsAttentionSection);
+        Assert.Contains("x:Name=\"ActionPanel\"", needsAttentionSection);
+        Assert.Contains("Grid.Column=\"2\"", needsAttentionSection);
+        Assert.Contains("Grid.ColumnSpan=\"3\"", needsAttentionSection);
         Assert.Contains("Text=\"NEEDS ATTENTION\"", needsAttentionSection);
         Assert.True(
             windowXaml.IndexOf("<needsAttention:NeedsAttentionSection", StringComparison.Ordinal) <
@@ -784,18 +870,6 @@ public sealed class PulseMeterWindowLayoutTests
             quotaRowsXaml.IndexOf("<ProgressBar", StringComparison.Ordinal));
     }
 
-    [Fact(Skip = "Replaced by navigation button contract.")]
-    public void PulseMeter_UsesWhiteExpandedDashboardWithCompactDarkHeader()
-    {
-        var xaml = ReadPulseMeterMarkup();
-
-        Assert.Contains("Property=\"Background\" Value=\"#20242C\"", xaml);
-        Assert.Contains("Property=\"Background\" Value=\"#FFFFFF\"", xaml);
-        Assert.Contains("Property=\"BorderBrush\" Value=\"#E5E7EB\"", xaml);
-        Assert.Contains("Text=\"PulseMeter\"", xaml);
-        Assert.Contains("Text=\"Overview\"", xaml);
-    }
-
     [Fact]
     public void ExpandedSidebar_HasCollapseToggleAndCollapsedWidthBinding()
     {
@@ -803,10 +877,13 @@ public sealed class PulseMeterWindowLayoutTests
         var code = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "NavigationRail", "NavigationRail.xaml.cs"));
 
         Assert.Contains("NavigationPanelToggleButtonStyle", xaml);
+        Assert.Contains("FontFamily=\"Segoe MDL2 Assets\"", xaml);
+        Assert.Contains("Text=\"{Binding NavigationPanelToggleGlyph}\"", xaml);
         Assert.Contains("Width=\"{Binding NavigationPanelWidth}\"", xaml);
         Assert.Contains("IsNavigationPanelExpanded", xaml);
         Assert.Contains("NavigationPanelToggleGlyph", xaml);
         Assert.Contains("NavigationPanelToggleTooltip", xaml);
+        Assert.Contains("AutomationProperties.Name=\"{Binding NavigationPanelToggleTooltip}\"", xaml);
         Assert.Contains("NavigationPanelToggleButton_Click", xaml);
         Assert.Contains("ToggleNavigationPanel", code);
     }
@@ -820,237 +897,6 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("ToggleNavigationPanel", code);
         Assert.DoesNotContain("Window.GetWindow", code);
         Assert.DoesNotContain("ToggleExpanded", code);
-    }
-
-    [Fact(Skip = "Replaced by navigation button contract.")]
-    public void ExpandedSidebar_UsesBlueOverviewUnderline()
-    {
-        var xaml = ReadPulseMeterMarkup();
-        var overviewIndex = xaml.IndexOf("Text=\"Overview\"", StringComparison.Ordinal);
-
-        Assert.NotEqual(-1, overviewIndex);
-
-        var overviewBlock = xaml[overviewIndex..Math.Min(xaml.Length, overviewIndex + 1_200)];
-        Assert.Contains("Background=\"#1F73FF\"", overviewBlock);
-        Assert.DoesNotContain("Background=\"#16A34A\"", overviewBlock);
-    }
-
-    [Fact(Skip = "Replaced by navigation button contract.")]
-    public void ExpandedSidebar_UsesOverviewUnderlineAndSectionSwitches()
-    {
-        var xaml = ReadPulseMeterMarkup();
-        var underlineStyleStart = xaml.IndexOf("x:Key=\"NavigationUnderlineStyle\"", StringComparison.Ordinal);
-        var underlineStyleEnd = xaml.IndexOf("x:Key=\"NavigationSectionToggleStyle\"", underlineStyleStart, StringComparison.Ordinal);
-        var navigationStyleStart = xaml.IndexOf("x:Key=\"NavigationSectionToggleStyle\"", StringComparison.Ordinal);
-        var navigationStyleEnd = xaml.IndexOf("x:Key=\"NavigationItemContentStyle\"", navigationStyleStart, StringComparison.Ordinal);
-        var overviewUnderlineStart = xaml.IndexOf("x:Name=\"OverviewUnderline\"", StringComparison.Ordinal);
-        var overviewTextStart = xaml.IndexOf("Text=\"Overview\"", StringComparison.Ordinal);
-        var overviewStart = xaml.LastIndexOf("<Border Height=\"64\"", overviewTextStart, StringComparison.Ordinal);
-
-        Assert.NotEqual(-1, underlineStyleStart);
-        Assert.NotEqual(-1, navigationStyleStart);
-        Assert.NotEqual(-1, overviewUnderlineStart);
-        Assert.NotEqual(-1, overviewStart);
-        Assert.True(underlineStyleEnd > underlineStyleStart);
-        Assert.True(navigationStyleEnd > navigationStyleStart);
-
-        var underlineStyle = xaml[underlineStyleStart..underlineStyleEnd];
-        var navigationStyle = xaml[navigationStyleStart..navigationStyleEnd];
-        var overviewUnderline = xaml[overviewUnderlineStart..Math.Min(xaml.Length, overviewUnderlineStart + 500)];
-        var overviewBlock = xaml[overviewStart..Math.Min(xaml.Length, overviewStart + 2_000)];
-        var longLabelStart = xaml.IndexOf("Text=\"Rate Limits Daily\"", StringComparison.Ordinal);
-
-        Assert.NotEqual(-1, longLabelStart);
-
-        var longLabelBlock = xaml[longLabelStart..Math.Min(xaml.Length, longLabelStart + 500)];
-
-        Assert.Contains("<Setter Property=\"Padding\" Value=\"18,34,14,28\" />", xaml);
-        Assert.DoesNotContain("<Setter Property=\"Padding\" Value=\"18,34,12,28\" />", xaml);
-        Assert.DoesNotContain("<Setter Property=\"Margin\" Value=\"-16,24,0,0\" />", xaml);
-        Assert.Contains("<Setter Property=\"Margin\" Value=\"14,0,14,4\" />", underlineStyle);
-        Assert.Contains("<Setter Property=\"HorizontalAlignment\" Value=\"Stretch\" />", underlineStyle);
-        Assert.Contains("<Setter Property=\"Width\" Value=\"14\" />", underlineStyle);
-        Assert.Contains("<Setter Property=\"HorizontalAlignment\" Value=\"Center\" />", underlineStyle);
-        Assert.DoesNotContain("ActiveUnderline", navigationStyle);
-        Assert.DoesNotContain("Style=\"{StaticResource NavigationUnderlineStyle}\"", navigationStyle);
-        Assert.Contains("<Setter Property=\"Padding\" Value=\"8,0,0,0\" />", navigationStyle);
-        Assert.Contains("x:Name=\"SectionSwitchTrack\"", navigationStyle);
-        Assert.Contains("x:Name=\"SectionSwitchThumb\"", navigationStyle);
-        Assert.Contains("Grid.Column=\"0\"", navigationStyle);
-        Assert.Contains("<ColumnDefinition Width=\"*\" />", navigationStyle);
-        Assert.Contains("<ColumnDefinition Width=\"Auto\" />", navigationStyle);
-        Assert.Contains("Width=\"28\"", navigationStyle);
-        Assert.Contains("Height=\"15\"", navigationStyle);
-        Assert.Contains("CornerRadius=\"7.5\"", navigationStyle);
-        Assert.Contains("Width=\"13\"", navigationStyle);
-        Assert.Contains("Height=\"13\"", navigationStyle);
-        Assert.Contains("Margin=\"4,0,0,0\"", navigationStyle);
-        Assert.DoesNotContain("Width=\"42\"", navigationStyle);
-        Assert.DoesNotContain("Height=\"24\"", navigationStyle);
-        Assert.Contains("<Setter TargetName=\"SectionSwitchTrack\" Property=\"Background\" Value=\"#65D75F\" />", navigationStyle);
-        Assert.Contains("HorizontalAlignment=\"Right\"", navigationStyle);
-        Assert.Contains("Style=\"{StaticResource NavigationUnderlineStyle}\"", overviewUnderline);
-        Assert.DoesNotContain("Width=\"14\"", overviewUnderline);
-        Assert.Contains("Background=\"#1F73FF\"", overviewUnderline);
-        Assert.Contains("VerticalAlignment=\"Center\"", longLabelBlock);
-        Assert.DoesNotContain("<Setter Property=\"Padding\" Value=\"14,0\" />", overviewBlock);
-        Assert.Contains("<Setter Property=\"HorizontalAlignment\" Value=\"Center\" />", overviewBlock);
-    }
-
-    [Fact(Skip = "Replaced by navigation button contract.")]
-    public void ExpandedSidebar_UsesFullWidthRowsSoLongLabelsStayReadable()
-    {
-        var xaml = ReadPulseMeterMarkup();
-        var navigationStyleStart = xaml.IndexOf("x:Key=\"NavigationSectionToggleStyle\"", StringComparison.Ordinal);
-        var navigationStyleEnd = xaml.IndexOf("x:Key=\"NavigationItemContentStyle\"", navigationStyleStart, StringComparison.Ordinal);
-        var longLabelStart = xaml.IndexOf("Text=\"Rate Limits Daily\"", StringComparison.Ordinal);
-
-        Assert.NotEqual(-1, navigationStyleStart);
-        Assert.True(navigationStyleEnd > navigationStyleStart);
-        Assert.NotEqual(-1, longLabelStart);
-
-        var navigationStyle = xaml[navigationStyleStart..navigationStyleEnd];
-        var longLabelBlock = xaml[longLabelStart..Math.Min(xaml.Length, longLabelStart + 500)];
-
-        Assert.Contains("<Setter Property=\"HorizontalAlignment\" Value=\"Stretch\" />", navigationStyle);
-        Assert.Contains("<Setter Property=\"Padding\" Value=\"8,0,0,0\" />", navigationStyle);
-        Assert.Contains("Width=\"28\"", navigationStyle);
-        Assert.Contains("Height=\"15\"", navigationStyle);
-        Assert.Contains("Width=\"13\"", navigationStyle);
-        Assert.Contains("Height=\"13\"", navigationStyle);
-        Assert.Contains("FontSize=\"13.5\"", longLabelBlock);
-        Assert.DoesNotContain("TextTrimming", longLabelBlock);
-    }
-
-    [Fact(Skip = "Replaced by navigation button contract.")]
-    public void ExpandedSidebar_KeepsSectionSwitchesAwayFromRightEdge()
-    {
-        var xaml = ReadPulseMeterMarkup();
-
-        Assert.Contains("<Setter Property=\"Padding\" Value=\"18,34,14,28\" />", xaml);
-        Assert.DoesNotContain("<Setter Property=\"Padding\" Value=\"18,34,4,28\" />", xaml);
-    }
-
-    [Fact(Skip = "Replaced by navigation button contract.")]
-    public void ExpandedSidebar_MovesIconAndLabelGroupLeftWithoutMovingSwitches()
-    {
-        var xaml = ReadPulseMeterMarkup();
-        var navigationStyleStart = xaml.IndexOf("x:Key=\"NavigationSectionToggleStyle\"", StringComparison.Ordinal);
-        var navigationStyleEnd = xaml.IndexOf("x:Key=\"NavigationItemContentStyle\"", navigationStyleStart, StringComparison.Ordinal);
-        var overviewTextStart = xaml.IndexOf("Text=\"Overview\"", StringComparison.Ordinal);
-        var overviewStart = xaml.LastIndexOf("<Border Height=\"64\"", overviewTextStart, StringComparison.Ordinal);
-
-        Assert.NotEqual(-1, navigationStyleStart);
-        Assert.True(navigationStyleEnd > navigationStyleStart);
-        Assert.NotEqual(-1, overviewStart);
-
-        var navigationStyle = xaml[navigationStyleStart..navigationStyleEnd];
-        var overviewBlock = xaml[overviewStart..Math.Min(xaml.Length, overviewStart + 3_000)];
-
-        Assert.Contains("<Setter Property=\"Padding\" Value=\"8,0,0,0\" />", navigationStyle);
-        Assert.DoesNotContain("<Setter Property=\"Padding\" Value=\"14,0,0,0\" />", navigationStyle);
-        Assert.Contains("<Setter Property=\"HorizontalAlignment\" Value=\"Center\" />", overviewBlock);
-        Assert.Contains("Width=\"28\"", navigationStyle);
-        Assert.Contains("Margin=\"4,0,0,0\"", navigationStyle);
-    }
-
-    [Fact(Skip = "Replaced by navigation button contract.")]
-    public void ExpandedSidebar_CentersOverviewIconAndLabelOverUnderline()
-    {
-        var xaml = ReadPulseMeterMarkup();
-        var overviewTextStart = xaml.IndexOf("Text=\"Overview\"", StringComparison.Ordinal);
-        var overviewStart = xaml.LastIndexOf("<Border Height=\"64\"", overviewTextStart, StringComparison.Ordinal);
-
-        Assert.NotEqual(-1, overviewStart);
-
-        var overviewBlock = xaml[overviewStart..Math.Min(xaml.Length, overviewStart + 3_000)];
-
-        Assert.Contains("x:Name=\"OverviewUnderline\"", overviewBlock);
-        Assert.Contains("Style=\"{StaticResource NavigationUnderlineStyle}\"", overviewBlock);
-        Assert.Contains("<Setter Property=\"HorizontalAlignment\" Value=\"Center\" />", overviewBlock);
-        Assert.DoesNotContain("<Setter Property=\"Margin\" Value=\"8,0\" />", overviewBlock);
-        Assert.DoesNotContain("<Setter Property=\"Margin\" Value=\"14,0\" />", overviewBlock);
-    }
-
-    [Fact(Skip = "Replaced by navigation button contract.")]
-    public void ExpandedSidebar_CentersCollapsedIconCellsWithoutClippingOffsets()
-    {
-        var xaml = ReadPulseMeterMarkup();
-        var navigationStyleStart = xaml.IndexOf("x:Key=\"NavigationSectionToggleStyle\"", StringComparison.Ordinal);
-        var navigationStyleEnd = xaml.IndexOf("x:Key=\"NavigationItemContentStyle\"", navigationStyleStart, StringComparison.Ordinal);
-        var overviewTextStart = xaml.IndexOf("Text=\"Overview\"", StringComparison.Ordinal);
-        var overviewStart = xaml.LastIndexOf("<Border Height=\"64\"", overviewTextStart, StringComparison.Ordinal);
-
-        Assert.NotEqual(-1, navigationStyleStart);
-        Assert.True(navigationStyleEnd > navigationStyleStart);
-        Assert.NotEqual(-1, overviewStart);
-
-        var navigationStyle = xaml[navigationStyleStart..navigationStyleEnd];
-        var overviewBlock = xaml[overviewStart..Math.Min(xaml.Length, overviewStart + 1_800)];
-
-        Assert.DoesNotContain("<Setter Property=\"Margin\" Value=\"-8,24,0,0\" />", xaml);
-        Assert.DoesNotContain("<Setter Property=\"Margin\" Value=\"-16,24,0,0\" />", xaml);
-        Assert.Contains("<Setter Property=\"Margin\" Value=\"0,24,0,0\" />", xaml);
-        Assert.Contains("<Setter Property=\"Width\" Value=\"36\" />", navigationStyle);
-        Assert.Contains("<Setter Property=\"Padding\" Value=\"0\" />", navigationStyle);
-        Assert.Contains("<Setter Property=\"HorizontalContentAlignment\" Value=\"Center\" />", navigationStyle);
-        Assert.Contains("<Setter Property=\"Width\" Value=\"36\" />", overviewBlock);
-        Assert.Contains("<Setter Property=\"HorizontalAlignment\" Value=\"Center\" />", overviewBlock);
-        Assert.Contains("<Setter Property=\"Margin\" Value=\"0\" />", overviewBlock);
-        Assert.DoesNotContain("<Setter Property=\"Padding\" Value=\"14,0\" />", overviewBlock);
-    }
-
-    [Fact(Skip = "Replaced by navigation button contract.")]
-    public void ExpandedSidebar_HidesSectionSwitchesWhenNavigationIsCollapsed()
-    {
-        var xaml = ReadPulseMeterMarkup();
-        var navigationStyleStart = xaml.IndexOf("x:Key=\"NavigationSectionToggleStyle\"", StringComparison.Ordinal);
-        var navigationStyleEnd = xaml.IndexOf("x:Key=\"NavigationItemContentStyle\"", navigationStyleStart, StringComparison.Ordinal);
-        var overviewTextStart = xaml.IndexOf("Text=\"Overview\"", StringComparison.Ordinal);
-        var overviewStart = xaml.LastIndexOf("<Border Height=\"64\"", overviewTextStart, StringComparison.Ordinal);
-
-        Assert.NotEqual(-1, navigationStyleStart);
-        Assert.True(navigationStyleEnd > navigationStyleStart);
-        Assert.NotEqual(-1, overviewStart);
-
-        var navigationStyle = xaml[navigationStyleStart..navigationStyleEnd];
-        var overviewBlock = xaml[overviewStart..Math.Min(xaml.Length, overviewStart + 4_200)];
-
-        Assert.Contains("x:Name=\"SectionSwitch\"", navigationStyle);
-        Assert.Contains("TargetName=\"SectionSwitch\"", navigationStyle);
-        Assert.Contains("<Setter TargetName=\"SectionSwitch\" Property=\"Visibility\" Value=\"Collapsed\" />", navigationStyle);
-        Assert.DoesNotContain("ActiveUnderline", navigationStyle);
-        Assert.DoesNotContain("Style=\"{StaticResource NavigationUnderlineStyle}\"", navigationStyle);
-        Assert.Contains("x:Name=\"OverviewUnderline\"", overviewBlock);
-        Assert.Contains("Style=\"{StaticResource NavigationUnderlineStyle}\"", overviewBlock);
-    }
-
-    [Fact(Skip = "Replaced by navigation button contract.")]
-    public void ExpandedSidebar_UsesSharedCollapsedNavIconCellStyles()
-    {
-        var xaml = ReadPulseMeterMarkup();
-        var contentStyleStart = xaml.IndexOf("x:Key=\"NavigationItemContentStyle\"", StringComparison.Ordinal);
-        var iconCellStyleStart = xaml.IndexOf("x:Key=\"NavigationIconCellStyle\"", StringComparison.Ordinal);
-        var glyphStyleStart = xaml.IndexOf("x:Key=\"NavigationIconGlyphStyle\"", StringComparison.Ordinal);
-
-        Assert.NotEqual(-1, contentStyleStart);
-        Assert.NotEqual(-1, iconCellStyleStart);
-        Assert.NotEqual(-1, glyphStyleStart);
-
-        var contentStyle = xaml[contentStyleStart..Math.Min(xaml.Length, contentStyleStart + 900)];
-        var iconCellStyle = xaml[iconCellStyleStart..Math.Min(xaml.Length, iconCellStyleStart + 700)];
-        var glyphStyle = xaml[glyphStyleStart..Math.Min(xaml.Length, glyphStyleStart + 900)];
-
-        Assert.Contains("Setter Property=\"HorizontalAlignment\" Value=\"Left\"", contentStyle);
-        Assert.Contains("Setter Property=\"HorizontalAlignment\" Value=\"Center\"", contentStyle);
-        Assert.Contains("Setter Property=\"Width\" Value=\"22\"", iconCellStyle);
-        Assert.Contains("Setter Property=\"Height\" Value=\"22\"", iconCellStyle);
-        Assert.Contains("Setter Property=\"HorizontalAlignment\" Value=\"Center\"", iconCellStyle);
-        Assert.Contains("Setter Property=\"TextAlignment\" Value=\"Center\"", glyphStyle);
-        var directContentStyleUses = CountOccurrences(xaml, "Style=\"{StaticResource NavigationItemContentStyle}\"");
-        var basedOnContentStyleUses = CountOccurrences(xaml, "BasedOn=\"{StaticResource NavigationItemContentStyle}\"");
-        Assert.Equal(8, directContentStyleUses + basedOnContentStyleUses);
-        Assert.Equal(8, CountOccurrences(xaml, "Style=\"{StaticResource NavigationIconCellStyle}\""));
     }
 
     [Fact]
@@ -1097,31 +943,37 @@ public sealed class PulseMeterWindowLayoutTests
     }
 
     [Fact]
-    public void RunwayForecast_IsASeparateCustomizableSectionAfterWeeklyPace()
+    public void CodingRunway_ReplacesTheStandaloneRunwayForecastSection()
     {
-        var xaml = ReadPulseMeterMarkup();
+        var windowXaml = ReadXamlFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml");
+        var navigationXaml = ReadXamlFile("src", "PulseMeter", "Slices", "NavigationRail", "UI", "NavigationRail.xaml");
+        var windowCode = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml.cs"));
 
-        Assert.Contains("Text=\"Runway forecast\"", xaml);
-        Assert.Contains("IsRunwayForecastVisible", xaml);
-        Assert.Contains("x:Name=\"RunwayForecastPanel\"", xaml);
-        Assert.Contains("Text=\"RUNWAY FORECAST\"", xaml);
-        Assert.Contains("Text=\"Forecast\"", xaml);
-        Assert.Contains("ItemsSource=\"{Binding Rows}\"", xaml);
-        Assert.Contains("Text=\"Estimated\"", xaml);
-        Assert.Contains("Text=\"Recent pace\"", xaml);
-        Assert.DoesNotContain("billing", xaml, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("<usageTrend:UsageTrendSection", windowXaml);
+        Assert.Contains("x:Name=\"UsageTrendSection\"", windowXaml);
+        Assert.Contains("IsRunwayForecastVisible", windowXaml);
+        Assert.DoesNotContain("<runwayForecast:RunwayForecastSection", windowXaml);
+        Assert.DoesNotContain("x:Name=\"RunwayForecastSection\"", windowXaml);
 
-        var weeklyNav = xaml.IndexOf("Text=\"Weekly pace\"", StringComparison.Ordinal);
-        var runwayNav = xaml.IndexOf("Text=\"Runway forecast\"", StringComparison.Ordinal);
-        var resetNav = xaml.IndexOf("Text=\"Reset credits\"", StringComparison.Ordinal);
+        Assert.Contains("Text=\"Coding runway\"", navigationXaml);
+        Assert.Contains("Content=\"Coding runway\"", navigationXaml);
+        Assert.Contains("ToolTip=\"Go to coding runway\"", navigationXaml);
+        Assert.DoesNotContain("Text=\"Runway forecast\"", navigationXaml);
+        Assert.Contains("NavigationSection.RunwayForecast => UsageTrendSection", windowCode);
+
+        var weeklyScrollSection = windowCode.IndexOf(
+            "(NavigationSection.WeeklyPace, (FrameworkElement)WeeklyPaceSection)",
+            StringComparison.Ordinal);
+        var runwayScrollSection = windowCode.IndexOf(
+            "(NavigationSection.RunwayForecast, (FrameworkElement)UsageTrendSection)",
+            StringComparison.Ordinal);
+        Assert.True(weeklyScrollSection < runwayScrollSection);
+
+        var runwayNav = navigationXaml.IndexOf("Text=\"Coding runway\"", StringComparison.Ordinal);
+        var weeklyNav = navigationXaml.IndexOf("Text=\"Weekly pace\"", StringComparison.Ordinal);
+        var resetNav = navigationXaml.IndexOf("Text=\"Reset credits\"", StringComparison.Ordinal);
         Assert.True(weeklyNav < runwayNav);
-        Assert.True(runwayNav < resetNav);
-
-        var weeklyPanel = xaml.IndexOf("x:Name=\"RateLimitsDailyPanel\"", StringComparison.Ordinal);
-        var runwayPanel = xaml.IndexOf("x:Name=\"RunwayForecastPanel\"", StringComparison.Ordinal);
-        var resetPanel = xaml.IndexOf("x:Name=\"ResetCreditsPanel\"", StringComparison.Ordinal);
-        Assert.True(weeklyPanel < runwayPanel);
-        Assert.True(runwayPanel < resetPanel);
+        Assert.True(weeklyNav < resetNav);
     }
 
     [Fact]
@@ -1207,7 +1059,9 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("DailyUsageRows", xaml);
 
         var autoRefreshStart = xaml.IndexOf("Text=\"Auto refresh every\"", StringComparison.Ordinal);
-        var autoRefreshBlock = xaml[autoRefreshStart..Math.Min(xaml.Length, autoRefreshStart + 1_400)];
+        var autoRefreshEnd = xaml.IndexOf("x:Name=\"DashboardMetricCards\"", autoRefreshStart, StringComparison.Ordinal);
+        Assert.True(autoRefreshEnd > autoRefreshStart);
+        var autoRefreshBlock = xaml[autoRefreshStart..autoRefreshEnd];
         Assert.Contains("Text=\"&#xE70F;\"", autoRefreshBlock);
         Assert.DoesNotContain("Text=\"&#xE70D;\"", autoRefreshBlock);
 
@@ -1329,6 +1183,8 @@ public sealed class PulseMeterWindowLayoutTests
 
         Assert.Contains("x:Key=\"NavigationSectionButtonStyle\"", xaml);
         Assert.Contains("x:Name=\"CustomizeDashboardButton\"", xaml);
+        Assert.Contains("Text=\"{Binding ApplicationVersionText}\"", xaml);
+        Assert.Contains("AutomationProperties.Name=\"{Binding ApplicationVersionText}\"", xaml);
         Assert.Contains("x:Name=\"CustomizeDashboardPopup\"", xaml);
         Assert.Contains("StaysOpen=\"False\"", xaml);
         Assert.Contains("Choose visible sections", xaml);
@@ -1337,7 +1193,23 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("IsUsageAttributionVisible", xaml);
         Assert.Contains("SectionRequested", code);
         Assert.Contains("SectionButton_Click", code);
+        Assert.Contains("Opened=\"CustomizeDashboardPopup_Opened\"", xaml);
+        Assert.Contains("Closed=\"CustomizeDashboardPopup_Closed\"", xaml);
         Assert.Contains("CustomizeDashboardPopup_KeyDown", code);
+        Assert.Contains("CustomizeDashboardPopup_Opened", code);
+        Assert.Contains("CustomizeDashboardPopup_Closed", code);
+        Assert.Contains("FocusPopupControl(RateLimitsVisibilityCheckBox)", code);
+        Assert.Contains("DispatcherPriority.ContextIdle", code);
+        Assert.Contains("_restoreCustomizeFocusAfterClose = true", code);
+        Assert.Contains("new Action(() => CustomizeDashboardButton.Focus())", code);
+        Assert.Contains("Text=\"{Binding VisibleSectionSummaryText}\"", xaml);
+        Assert.Contains("Content=\"Restore all sections\"", xaml);
+        Assert.Contains("IsEnabled=\"{Binding HasHiddenSections}\"", xaml);
+        Assert.Contains("AutomationProperties.Name=\"Restore all dashboard sections\"", xaml);
+        Assert.Equal(8, CountOccurrences(xaml, "Style=\"{StaticResource DashboardVisibilityCheckBoxStyle}\""));
+        Assert.Contains("VisibilityCheckBox_Click", code);
+        Assert.Contains("if (!CustomizeDashboardPopup.IsOpen)", code);
+        Assert.Contains("Keyboard.Focus(control)", code);
         Assert.DoesNotContain("NavigationSectionToggleStyle", xaml);
     }
 
@@ -1345,12 +1217,115 @@ public sealed class PulseMeterWindowLayoutTests
     public void NavigationRail_PlacesRequestedSectionAtTheTopOfTheViewport()
     {
         var code = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml.cs"));
-        var handlerStart = code.IndexOf("private void NavigationRail_SectionRequested", StringComparison.Ordinal);
+        var handlerStart = code.IndexOf("private void NavigateToSection", StringComparison.Ordinal);
         var handler = code[handlerStart..Math.Min(code.Length, handlerStart + 1_400)];
 
         Assert.Contains("ScrollToVerticalOffset", handler);
         Assert.Contains("TransformToAncestor(ExpandedContentScrollViewer)", handler);
         Assert.DoesNotContain("target.BringIntoView()", handler);
+    }
+
+    [Fact]
+    public void UsageTrend_IsAnAccessibleAnalyticalSectionAfterRateLimits()
+    {
+        var windowXaml = ReadXamlFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml");
+        var trendXaml = ReadXamlFile("src", "PulseMeter", "Slices", "UsageTrend", "UI", "UsageTrendSection.xaml");
+        var trendChart = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "UsageTrend", "UI", "UsageTrendChart.cs"));
+        var tracker = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "UsageSignals", "Business", "UsageSignalsTracker.cs"));
+
+        Assert.Contains("DataContext=\"{Binding UsageTrend}\"", windowXaml);
+        Assert.Contains("x:Name=\"UsageTrendSection\"", windowXaml);
+        Assert.Contains("SectionRequested=\"UsageTrendSection_SectionRequested\"", windowXaml);
+        Assert.Contains("Text=\"Coding runway\"", trendXaml);
+        Assert.Contains("Text=\"{Binding RunwayHeadline}\"", trendXaml);
+        Assert.DoesNotContain("Content=\"See pacing plan\"", trendXaml);
+        Assert.DoesNotContain("Text=\"{Binding RecommendationText}\"", trendXaml);
+        Assert.Contains("AutomationProperties.Name=\"{Binding AccessibleSummary}\"", trendXaml);
+        Assert.Contains("AutomationProperties.Name=\"Show current pace projection\"", trendXaml);
+        Assert.Contains("ToolTip=\"Reset chart view\"", trendXaml);
+        Assert.Contains("Text=\"&#xE72C;\"", trendXaml);
+        Assert.DoesNotContain("Text=\"&#xE713;\"", trendXaml);
+        Assert.DoesNotContain("<WrapPanel Margin=\"16,10,16,0\"", trendXaml);
+        Assert.Contains("UsageTrendChart Height=\"380\"", trendXaml);
+        Assert.Contains("\"Sustainable pace\"", trendChart);
+        Assert.DoesNotContain("\"80% range\"", trendChart);
+        Assert.Contains("AutomationProperties.Name=\"Show possible-limit window\"", trendXaml);
+        Assert.Contains("\"Actual\"", trendChart);
+        Assert.DoesNotContain("ProjectionPen, \"Forecast\"", trendChart);
+        Assert.Contains("\"Estimated reach limit ·", trendChart);
+        Assert.Contains("\"Limit 100%\"", trendChart);
+        Assert.Contains("BuildDailyContextTicks", trendChart);
+        Assert.Contains("DrawContextStrip", trendChart);
+        Assert.Contains("\"Not measured\"", trendChart);
+        Assert.DoesNotContain("P10", trendXaml + trendChart, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("public static readonly DependencyProperty ModelProperty", trendChart);
+        Assert.DoesNotContain("StaysOpen = false", trendChart);
+        Assert.Contains("ShortRunwayHistory = TimeSpan.FromHours(3)", tracker);
+
+        var rateLimits = windowXaml.IndexOf("x:Name=\"RateLimitsSection\"", StringComparison.Ordinal);
+        var usageTrend = windowXaml.IndexOf("x:Name=\"UsageTrendSection\"", StringComparison.Ordinal);
+        var weeklyPace = windowXaml.IndexOf("x:Name=\"WeeklyPaceSection\"", StringComparison.Ordinal);
+        Assert.True(rateLimits < weeklyPace);
+        Assert.True(weeklyPace < usageTrend);
+    }
+
+    [Fact]
+    public void NavigationRail_ShowsAndAnnouncesTheCurrentSection()
+    {
+        var navigationXaml = ReadXamlFile("src", "PulseMeter", "Slices", "NavigationRail", "UI", "NavigationRail.xaml");
+
+        Assert.Contains("NavigationSectionSelectedConverter", navigationXaml);
+        Assert.Equal(9, CountOccurrences(navigationXaml, "Tag=\"{Binding SelectedSection, Converter={StaticResource NavigationSectionSelectedConverter}"));
+        Assert.Contains("<Trigger Property=\"Tag\" Value=\"Current\">", navigationXaml);
+        Assert.Contains("Background\" Value=\"#EFF6FF\"", navigationXaml);
+        Assert.Contains("AutomationProperties.ItemStatus\" Value=\"Current section\"", navigationXaml);
+        Assert.Contains("AutomationProperties.HelpText\" Value=\"Current section\"", navigationXaml);
+    }
+
+    [Fact]
+    public void InteractiveUsageControls_HaveAccessibleNames()
+    {
+        var rateLimitsXaml = ReadXamlFile("src", "PulseMeter", "Slices", "RateLimits", "UI", "RateLimitsSection.xaml");
+        var accountUsageXaml = ReadXamlFile("src", "PulseMeter", "Slices", "AccountUsage", "UI", "AccountUsageSection.xaml");
+        var projectUsageXaml = ReadXamlFile("src", "PulseMeter", "Slices", "ProjectUsage", "UI", "ProjectUsageSection.xaml");
+
+        Assert.Contains("AutomationProperties.Name=\"Rate limit track\"", rateLimitsXaml);
+        Assert.Contains("AutomationProperties.Name=\"Auto refresh interval in seconds\"", accountUsageXaml);
+        Assert.Contains("AutomationProperties.HelpText=\"Enter 1 to 86,400 seconds. Press Enter to apply; press Escape to cancel.\"", accountUsageXaml);
+        Assert.Contains("AutomationProperties.Name=\"Project usage\"", projectUsageXaml);
+        Assert.Contains("AutomationProperties.HelpText=\"Select a project to review its recent usage evidence.\"", projectUsageXaml);
+        Assert.DoesNotContain("Text=\"SELECTED PROJECT\"", projectUsageXaml);
+        Assert.DoesNotContain("Text=\"{Binding SelectedProjectPathText}\"", projectUsageXaml);
+        Assert.DoesNotContain("Text=\"{Binding SelectedProjectSummary}\"", projectUsageXaml);
+    }
+
+    [Fact]
+    public void NeedsAttentionReview_WiresTypedEventAndUsesSharedNavigationPath()
+    {
+        var windowXaml = ReadXamlFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml");
+        var windowCode = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml.cs"));
+        var sectionCode = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "NeedsAttention", "UI", "NeedsAttentionSection.xaml.cs"));
+
+        Assert.Contains("ReviewRequested=\"NeedsAttentionSection_ReviewRequested\"", windowXaml);
+        Assert.Contains("NeedsAttentionReviewRequestedEventArgs", sectionCode);
+        Assert.Contains("ReviewRequested?.Invoke", sectionCode);
+        Assert.Contains("RevealAndSelectSection(section)", windowCode);
+        Assert.Contains("GetNavigationSection(e.Target)", windowCode);
+        Assert.Contains("NavigateToSection(GetNavigationSection(e.Target), restoreHiddenSection: true)", windowCode);
+    }
+
+    [Fact]
+    public void NeedsAttention_DoesNotDependOnNavigationRail()
+    {
+        var needsAttentionPath = Path.GetDirectoryName(
+            FindWorkspaceFile("src", "PulseMeter", "Slices", "NeedsAttention", "Models", "NeedsAttentionItem.cs"));
+        Assert.NotNull(needsAttentionPath);
+        var source = string.Join(
+            Environment.NewLine,
+            Directory.EnumerateFiles(needsAttentionPath, "*", SearchOption.AllDirectories)
+                .Select(File.ReadAllText));
+
+        Assert.DoesNotContain("NavigationRail", source);
     }
 
     [Fact]
@@ -1467,6 +1442,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("x:Name=\"DailyUsagePanel\"", xaml);
         Assert.Contains("x:Name=\"DailyUsagePanelBody\"", xaml);
         Assert.Contains("DailyUsageExpandCollapseTooltip", xaml);
+        Assert.Equal(2, CountOccurrences(xaml, "AutomationProperties.Name=\"{Binding DailyUsageExpandCollapseTooltip}\""));
         Assert.Contains("DailyUsageExpandCollapseButton_Click", xaml);
         Assert.Contains("Text=\"DAILY USAGE\"", xaml);
         Assert.Contains("Visibility=\"{Binding IsDailyUsageExpanded", xaml);
@@ -1547,7 +1523,8 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("Difference between the last 7 days and the 7 days before that.", projectUsageXaml);
         Assert.Contains("Value=\"{Binding SharePercentValue, Mode=OneWay}\"", projectUsageXaml);
         Assert.Contains("BorderThickness\" Value=\"3,0,0,0\"", projectUsageXaml);
-        Assert.Contains("Text=\"{Binding SelectedProjectChatsText}\"", projectUsageXaml);
+        Assert.DoesNotContain("Text=\"{Binding SelectedProjectChatsText}\"", projectUsageXaml);
+        Assert.DoesNotContain("Text=\"{Binding SelectedProjectMomentText}\"", projectUsageXaml);
         Assert.DoesNotContain("ThreadCountText", projectUsageXaml);
         Assert.DoesNotContain("RawLocalTokens", projectUsageXaml);
         Assert.DoesNotContain("Prompt", projectUsageXaml);
@@ -1567,12 +1544,31 @@ public sealed class PulseMeterWindowLayoutTests
     }
 
     [Fact]
-    public void RateLimitsPanel_ShowsStatusMessageWhenCodexIsUnavailable()
+    public void RateLimitsPanel_ShowsOnlyNonActionableStatusMessages()
     {
         var xaml = ReadPulseMeterMarkup();
+        var code = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "RateLimits", "RateLimitsSection.xaml.cs"));
 
-        Assert.Contains("Text=\"{Binding DataContext.StatusMessage, RelativeSource={RelativeSource AncestorType=Window}}\"", xaml);
-        Assert.Contains("Visibility=\"{Binding DataContext.HasStatusMessage, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}\"", xaml);
+        Assert.Contains("Text=\"{Binding DataContext.StatusMessage, RelativeSource={RelativeSource AncestorType=Window}, NotifyOnTargetUpdated=True}\"", xaml);
+        Assert.Contains("Foreground=\"{Binding DataContext.StatusMessageBrush, RelativeSource={RelativeSource AncestorType=Window}}\"", xaml);
+        Assert.Contains("AutomationProperties.LiveSetting=\"Polite\"", xaml);
+        Assert.Contains("TargetUpdated=\"StatusMessage_OnTargetUpdated\"", xaml);
+        Assert.Contains("AutomationEvents.LiveRegionChanged", code);
+        Assert.Contains("RaiseAutomationEvent", code);
+        Assert.Contains("Visibility=\"{Binding DataContext.HasSectionStatusMessage, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}\"", xaml);
+    }
+
+    [Fact]
+    public void ExposedProgressIndicators_HaveMeaningfulAccessibleNames()
+    {
+        var accountUsage = ReadXamlFile("src", "PulseMeter", "Slices", "AccountUsage", "AccountUsageSection.xaml");
+        var projectUsage = ReadXamlFile("src", "PulseMeter", "Slices", "ProjectUsage", "ProjectUsageSection.xaml");
+        var resetCredits = ReadXamlFile("src", "PulseMeter", "Slices", "ResetCredits", "ResetCreditsSection.xaml");
+
+        Assert.Contains("AutomationProperties.Name=\"{Binding TodayMedianDailyPercentText}\"", accountUsage);
+        Assert.Contains("AutomationProperties.Name=\"{Binding ShareText}\"", projectUsage);
+        Assert.Contains("AutomationProperties.HelpText=\"{Binding DisplayName}\"", projectUsage);
+        Assert.Contains("AutomationProperties.Name=\"{Binding DisplayText}\"", resetCredits);
     }
 
     [Fact]
@@ -1593,16 +1589,6 @@ public sealed class PulseMeterWindowLayoutTests
 
         Assert.Contains("DailyUsageExpandCollapseButton_Click", code);
         Assert.Contains("ToggleDailyUsageExpanded", code);
-    }
-
-    [Fact(Skip = "Navigation rail no longer owns sync feedback.")]
-    public void SyncFooter_UsesSingleTimestampFeedbackLine()
-    {
-        var xaml = ReadPulseMeterMarkup();
-
-        Assert.Contains("SyncFeedbackText", xaml);
-        Assert.DoesNotContain("LastUpdatedText", xaml);
-        Assert.DoesNotContain("SourceText", xaml);
     }
 
     [Fact]

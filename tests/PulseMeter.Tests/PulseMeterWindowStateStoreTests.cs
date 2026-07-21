@@ -22,4 +22,23 @@ public sealed class PulseMeterWindowStateStoreTests
         Assert.Equal(32, loaded.Left);
         Assert.Equal(48, loaded.Top);
     }
+
+    [Fact]
+    public async Task ConcurrentSaves_LeaveValidJsonAndNoTemporaryFiles()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "PulseMeter.Tests", Guid.NewGuid().ToString("N"), "window-state.json");
+
+        await Task.WhenAll(Enumerable.Range(0, 20).Select(index => Task.Run(() =>
+        {
+            new PulseMeterWindowStateStore(path).Save(new PulseMeterWindowState(
+                IsExpanded: index % 2 == 0,
+                Width: 700 + index,
+                Height: 600 + index));
+        })));
+
+        using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+        Assert.Equal(System.Text.Json.JsonValueKind.Object, document.RootElement.ValueKind);
+        Assert.NotNull(new PulseMeterWindowStateStore(path).Load());
+        Assert.Empty(Directory.EnumerateFiles(Path.GetDirectoryName(path)!, "*.tmp"));
+    }
 }

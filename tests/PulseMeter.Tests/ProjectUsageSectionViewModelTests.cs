@@ -33,7 +33,9 @@ public sealed class ProjectUsageSectionViewModelTests
         ]);
 
         Assert.True(viewModel.HasProjectUsage);
+        Assert.True(viewModel.HasSelectedProject);
         Assert.Equal("PulseMeter", viewModel.SelectedProjectTitle);
+        Assert.Equal(@"C:\Projects\PulseMeter", viewModel.SelectedProjectPathText);
         Assert.Contains("600.0K", viewModel.SelectedProjectSummary);
         Assert.Contains("4 active days", viewModel.SelectedProjectSummary);
         Assert.Contains("PulseMeter", viewModel.SelectedProjectChatsText);
@@ -44,5 +46,17 @@ public sealed class ProjectUsageSectionViewModelTests
         Assert.Equal("+400.0K", viewModel.LargestIncreaseValueText);
         Assert.Equal("Docs", viewModel.LargestDropProjectText);
         Assert.Equal("-220.0K", viewModel.LargestDropValueText);
+    }
+
+    [Fact]
+    public void ApplyRows_WithNoProjects_ClearsSelectedProjectIdentity()
+    {
+        var viewModel = new ProjectUsageSectionViewModel(new ProjectUsagePresenter());
+
+        viewModel.ApplyRows([]);
+
+        Assert.False(viewModel.HasSelectedProject);
+        Assert.Equal("Select a project", viewModel.SelectedProjectTitle);
+        Assert.Equal(string.Empty, viewModel.SelectedProjectPathText);
     }
 }

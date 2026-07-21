@@ -90,10 +90,18 @@ public sealed class RunwayForecastPresenter : IRunwayForecastPresenter
             LimitRunwayForecastState.Learning => "One more live sample after 2m will unlock a projection.",
             LimitRunwayForecastState.Stable =>
                 "No measurable usage change was observed during this sample; this is not a long-term prediction.",
+            LimitRunwayForecastState.OnTrack when forecast.ExhaustionProbabilityBeforeReset is double probability
+                && forecast.ProjectedRemainingAtResetPercent is double remaining =>
+                $"{FormatProbability(probability)} model probability of exhausting before reset; about {remaining.ToString("0.#", CultureInfo.InvariantCulture)}% is projected to remain.",
             LimitRunwayForecastState.OnTrack when forecast.ProjectedRemainingAtResetPercent is double remaining =>
                 $"About {remaining.ToString("0.#", CultureInfo.InvariantCulture)}% is projected to remain at reset.",
             LimitRunwayForecastState.OnTrack => "The current window is projected to reset before exhaustion.",
             LimitRunwayForecastState.AtRisk when forecast.ExhaustsAtUtc <= now => "The last projection passed; waiting for fresh usage evidence.",
+            LimitRunwayForecastState.AtRisk when forecast.ExhaustionProbabilityBeforeReset is double probability
+                && forecast.IsActionable =>
+                $"{FormatProbability(probability)} model probability of exhausting before reset; this is inside the alert window.",
+            LimitRunwayForecastState.AtRisk when forecast.ExhaustionProbabilityBeforeReset is double probability =>
+                $"{FormatProbability(probability)} model probability of exhausting before reset; more evidence may change this forecast.",
             LimitRunwayForecastState.AtRisk when forecast.IsActionable => "Recent pace reaches the limit before reset and is inside the alert window.",
             LimitRunwayForecastState.AtRisk => "Recent pace reaches the limit before reset; the alert window is not close yet.",
             LimitRunwayForecastState.Exhausted => "Waiting for this rate-limit window to reset.",
@@ -116,8 +124,12 @@ public sealed class RunwayForecastPresenter : IRunwayForecastPresenter
         var pace = forecast.PercentPerHour is double percentPerHour
             ? $" | {percentPerHour.ToString("0.#", CultureInfo.InvariantCulture)}%/h pace"
             : string.Empty;
+        var resetRisk = forecast.ExhaustionProbabilityBeforeReset is double probability
+            ? $" | {FormatProbability(probability)} before reset"
+            : string.Empty;
         var readings = forecast.SampleCount == 1 ? "1 reading" : $"{forecast.SampleCount} readings";
-        return $"Estimated | {FormatDuration(duration)} sample | {readings} | {FormatConfidence(forecast.Confidence)} confidence{pace}";
+        var modelRange = forecast.ProjectionPoints is { Count: > 1 } ? " | P10-P90 model range" : string.Empty;
+        return $"Model | {FormatDuration(duration)} sample | {readings} | {FormatConfidence(forecast.Confidence)} evidence{pace}{resetRisk}{modelRange}";
     }
 
     private static (string Text, string Foreground, string Background, string Border) BuildStatus(
@@ -156,6 +168,11 @@ public sealed class RunwayForecastPresenter : IRunwayForecastPresenter
             LimitRunwayForecastConfidence.Medium => "Medium",
             _ => "Low"
         };
+    }
+
+    private static string FormatProbability(double probability)
+    {
+        return probability.ToString("P1", CultureInfo.InvariantCulture);
     }
 
     private static string FormatDuration(TimeSpan value)

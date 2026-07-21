@@ -24,7 +24,7 @@ PulseMeter does not send usage analytics, crash reports, or maintainer-owned tra
 
 ## Local Data Written
 
-PulseMeter stores its own settings under `%LOCALAPPDATA%\PulseMeter`, including window state, sync settings, and inferred reset-credit expiry timestamps.
+PulseMeter stores its own settings under `%LOCALAPPDATA%\PulseMeter`, including window state, sync settings, inferred reset-credit expiry timestamps, and a bounded Runway Forecast observation history. Runway observations contain rate-limit bucket and display labels, window duration, used percentage, reset time, and observation time. They do not contain prompt text, message content, project paths, thread IDs, credentials, or account identifiers.
 
 ## Credentials
 

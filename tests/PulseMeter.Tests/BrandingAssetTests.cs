@@ -21,7 +21,7 @@ public sealed class BrandingAssetTests
     {
         var xaml = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml"));
 
-        Assert.Contains("Icon=\"/Assets/PulseMeter.ico\"", xaml);
+        Assert.Contains("Icon=\"/PulseMeter;component/Assets/PulseMeter.ico\"", xaml);
     }
 
     [Fact]
@@ -37,7 +37,7 @@ public sealed class BrandingAssetTests
         var headerTitleArea = xaml[headerStart..controlsStart];
 
         Assert.Contains("x:Name=\"ExpandedHeaderLogo\"", headerTitleArea);
-        Assert.Contains("ImageSource=\"/Assets/PulseMeterLogo.png\"", headerTitleArea);
+        Assert.Contains("ImageSource=\"/PulseMeter;component/Assets/PulseMeterLogo.png\"", headerTitleArea);
         Assert.True(
             headerTitleArea.IndexOf("x:Name=\"ExpandedHeaderLogo\"", StringComparison.Ordinal)
                 < headerTitleArea.IndexOf("Text=\"{Binding CompactTitleText}\"", StringComparison.Ordinal));
@@ -68,7 +68,7 @@ public sealed class BrandingAssetTests
     public void PulseMeterIcon_ArtworkFillsTaskbarCanvas(int size)
     {
         var entries = ReadIconEntries(FindWorkspaceFile("src", "PulseMeter", "Assets", "PulseMeter.ico"));
-        var entry = Assert.Single(entries.Where(entry => entry.Width == size));
+        var entry = Assert.Single(entries, entry => entry.Width == size);
 
         var coverage = MeasureVisibleBoundsCoverage(entry);
 

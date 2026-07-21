@@ -8,6 +8,51 @@ namespace PulseMeter.Tests;
 public sealed class PulseMeterWindowViewModelSyncTests
 {
     [Fact]
+    public void MergeSignals_RemovesDuplicateRateLimitAlertForTheSameWindow()
+    {
+        var usageSignals = new UsageSignalsSnapshot
+        {
+            AttentionSignals =
+            [
+                new UsageAttentionSignal(
+                    3,
+                    "LIMIT",
+                    "Weekly window is low",
+                    "25% left",
+                    "#F97316",
+                    Kind: UsageAttentionSignalKind.RateLimit,
+                    ScopeId: "codex|10080")
+            ]
+        };
+        UsageAttentionSignal[] budgetSignals =
+        [
+            new UsageAttentionSignal(
+                3,
+                "BUDGET",
+                "7d budget warning",
+                "7d is 75% used",
+                "#F97316",
+                Kind: UsageAttentionSignalKind.RateLimit,
+                ScopeId: "codex|10080"),
+            new UsageAttentionSignal(
+                3,
+                "BUDGET",
+                "5h budget warning",
+                "5h is 75% used",
+                "#F97316",
+                Kind: UsageAttentionSignalKind.RateLimit,
+                ScopeId: "codex|300")
+        ];
+
+        var merged = PulseMeterWindowViewModel.MergeSignals(usageSignals, budgetSignals);
+
+        Assert.Equal(2, merged.AttentionSignals.Count);
+        Assert.Contains(merged.AttentionSignals, signal => signal.BadgeText == "LIMIT" && signal.ScopeId == "codex|10080");
+        Assert.DoesNotContain(merged.AttentionSignals, signal => signal.BadgeText == "BUDGET" && signal.ScopeId == "codex|10080");
+        Assert.Contains(merged.AttentionSignals, signal => signal.BadgeText == "BUDGET" && signal.ScopeId == "codex|300");
+    }
+
+    [Fact]
     public void AutoSyncText_DescribesConfiguredInterval()
     {
         var viewModel = new PulseMeterWindowViewModel(new StubUsageService(), TimeSpan.FromSeconds(90));
@@ -42,6 +87,34 @@ public sealed class PulseMeterWindowViewModelSyncTests
 
         Assert.Equal("STALE", viewModel.StatusBadgeText);
         Assert.Equal("Stale", viewModel.SyncStatusText);
+        Assert.Equal("#D97706", viewModel.StatusBadgeBrush);
+        Assert.Equal(viewModel.StatusBadgeBrush, viewModel.DataBar.StatusBadgeBrush);
+        Assert.Equal(viewModel.CompactStatusSummaryText, viewModel.DataBar.StatusSummaryText);
+        Assert.Equal(viewModel.StatusBadgeBrush, viewModel.ExpandedHeader.StatusBadgeBrush);
+        Assert.Equal(viewModel.LastUpdatedText, viewModel.ExpandedHeader.LastUpdatedText);
+        Assert.Equal(viewModel.LastUpdatedDetailText, viewModel.ExpandedHeader.LastUpdatedDetailText);
+        Assert.Equal($"{viewModel.StatusBadgeText}. {viewModel.LastUpdatedDetailText}", viewModel.ExpandedHeader.StatusSummaryText);
+    }
+
+    [Theory]
+    [InlineData(SyncStatus.Live, "#16A34A")]
+    [InlineData(SyncStatus.Mocked, "#16A34A")]
+    [InlineData(SyncStatus.Stale, "#D97706")]
+    [InlineData(SyncStatus.Unavailable, "#DC2626")]
+    public void StatusBadgeBrush_ReflectsTheCurrentDataState(SyncStatus status, string expectedBrush)
+    {
+        var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
+
+        viewModel.ApplySnapshot(new UsageSnapshot
+        {
+            Source = status == SyncStatus.Mocked ? "Mock" : "AppServer",
+            SyncStatus = status,
+            LastUpdatedUtc = DateTimeOffset.UtcNow
+        });
+
+        Assert.Equal(expectedBrush, viewModel.StatusBadgeBrush);
+        Assert.Equal(expectedBrush, viewModel.DataBar.StatusBadgeBrush);
+        Assert.Equal(expectedBrush, viewModel.ExpandedHeader.StatusBadgeBrush);
     }
 
     [Fact]
@@ -85,6 +158,13 @@ public sealed class PulseMeterWindowViewModelSyncTests
         Assert.False(viewModel.SyncNowCommand.CanExecute(null));
         Assert.Equal("Syncing...", viewModel.SyncButtonText);
         Assert.Equal("Syncing now...", viewModel.SyncFeedbackText);
+        Assert.Equal("#1F73FF", viewModel.StatusBadgeBrush);
+        Assert.Equal("#1F73FF", viewModel.DataBar.StatusBadgeBrush);
+        Assert.Equal("#1F73FF", viewModel.ExpandedHeader.StatusBadgeBrush);
+        Assert.True(viewModel.ExpandedHeader.IsRefreshing);
+        Assert.Equal("Syncing...", viewModel.ExpandedHeader.SyncButtonText);
+        Assert.Equal("Syncing usage", viewModel.ExpandedHeader.SyncButtonTooltip);
+        Assert.Equal("Syncing usage", viewModel.ExpandedHeader.SyncButtonAccessibleLabel);
 
         var updatedLocal = DateTimeOffset.Now;
         pendingSnapshot.SetResult(new UsageSnapshot
@@ -98,14 +178,20 @@ public sealed class PulseMeterWindowViewModelSyncTests
         Assert.False(viewModel.IsRefreshing);
         Assert.Equal("Sync now", viewModel.SyncButtonText);
         Assert.Equal($"Synced at {updatedLocal:HH:mm}", viewModel.SyncFeedbackText);
+        Assert.False(viewModel.HasActionableSyncIssue);
+        Assert.False(viewModel.ExpandedHeader.IsRefreshing);
+        Assert.Equal("Sync now", viewModel.ExpandedHeader.SyncButtonText);
+        Assert.Equal("Sync usage (F5)", viewModel.ExpandedHeader.SyncButtonTooltip);
+        Assert.Equal("Sync usage now", viewModel.ExpandedHeader.SyncButtonAccessibleLabel);
     }
 
     [Fact]
-    public async Task SyncNowCommand_ShowsFailureFeedbackWhenRefreshFails()
+    public async Task SyncNowCommand_HidesSensitiveFailureDetailsWhenRefreshFails()
     {
+        const string sensitiveDetails = @"C:\Users\Alice\.codex\sessions\private.json token=secret-token";
         var service = new StubUsageService
         {
-            ExceptionToThrow = new InvalidOperationException("app-server unavailable")
+            ExceptionToThrow = new InvalidOperationException(sensitiveDetails)
         };
         var viewModel = new PulseMeterWindowViewModel(service, TimeSpan.FromSeconds(90));
 
@@ -113,7 +199,15 @@ public sealed class PulseMeterWindowViewModelSyncTests
 
         Assert.False(viewModel.IsRefreshing);
         Assert.Equal("Sync now", viewModel.SyncButtonText);
-        Assert.Equal("Sync failed: app-server unavailable", viewModel.SyncFeedbackText);
+        Assert.Equal("Sync failed. Try again.", viewModel.SyncFeedbackText);
+        Assert.True(viewModel.HasActionableSyncIssue);
+        Assert.Equal("Sync failed", viewModel.SyncIssueTitle);
+        Assert.Equal("PulseMeter could not refresh usage. Check the monitored app, then try again.", viewModel.SyncIssueText);
+        Assert.Equal("#FEF2F2", viewModel.SyncIssueBackground);
+        Assert.Equal("#FCA5A5", viewModel.SyncIssueBorderBrush);
+        Assert.DoesNotContain("C:\\Users", viewModel.SyncFeedbackText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Alice", viewModel.SyncFeedbackText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("secret-token", viewModel.SyncFeedbackText, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -134,9 +228,83 @@ public sealed class PulseMeterWindowViewModelSyncTests
 
         Assert.Equal("UNAVAILABLE", viewModel.StatusBadgeText);
         Assert.Equal("The monitored app is not running. Start it, then sync again.", viewModel.StatusMessage);
+        Assert.Equal("#DC2626", viewModel.StatusMessageBrush);
+        Assert.True(viewModel.HasActionableSyncIssue);
+        Assert.Equal("Live source unavailable", viewModel.SyncIssueTitle);
+        Assert.Equal("The monitored app is not running. Start it, then sync again.", viewModel.SyncIssueText);
+        Assert.Contains("Live source unavailable", viewModel.DataBar.StatusSummaryText);
+        Assert.Contains("Start it, then sync again", viewModel.DataBar.StatusSummaryText);
+        Assert.False(viewModel.HasSectionStatusMessage);
         Assert.Equal(
             "Source unavailable: The monitored app is not running. Start it, then sync again.",
             viewModel.SyncFeedbackText);
+    }
+
+    [Fact]
+    public void StaleSnapshot_ShowsGlobalRetryIssueWithoutDuplicatingSectionStatus()
+    {
+        var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
+        var updated = DateTimeOffset.UtcNow.AddMinutes(-10);
+
+        viewModel.ApplySnapshot(new UsageSnapshot
+        {
+            Source = "AppServer",
+            SyncStatus = SyncStatus.Stale,
+            LastUpdatedUtc = updated,
+            StatusMessage = "Cached usage is older than expected."
+        });
+
+        Assert.True(viewModel.HasActionableSyncIssue);
+        Assert.Equal("Usage data is stale", viewModel.SyncIssueTitle);
+        Assert.Contains("Retry to refresh usage.", viewModel.SyncIssueText);
+        Assert.Equal("#FFF7ED", viewModel.SyncIssueBackground);
+        Assert.Equal("#FDBA74", viewModel.SyncIssueBorderBrush);
+        Assert.Equal("#C2410C", viewModel.SyncIssueForeground);
+        Assert.False(viewModel.HasSectionStatusMessage);
+    }
+
+    [Fact]
+    public void MockStatusMessage_RemainsInRateLimitsWithoutGlobalIssueBanner()
+    {
+        var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
+
+        viewModel.ApplySnapshot(new UsageSnapshot
+        {
+            Source = "Mock",
+            SyncStatus = SyncStatus.Mocked,
+            StatusMessage = "Representative mock data."
+        });
+
+        Assert.False(viewModel.HasActionableSyncIssue);
+        Assert.True(viewModel.HasSectionStatusMessage);
+        Assert.Equal(string.Empty, viewModel.SyncIssueTitle);
+    }
+
+    [Fact]
+    public void InitialStartingSnapshot_DoesNotFlashUnavailableBanner()
+    {
+        var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
+
+        Assert.False(viewModel.HasActionableSyncIssue);
+        Assert.True(viewModel.HasSectionStatusMessage);
+    }
+
+    [Theory]
+    [InlineData(SyncStatus.Mocked, "#64748B")]
+    [InlineData(SyncStatus.Live, "#64748B")]
+    [InlineData(SyncStatus.Stale, "#D97706")]
+    [InlineData(SyncStatus.Unavailable, "#DC2626")]
+    public void StatusMessageBrush_ReflectsSyncSeverity(SyncStatus status, string expectedBrush)
+    {
+        var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
+
+        viewModel.ApplySnapshot(new UsageSnapshot
+        {
+            SyncStatus = status,
+            StatusMessage = "Status detail"
+        });
+
+        Assert.Equal(expectedBrush, viewModel.StatusMessageBrush);
     }
 
     [Fact]
@@ -607,7 +775,7 @@ public sealed class PulseMeterWindowViewModelSyncTests
             ]
         });
 
-        Assert.Contains(viewModel.NeedsAttention.NeedsAttentionItems, item => item.Title == "Rate limit budget is critical");
+        Assert.Contains(viewModel.NeedsAttention.NeedsAttentionItems, item => item.Title == "5h budget is critical");
     }
 
     [Fact]

@@ -19,6 +19,14 @@ public interface IAppServerProcessFactory
     IAppServerProcess Start(string? executable = null);
 }
 
+public sealed class AppServerLaunchException : Exception
+{
+    public AppServerLaunchException(Exception? innerException = null)
+        : base("The monitored CLI could not be started.", innerException)
+    {
+    }
+}
+
 public sealed class AppServerProcessFactory : IAppServerProcessFactory
 {
     public IAppServerProcess Start(string? executable = null)
@@ -51,7 +59,7 @@ public sealed class AppServerProcess : IAppServerProcess
 
         if (resolution is null)
         {
-            throw new InvalidOperationException("Monitored CLI not found. Configure the CLI path, then sync again.");
+            throw new AppServerLaunchException();
         }
 
         var startInfo = BuildStartInfo(resolution.ExecutablePath);
@@ -59,7 +67,7 @@ public sealed class AppServerProcess : IAppServerProcess
         try
         {
             var process = Process.Start(startInfo)
-                ?? throw new InvalidOperationException("Could not start the local app-server.");
+                ?? throw new AppServerLaunchException();
 
             process.ErrorDataReceived += (_, args) =>
             {
@@ -74,7 +82,7 @@ public sealed class AppServerProcess : IAppServerProcess
         }
         catch (Win32Exception ex)
         {
-            throw new InvalidOperationException($"Could not start monitored CLI at {resolution.ExecutablePath}.", ex);
+            throw new AppServerLaunchException(ex);
         }
     }
 

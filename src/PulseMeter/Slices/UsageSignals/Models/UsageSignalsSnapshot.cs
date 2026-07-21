@@ -8,11 +8,13 @@ public sealed class UsageSignalsSnapshot
 
     public IReadOnlyList<LimitRunwayForecast> RunwayForecasts { get; init; } = Array.Empty<LimitRunwayForecast>();
 
+    public IReadOnlyList<LimitUsageTrend> UsageTrends { get; init; } = Array.Empty<LimitUsageTrend>();
+
     public IdleDrainIncident? IdleDrainIncident { get; init; }
 
     public IReadOnlyList<UsageAttentionSignal> AttentionSignals { get; init; } = Array.Empty<UsageAttentionSignal>();
 
     public bool ShowAllAttentionSignals { get; init; }
 
-    public bool HasSignals => RunwaySignals.Count > 0 || IdleDrainIncident is not null || AttentionSignals.Count > 0;
+    public bool HasSignals => RunwaySignals.Count > 0 || UsageTrends.Count > 0 || IdleDrainIncident is not null || AttentionSignals.Count > 0;
 }

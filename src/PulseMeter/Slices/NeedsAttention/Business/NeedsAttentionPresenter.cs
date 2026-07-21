@@ -7,19 +7,12 @@ public interface INeedsAttentionPresenter
 
 public sealed class NeedsAttentionPresenter : INeedsAttentionPresenter
 {
-    private const int MaximumItems = 3;
-
     public IReadOnlyList<NeedsAttentionItem> BuildItems(UsageSignalsSnapshot signals)
     {
-        var ordered = signals.AttentionSignals
+        return signals.AttentionSignals
             .OrderBy(signal => signal.Priority)
+            .Select(ToItem)
             .ToList();
-
-        var selected = signals.ShowAllAttentionSignals
-            ? ordered
-            : ordered.Take(MaximumItems);
-
-        return selected.Select(ToItem).ToList();
     }
 
     private static NeedsAttentionItem ToItem(UsageAttentionSignal signal)
@@ -30,6 +23,20 @@ public sealed class NeedsAttentionPresenter : INeedsAttentionPresenter
             signal.Detail,
             signal.AccentBrush,
             signal.DiagnosticText,
-            signal.DismissSignalId);
+            signal.DismissSignalId,
+            GetReviewTarget(signal.Kind));
+    }
+
+    private static NeedsAttentionReviewTarget? GetReviewTarget(UsageAttentionSignalKind kind)
+    {
+        return kind switch
+        {
+            UsageAttentionSignalKind.Runway => NeedsAttentionReviewTarget.RunwayForecast,
+            UsageAttentionSignalKind.RateLimit => NeedsAttentionReviewTarget.RateLimits,
+            UsageAttentionSignalKind.ResetCredit => NeedsAttentionReviewTarget.ResetCredits,
+            UsageAttentionSignalKind.DailyUsage => NeedsAttentionReviewTarget.DailyUsage,
+            UsageAttentionSignalKind.ProjectUsage => NeedsAttentionReviewTarget.ProjectUsage,
+            _ => null
+        };
     }
 }

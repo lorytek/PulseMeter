@@ -7,6 +7,42 @@ namespace PulseMeter.Tests;
 public sealed class PulseMeterWindowViewModelSelectionTests
 {
     [Fact]
+    public void ApplySnapshot_RestoresPreferredTrackByStableKey()
+    {
+        var viewModel = new PulseMeterWindowViewModel(
+            new StubUsageService(),
+            selectedLimitKey: "CODEX_BENGALFOX");
+
+        viewModel.ApplySnapshot(new UsageSnapshot
+        {
+            Buckets =
+            [
+                Bucket("codex", "General", "5h", 4),
+                Bucket("codex_bengalfox", "GPT-5.3-Spark", "5h", 22)
+            ]
+        });
+
+        Assert.Equal("codex_bengalfox", viewModel.SelectedLimitOption?.Key);
+        Assert.Equal("codex_bengalfox", viewModel.SelectedLimitKey);
+    }
+
+    [Fact]
+    public void ApplySnapshot_WhenPreferredTrackDisappears_FallsBackSafely()
+    {
+        var viewModel = new PulseMeterWindowViewModel(
+            new StubUsageService(),
+            selectedLimitKey: "retired-track");
+
+        viewModel.ApplySnapshot(new UsageSnapshot
+        {
+            Buckets = [Bucket("codex", "General", "5h", 4)]
+        });
+
+        Assert.Equal("codex", viewModel.SelectedLimitOption?.Key);
+        Assert.Equal("codex", viewModel.SelectedLimitKey);
+    }
+
+    [Fact]
     public void ApplySnapshot_CreatesLimitOptionsAndUsesSelectedGroupForQuotaRows()
     {
         var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
@@ -401,21 +437,21 @@ public sealed class PulseMeterWindowViewModelSelectionTests
 
         Assert.True(viewModel.IsNavigationPanelExpanded);
         Assert.Equal(205, viewModel.NavigationPanelWidth);
-        Assert.Equal("\u2039", viewModel.NavigationPanelToggleGlyph);
+        Assert.Equal("\uE76B", viewModel.NavigationPanelToggleGlyph);
         Assert.Equal("Collapse navigation", viewModel.NavigationPanelToggleTooltip);
 
         viewModel.ToggleNavigationPanel();
 
         Assert.False(viewModel.IsNavigationPanelExpanded);
         Assert.Equal(64, viewModel.NavigationPanelWidth);
-        Assert.Equal("\u203A", viewModel.NavigationPanelToggleGlyph);
+        Assert.Equal("\uE76C", viewModel.NavigationPanelToggleGlyph);
         Assert.Equal("Expand navigation", viewModel.NavigationPanelToggleTooltip);
 
         viewModel.ToggleNavigationPanel();
 
         Assert.True(viewModel.IsNavigationPanelExpanded);
         Assert.Equal(205, viewModel.NavigationPanelWidth);
-        Assert.Equal("\u2039", viewModel.NavigationPanelToggleGlyph);
+        Assert.Equal("\uE76B", viewModel.NavigationPanelToggleGlyph);
     }
 
     [Fact]

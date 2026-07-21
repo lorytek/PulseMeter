@@ -13,6 +13,7 @@ using PulseMeter.Slices.ResetCredits;
 using PulseMeter.Slices.RunwayForecast;
 using PulseMeter.Slices.UsageAttribution;
 using PulseMeter.Slices.UsageSignals;
+using PulseMeter.Slices.UsageTrend;
 
 namespace PulseMeter.Slices.PulseMeterWindow.Business;
 
@@ -20,10 +21,19 @@ internal static class PulseMeterSlicesRegistration
 {
     internal static IServiceCollection AddPulseMeterSlices(this IServiceCollection services)
     {
+        services.AddPulseMeterSlicesWithoutUsageSignals();
+        services.AddUsageSignalsSlice();
+
+        return services;
+    }
+
+    internal static IServiceCollection AddPulseMeterSlicesWithoutUsageSignals(this IServiceCollection services)
+    {
         services.AddDataBarSlice();
         services.AddExpandedHeaderSlice();
         services.AddNavigationRailSlice();
         services.AddRateLimitsSlice();
+        services.AddUsageTrendSlice();
         services.AddRateLimitsDailySlice();
         services.AddRunwayForecastSlice();
         services.AddNeedsAttentionSlice();
@@ -33,7 +43,6 @@ internal static class PulseMeterSlicesRegistration
         services.AddProjectUsageSlice();
         services.AddUsageAttributionSlice();
         services.AddDailyUsageSlice();
-        services.AddUsageSignalsSlice();
 
         return services;
     }

@@ -141,13 +141,18 @@ internal static class RateLimitsDailyDisplayBuilder
         {
             var sliceTicks = Math.Max(1, duration.Ticks / DailyRateLimitSliceCount);
             var sliceStartUtc = resetAtUtc.Value - duration + TimeSpan.FromTicks(sliceTicks * index);
-            return sliceStartUtc.ToLocalTime().ToString("dddd", CultureInfo.CurrentCulture);
+            return FormatCalendarDayLabel(sliceStartUtc, now);
         }
 
-        return now
-            .AddDays(index - activeDayIndex)
-            .ToLocalTime()
-            .ToString("dddd", CultureInfo.CurrentCulture);
+        return FormatCalendarDayLabel(now.AddDays(index - activeDayIndex), now);
+    }
+
+    private static string FormatCalendarDayLabel(DateTimeOffset day, DateTimeOffset now)
+    {
+        var localDay = day.ToLocalTime();
+        return localDay.Date == now.ToLocalTime().Date
+            ? "Today"
+            : localDay.ToString("dddd", CultureInfo.CurrentCulture);
     }
 
     private static bool TryGetWeeklyWindowTiming(

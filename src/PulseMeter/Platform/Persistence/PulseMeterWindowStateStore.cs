@@ -36,48 +36,11 @@ public sealed class PulseMeterWindowStateStore : IPulseMeterWindowStateStore
 
     public PulseMeterWindowState? Load()
     {
-        try
-        {
-            if (!File.Exists(_filePath))
-            {
-                return null;
-            }
-
-            var json = File.ReadAllText(_filePath);
-            return JsonSerializer.Deserialize<PulseMeterWindowState>(json, JsonOptions);
-        }
-        catch (IOException)
-        {
-            return null;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return null;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
+        return AtomicJsonFileStore.Load<PulseMeterWindowState>(_filePath, JsonOptions);
     }
 
     public void Save(PulseMeterWindowState state)
     {
-        try
-        {
-            var directory = Path.GetDirectoryName(_filePath);
-            if (!string.IsNullOrWhiteSpace(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            var json = JsonSerializer.Serialize(state, JsonOptions);
-            File.WriteAllText(_filePath, json);
-        }
-        catch (IOException)
-        {
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
+        AtomicJsonFileStore.Save(_filePath, state, JsonOptions);
     }
 }

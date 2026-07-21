@@ -69,6 +69,37 @@ public sealed class CodexResetCreditServiceTests
     }
 
     [Fact]
+    public void ParseResponse_TreatsOutOfRangeNumericAndStringUnixSecondsAsAbsent()
+    {
+        using var document = JsonDocument.Parse("""
+            {
+              "available_count": 2,
+              "credits": [
+                {
+                  "status": "available",
+                  "granted_at": 9223372036854775807,
+                  "expires_at": "9223372036854775807"
+                },
+                {
+                  "status": "available",
+                  "granted_at": "9223372036854775807",
+                  "expires_at": 9223372036854775807
+                }
+              ]
+            }
+            """);
+
+        var result = CodexResetCreditService.ParseResponse(document.RootElement);
+
+        Assert.Equal(2, result.AvailableCount);
+        Assert.All(result.Credits, credit =>
+        {
+            Assert.Null(credit.GrantedAtUtc);
+            Assert.Null(credit.ExpiresAtUtc);
+        });
+    }
+
+    [Fact]
     public async Task TryFetchAsync_UsesLocalAuthForOpenAiResetCreditRequest()
     {
         var directory = Path.Combine(Path.GetTempPath(), "PulseMeter.Tests", Guid.NewGuid().ToString("N"));

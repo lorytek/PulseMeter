@@ -4,6 +4,7 @@ using PulseMeter.Platform.Windows;
 using PulseMeter.Platform.Threading;
 using PulseMeter.Platform.Timing;
 using PulseMeter.Slices.UsageCollection;
+using PulseMeter.Slices.UsageSignals.Business;
 using System.Windows;
 
 namespace PulseMeter.Tests;
@@ -119,7 +120,11 @@ public sealed class PulseMeterWindowLifecycleCoordinatorTests
     public async Task Stop_SavesStateStopsTimersAndDisposesTray()
     {
         var usageService = new StubUsageService();
-        var viewModel = new PulseMeterWindowViewModel(usageService, TimeSpan.FromSeconds(90));
+        var usageSignalsTracker = new RecordingUsageSignalsTracker();
+        var viewModel = new PulseMeterWindowViewModel(
+            usageService,
+            TimeSpan.FromSeconds(90),
+            usageSignalsTracker: usageSignalsTracker);
         var tray = new StubTrayIconService();
         var settingsStore = new StubAppSettingsStore();
         var windowStateStore = new StubWindowStateStore();
@@ -147,6 +152,117 @@ public sealed class PulseMeterWindowLifecycleCoordinatorTests
         Assert.False(settingsStore.Saved.DashboardVisibility.BurnAnalysis);
         Assert.NotNull(windowStateStore.Saved);
         Assert.All(timerFactory.Timers, timer => Assert.False(timer.Started));
+        Assert.Equal(1, usageSignalsTracker.FlushCount);
+    }
+
+    [Fact]
+    public async Task SelectedRateLimitTrack_IsSavedOnlyWhenItsStableKeyChanges()
+    {
+        var usageService = new StubUsageService();
+        var viewModel = new PulseMeterWindowViewModel(usageService);
+        var settingsStore = new StubAppSettingsStore();
+        var coordinator = new PulseMeterWindowLifecycleCoordinator(
+            usageService,
+            viewModel,
+            new StubPulseMeterWindow(),
+            new StubTrayIconService(),
+            new StubForegroundWindowService(),
+            settingsStore,
+            new StubWindowStateStore(),
+            new StubPulseMeterTimerFactory(),
+            new ImmediateUiDispatcher());
+        var snapshot = new UsageSnapshot
+        {
+            Buckets =
+            [
+                new RateLimitBucket { LimitId = "codex", LimitName = "General", GroupLabel = "General", WindowLabel = "5h" },
+                new RateLimitBucket { LimitId = "codex_bengalfox", LimitName = "GPT-5.3-Spark", GroupLabel = "GPT-5.3-Spark", WindowLabel = "5h" }
+            ]
+        };
+
+        await coordinator.StartAsync();
+        usageService.RaiseSnapshot(snapshot);
+        var savesAfterInitialSelection = settingsStore.SaveCount;
+
+        viewModel.SelectedLimitOption = viewModel.LimitOptions.Single(option => option.Key == "codex_bengalfox");
+
+        Assert.Equal(savesAfterInitialSelection + 1, settingsStore.SaveCount);
+        Assert.Equal("codex_bengalfox", settingsStore.Saved?.SelectedRateLimitKey);
+
+        usageService.RaiseSnapshot(snapshot);
+
+        Assert.Equal(savesAfterInitialSelection + 1, settingsStore.SaveCount);
+    }
+
+    [Fact]
+    public async Task AlwaysOnTopChange_IsSavedThroughTheSettingsLifecycle()
+    {
+        var usageService = new StubUsageService();
+        var viewModel = new PulseMeterWindowViewModel(usageService);
+        var settingsStore = new StubAppSettingsStore();
+        var coordinator = new PulseMeterWindowLifecycleCoordinator(
+            usageService,
+            viewModel,
+            new StubPulseMeterWindow(),
+            new StubTrayIconService(),
+            new StubForegroundWindowService(),
+            settingsStore,
+            new StubWindowStateStore(),
+            new StubPulseMeterTimerFactory(),
+            new ImmediateUiDispatcher());
+
+        await coordinator.StartAsync();
+        viewModel.IsAlwaysOnTop = true;
+
+        Assert.True(settingsStore.Saved?.IsAlwaysOnTop);
+    }
+
+    [Fact]
+    public async Task NavigationPanelStateChange_IsSavedThroughTheSettingsLifecycle()
+    {
+        var usageService = new StubUsageService();
+        var viewModel = new PulseMeterWindowViewModel(usageService);
+        var settingsStore = new StubAppSettingsStore();
+        var coordinator = new PulseMeterWindowLifecycleCoordinator(
+            usageService,
+            viewModel,
+            new StubPulseMeterWindow(),
+            new StubTrayIconService(),
+            new StubForegroundWindowService(),
+            settingsStore,
+            new StubWindowStateStore(),
+            new StubPulseMeterTimerFactory(),
+            new ImmediateUiDispatcher());
+
+        await coordinator.StartAsync();
+        viewModel.NavigationRail.ToggleNavigationPanel();
+
+        Assert.False(viewModel.IsNavigationPanelExpanded);
+        Assert.Equal(false, settingsStore.Saved?.IsNavigationPanelExpanded);
+    }
+
+    [Fact]
+    public async Task Stop_DispatchesTeardownAndLeavesAsyncUsageDisposalToTheProvider()
+    {
+        var usageService = new StubUsageService();
+        var viewModel = new PulseMeterWindowViewModel(usageService, TimeSpan.FromSeconds(90));
+        var dispatcher = new RecordingUiDispatcher();
+        var coordinator = new PulseMeterWindowLifecycleCoordinator(
+            usageService,
+            viewModel,
+            new StubPulseMeterWindow(),
+            new StubTrayIconService(),
+            new StubForegroundWindowService(),
+            new StubAppSettingsStore(),
+            new StubWindowStateStore(),
+            new StubPulseMeterTimerFactory(),
+            dispatcher);
+
+        await coordinator.StartAsync();
+        coordinator.Stop();
+
+        Assert.Equal(1, dispatcher.InvokeCount);
+        Assert.Equal(0, usageService.DisposeAsyncCount);
     }
 
     [Fact]
@@ -191,10 +307,10 @@ public sealed class PulseMeterWindowLifecycleCoordinatorTests
         });
 
         Assert.Empty(tray.Notifications);
-        Assert.Contains(viewModel.NeedsAttention.NeedsAttentionItems, item => item.Title == "Rate limit budget is critical");
+        Assert.Contains(viewModel.NeedsAttention.NeedsAttentionItems, item => item.Title == "5h budget is critical");
     }
 
-    private sealed class StubUsageService : IUsageService
+    private sealed class StubUsageService : IUsageService, IAsyncDisposable
     {
         public event EventHandler<UsageSnapshot>? SnapshotUpdated;
 
@@ -203,6 +319,8 @@ public sealed class PulseMeterWindowLifecycleCoordinatorTests
         public int StartCallCount { get; private set; }
 
         public int GetSnapshotCallCount { get; private set; }
+
+        public int DisposeAsyncCount { get; private set; }
 
         public Task StartAsync(CancellationToken cancellationToken = default)
         {
@@ -224,6 +342,31 @@ public sealed class PulseMeterWindowLifecycleCoordinatorTests
         public void RaiseSnapshot(UsageSnapshot snapshot)
         {
             SnapshotUpdated?.Invoke(this, snapshot);
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            DisposeAsyncCount++;
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingUsageSignalsTracker : IUsageSignalsTracker
+    {
+        public int FlushCount { get; private set; }
+
+        public UsageSignalsSnapshot Observe(UsageSnapshot snapshot, DateTimeOffset nowUtc)
+        {
+            return UsageSignalsSnapshot.Empty;
+        }
+
+        public void DismissIdleDrain()
+        {
+        }
+
+        public void Flush()
+        {
+            FlushCount++;
         }
     }
 
@@ -288,6 +431,8 @@ public sealed class PulseMeterWindowLifecycleCoordinatorTests
     {
         public PulseMeterAppSettings? Saved { get; private set; }
 
+        public int SaveCount { get; private set; }
+
         public PulseMeterAppSettings? Load()
         {
             return null;
@@ -295,6 +440,7 @@ public sealed class PulseMeterWindowLifecycleCoordinatorTests
 
         public void Save(PulseMeterAppSettings settings)
         {
+            SaveCount++;
             Saved = settings;
         }
     }
@@ -354,6 +500,17 @@ public sealed class PulseMeterWindowLifecycleCoordinatorTests
     {
         public void Invoke(Action action)
         {
+            action();
+        }
+    }
+
+    private sealed class RecordingUiDispatcher : IUiDispatcher
+    {
+        public int InvokeCount { get; private set; }
+
+        public void Invoke(Action action)
+        {
+            InvokeCount++;
             action();
         }
     }

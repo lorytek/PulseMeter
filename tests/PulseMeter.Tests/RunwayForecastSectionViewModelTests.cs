@@ -50,7 +50,7 @@ public sealed class RunwayForecastSectionViewModelTests
                 Assert.Equal("18% left", row.RemainingText);
                 Assert.Contains("7m sample", row.EvidenceText);
                 Assert.Contains("5 readings", row.EvidenceText);
-                Assert.Contains("Medium confidence", row.EvidenceText);
+                Assert.Contains("Medium evidence", row.EvidenceText);
                 Assert.Contains("25.7%/h", row.EvidenceText);
             },
             row =>
@@ -121,7 +121,7 @@ public sealed class RunwayForecastSectionViewModelTests
         Assert.Equal("No recent movement", row.ForecastText);
         Assert.Contains("not a long-term prediction", row.DetailText);
         Assert.Contains("3 readings", row.EvidenceText);
-        Assert.Contains("Low confidence", row.EvidenceText);
+        Assert.Contains("Low evidence", row.EvidenceText);
     }
 
     [Fact]

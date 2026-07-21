@@ -64,10 +64,13 @@ public sealed class RateLimitsSectionViewModel : INotifyPropertyChanged
 
     public string RunwayEvidenceText => HasRunwayHint ? "Estimated" : string.Empty;
 
-    public void ApplyBuckets(IEnumerable<RateLimitBucket> buckets, DateTimeOffset now)
+    public void ApplyBuckets(
+        IEnumerable<RateLimitBucket> buckets,
+        DateTimeOffset now,
+        string? preferredLimitKey = null)
     {
         _lastUpdatedAt = now;
-        var selectedKey = SelectedLimitOption?.Key;
+        var selectedKey = SelectedLimitOption?.Key ?? preferredLimitKey;
         _buckets = buckets.ToList();
         var options = _presenter.BuildOptions(_buckets);
 

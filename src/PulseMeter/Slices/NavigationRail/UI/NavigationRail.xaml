@@ -1,17 +1,49 @@
 <UserControl x:Class="PulseMeter.Slices.NavigationRail.UI.NavigationRail"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:PulseMeter.Slices.NavigationRail.UI"
              xmlns:navModels="clr-namespace:PulseMeter.Slices.NavigationRail.Models">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <local:NavigationSectionSelectedConverter x:Key="NavigationSectionSelectedConverter" />
+
+        <Style x:Key="DashboardVisibilityCheckBoxStyle" TargetType="CheckBox">
+            <EventSetter Event="Click" Handler="VisibilityCheckBox_Click" />
+        </Style>
 
         <Style x:Key="NavigationPanelToggleButtonStyle" TargetType="Button">
-            <Setter Property="Width" Value="28" />
-            <Setter Property="Height" Value="28" />
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="30" />
             <Setter Property="Padding" Value="0" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Background" Value="#F8FAFC" />
+            <Setter Property="BorderBrush" Value="#E5E7EB" />
+            <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Surface"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Surface" Property="Background" Value="#F3F7FC" />
+                                <Setter TargetName="Surface" Property="BorderBrush" Value="#D1D5DB" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Surface" Property="BorderBrush" Value="#1F73FF" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style x:Key="NavigationSectionButtonStyle" TargetType="Button">
@@ -24,6 +56,7 @@
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Foreground" Value="#374151" />
+            <Setter Property="AutomationProperties.ItemStatus" Value="" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -41,6 +74,12 @@
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="Surface" Property="BorderBrush" Value="#1F73FF" />
                                 <Setter TargetName="Surface" Property="BorderThickness" Value="1" />
+                            </Trigger>
+                            <Trigger Property="Tag" Value="Current">
+                                <Setter TargetName="Surface" Property="Background" Value="#EFF6FF" />
+                                <Setter Property="Foreground" Value="#1F73FF" />
+                                <Setter Property="AutomationProperties.ItemStatus" Value="Current section" />
+                                <Setter Property="AutomationProperties.HelpText" Value="Current section" />
                             </Trigger>
                             <DataTrigger Binding="{Binding IsNavigationPanelExpanded}" Value="False">
                                 <Setter Property="Width" Value="42" />
@@ -77,13 +116,18 @@
             </Grid.RowDefinitions>
 
             <Button HorizontalAlignment="Right"
-                    Content="{Binding NavigationPanelToggleGlyph}"
                     ToolTip="{Binding NavigationPanelToggleTooltip}"
+                    AutomationProperties.Name="{Binding NavigationPanelToggleTooltip}"
                     Click="NavigationPanelToggleButton_Click"
-                    Style="{StaticResource NavigationPanelToggleButtonStyle}" />
+                    Style="{StaticResource NavigationPanelToggleButtonStyle}">
+                <TextBlock Text="{Binding NavigationPanelToggleGlyph}"
+                           FontFamily="Segoe MDL2 Assets"
+                           FontSize="14" />
+            </Button>
 
             <StackPanel Grid.Row="1" Margin="0,28,0,0">
                 <Button CommandParameter="{x:Static navModels:NavigationSection.Overview}"
+                        Tag="{Binding SelectedSection, Converter={StaticResource NavigationSectionSelectedConverter}, ConverterParameter={x:Static navModels:NavigationSection.Overview}}"
                         ToolTip="Go to overview"
                         AutomationProperties.Name="Go to overview"
                         Click="SectionButton_Click"
@@ -96,6 +140,7 @@
                 </Button>
 
                 <Button CommandParameter="{x:Static navModels:NavigationSection.RateLimits}"
+                        Tag="{Binding SelectedSection, Converter={StaticResource NavigationSectionSelectedConverter}, ConverterParameter={x:Static navModels:NavigationSection.RateLimits}}"
                         ToolTip="Go to rate limits" AutomationProperties.Name="Go to rate limits"
                         Visibility="{Binding IsRateLimitsVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
                         Click="SectionButton_Click" Style="{StaticResource NavigationSectionButtonStyle}">
@@ -106,6 +151,7 @@
                 </Button>
 
                 <Button CommandParameter="{x:Static navModels:NavigationSection.WeeklyPace}"
+                        Tag="{Binding SelectedSection, Converter={StaticResource NavigationSectionSelectedConverter}, ConverterParameter={x:Static navModels:NavigationSection.WeeklyPace}}"
                         ToolTip="Go to weekly pace" AutomationProperties.Name="Go to weekly pace"
                         Visibility="{Binding IsRateLimitsDailyVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
                         Click="SectionButton_Click" Style="{StaticResource NavigationSectionButtonStyle}">
@@ -116,16 +162,18 @@
                 </Button>
 
                 <Button CommandParameter="{x:Static navModels:NavigationSection.RunwayForecast}"
-                        ToolTip="Go to runway forecast" AutomationProperties.Name="Go to runway forecast"
+                        Tag="{Binding SelectedSection, Converter={StaticResource NavigationSectionSelectedConverter}, ConverterParameter={x:Static navModels:NavigationSection.RunwayForecast}}"
+                        ToolTip="Go to coding runway" AutomationProperties.Name="Go to coding runway"
                         Visibility="{Binding IsRunwayForecastVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
                         Click="SectionButton_Click" Style="{StaticResource NavigationSectionButtonStyle}">
                     <StackPanel Style="{StaticResource NavigationItemContentStyle}">
                         <TextBlock Text="&#xE823;" FontFamily="Segoe MDL2 Assets" FontSize="17" />
-                        <TextBlock Margin="8,0,0,0" Text="Runway forecast" FontSize="13.5" Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <TextBlock Margin="8,0,0,0" Text="Coding runway" FontSize="13.5" Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     </StackPanel>
                 </Button>
 
                 <Button CommandParameter="{x:Static navModels:NavigationSection.ResetCredits}"
+                        Tag="{Binding SelectedSection, Converter={StaticResource NavigationSectionSelectedConverter}, ConverterParameter={x:Static navModels:NavigationSection.ResetCredits}}"
                         ToolTip="Go to reset credits" AutomationProperties.Name="Go to reset credits"
                         Visibility="{Binding IsResetCreditsVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
                         Click="SectionButton_Click" Style="{StaticResource NavigationSectionButtonStyle}">
@@ -136,6 +184,7 @@
                 </Button>
 
                 <Button CommandParameter="{x:Static navModels:NavigationSection.AccountUsage}"
+                        Tag="{Binding SelectedSection, Converter={StaticResource NavigationSectionSelectedConverter}, ConverterParameter={x:Static navModels:NavigationSection.AccountUsage}}"
                         ToolTip="Go to account usage" AutomationProperties.Name="Go to account usage"
                         Visibility="{Binding IsAccountUsageVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
                         Click="SectionButton_Click" Style="{StaticResource NavigationSectionButtonStyle}">
@@ -146,6 +195,7 @@
                 </Button>
 
                 <Button CommandParameter="{x:Static navModels:NavigationSection.ProjectUsage}"
+                        Tag="{Binding SelectedSection, Converter={StaticResource NavigationSectionSelectedConverter}, ConverterParameter={x:Static navModels:NavigationSection.ProjectUsage}}"
                         ToolTip="Go to project usage" AutomationProperties.Name="Go to project usage"
                         Visibility="{Binding IsProjectUsageVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
                         Click="SectionButton_Click" Style="{StaticResource NavigationSectionButtonStyle}">
@@ -156,6 +206,7 @@
                 </Button>
 
                 <Button CommandParameter="{x:Static navModels:NavigationSection.BurnAnalysis}"
+                        Tag="{Binding SelectedSection, Converter={StaticResource NavigationSectionSelectedConverter}, ConverterParameter={x:Static navModels:NavigationSection.BurnAnalysis}}"
                         ToolTip="Go to burn analysis" AutomationProperties.Name="Go to burn analysis"
                         Visibility="{Binding IsUsageAttributionVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
                         Click="SectionButton_Click" Style="{StaticResource NavigationSectionButtonStyle}">
@@ -166,6 +217,7 @@
                 </Button>
 
                 <Button CommandParameter="{x:Static navModels:NavigationSection.DailyUsage}"
+                        Tag="{Binding SelectedSection, Converter={StaticResource NavigationSectionSelectedConverter}, ConverterParameter={x:Static navModels:NavigationSection.DailyUsage}}"
                         ToolTip="Go to daily usage" AutomationProperties.Name="Go to daily usage"
                         Visibility="{Binding IsDailyUsageVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
                         Click="SectionButton_Click" Style="{StaticResource NavigationSectionButtonStyle}">
@@ -176,39 +228,62 @@
                 </Button>
             </StackPanel>
 
-            <Button x:Name="CustomizeDashboardButton"
-                    Grid.Row="2"
-                    Height="36"
-                    Padding="8,0"
-                    Background="#F8FAFC"
-                    BorderBrush="#D9E0EA"
-                    ToolTip="Choose visible sections"
-                    AutomationProperties.Name="Choose visible sections"
-                    Click="CustomizeDashboardButton_Click">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                    <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="15" />
-                    <TextBlock Margin="8,0,0,0" Text="Customize" FontSize="13" Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                </StackPanel>
-            </Button>
+            <StackPanel Grid.Row="2">
+                <Button x:Name="CustomizeDashboardButton"
+                        Height="36"
+                        Padding="8,0"
+                        Background="#F8FAFC"
+                        BorderBrush="#D9E0EA"
+                        ToolTip="Choose visible sections"
+                        AutomationProperties.Name="Choose visible sections"
+                        Click="CustomizeDashboardButton_Click">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="15" />
+                        <TextBlock Margin="8,0,0,0" Text="Customize" FontSize="13" Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </StackPanel>
+                </Button>
+                <TextBlock Margin="0,8,0,0"
+                           HorizontalAlignment="Center"
+                           Text="{Binding ApplicationVersionText}"
+                           Foreground="#94A3B8"
+                           FontSize="10.5"
+                           AutomationProperties.Name="{Binding ApplicationVersionText}"
+                           Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            </StackPanel>
 
             <Popup x:Name="CustomizeDashboardPopup"
                    Placement="Right"
                    PlacementTarget="{Binding ElementName=CustomizeDashboardButton}"
                    StaysOpen="False"
                    AllowsTransparency="True"
+                   Opened="CustomizeDashboardPopup_Opened"
+                   Closed="CustomizeDashboardPopup_Closed"
                    KeyDown="CustomizeDashboardPopup_KeyDown">
-                <Border Width="220" Margin="8,0,0,0" Padding="14" Background="#FFFFFF" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="6">
+                <Border Width="260" Margin="8,0,0,0" Padding="14" Background="#FFFFFF" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="6">
                     <StackPanel KeyboardNavigation.TabNavigation="Cycle">
                         <TextBlock Text="Visible sections" FontSize="14" FontWeight="SemiBold" Foreground="#111827" />
-                        <CheckBox x:Name="RateLimitsVisibilityCheckBox" Margin="0,12,0,0" Content="Rate limits" IsChecked="{Binding IsRateLimitsVisible, Mode=TwoWay}" AutomationProperties.Name="Show rate limits" />
-                        <CheckBox Margin="0,8,0,0" Content="Weekly pace" IsChecked="{Binding IsRateLimitsDailyVisible, Mode=TwoWay}" AutomationProperties.Name="Show weekly pace" />
-                        <CheckBox Margin="0,8,0,0" Content="Runway forecast" IsChecked="{Binding IsRunwayForecastVisible, Mode=TwoWay}" AutomationProperties.Name="Show runway forecast" />
-                        <CheckBox Margin="0,8,0,0" Content="Reset credits" IsChecked="{Binding IsResetCreditsVisible, Mode=TwoWay}" AutomationProperties.Name="Show reset credits" />
-                        <CheckBox Margin="0,8,0,0" Content="Account usage" IsChecked="{Binding IsAccountUsageVisible, Mode=TwoWay}" AutomationProperties.Name="Show account usage" />
-                        <CheckBox Margin="0,8,0,0" Content="Project usage" IsChecked="{Binding IsProjectUsageVisible, Mode=TwoWay}" AutomationProperties.Name="Show project usage" />
-                        <CheckBox Margin="0,8,0,0" Content="Burn analysis" IsChecked="{Binding IsUsageAttributionVisible, Mode=TwoWay}" AutomationProperties.Name="Show burn analysis" />
-                        <CheckBox Margin="0,8,0,0" Content="Daily usage" IsChecked="{Binding IsDailyUsageVisible, Mode=TwoWay}" AutomationProperties.Name="Show daily usage" />
-                        <Button Margin="0,14,0,0" Padding="8,5" HorizontalAlignment="Left" Content="Reset to defaults" Click="ResetVisibility_Click" />
+                        <TextBlock Margin="0,4,0,0"
+                                   Text="{Binding VisibleSectionSummaryText}"
+                                   Foreground="#6B7280"
+                                   FontSize="11.5"
+                                   TextWrapping="Wrap"
+                                   AutomationProperties.LiveSetting="Polite" />
+                        <CheckBox x:Name="RateLimitsVisibilityCheckBox" Margin="0,12,0,0" Content="Rate limits" IsChecked="{Binding IsRateLimitsVisible, Mode=TwoWay}" AutomationProperties.Name="Show rate limits" Style="{StaticResource DashboardVisibilityCheckBoxStyle}" />
+                        <CheckBox Margin="0,8,0,0" Content="Weekly pace" IsChecked="{Binding IsRateLimitsDailyVisible, Mode=TwoWay}" AutomationProperties.Name="Show weekly pace" Style="{StaticResource DashboardVisibilityCheckBoxStyle}" />
+                        <CheckBox Margin="0,8,0,0" Content="Coding runway" IsChecked="{Binding IsRunwayForecastVisible, Mode=TwoWay}" AutomationProperties.Name="Show coding runway" Style="{StaticResource DashboardVisibilityCheckBoxStyle}" />
+                        <CheckBox Margin="0,8,0,0" Content="Reset credits" IsChecked="{Binding IsResetCreditsVisible, Mode=TwoWay}" AutomationProperties.Name="Show reset credits" Style="{StaticResource DashboardVisibilityCheckBoxStyle}" />
+                        <CheckBox Margin="0,8,0,0" Content="Account usage" IsChecked="{Binding IsAccountUsageVisible, Mode=TwoWay}" AutomationProperties.Name="Show account usage" Style="{StaticResource DashboardVisibilityCheckBoxStyle}" />
+                        <CheckBox Margin="0,8,0,0" Content="Project usage" IsChecked="{Binding IsProjectUsageVisible, Mode=TwoWay}" AutomationProperties.Name="Show project usage" Style="{StaticResource DashboardVisibilityCheckBoxStyle}" />
+                        <CheckBox Margin="0,8,0,0" Content="Burn analysis" IsChecked="{Binding IsUsageAttributionVisible, Mode=TwoWay}" AutomationProperties.Name="Show burn analysis" Style="{StaticResource DashboardVisibilityCheckBoxStyle}" />
+                        <CheckBox Margin="0,8,0,0" Content="Daily usage" IsChecked="{Binding IsDailyUsageVisible, Mode=TwoWay}" AutomationProperties.Name="Show daily usage" Style="{StaticResource DashboardVisibilityCheckBoxStyle}" />
+                        <Button Margin="0,14,0,0"
+                                Padding="8,5"
+                                HorizontalAlignment="Left"
+                                Content="Restore all sections"
+                                IsEnabled="{Binding HasHiddenSections}"
+                                ToolTip="Show every dashboard section"
+                                AutomationProperties.Name="Restore all dashboard sections"
+                                Click="ResetVisibility_Click" />
                     </StackPanel>
                 </Border>
             </Popup>

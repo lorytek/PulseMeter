@@ -48,6 +48,7 @@
                                                                      Minimum="0"
                                                                      Maximum="100"
                                                                      Value="{Binding ExpiryProgressValue, Mode=OneWay}"
+                                                                     AutomationProperties.Name="{Binding DisplayText}"
                                                                      Foreground="{Binding ExpiryProgressBrush}"
                                                                      Style="{DynamicResource LightProgressBarStyle}" />
                                                     </StackPanel>
