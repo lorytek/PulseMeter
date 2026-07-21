@@ -38,7 +38,7 @@ public sealed class RateLimitsPresenter : IRateLimitsPresenter
 
     public RateLimitOption? SelectOption(IReadOnlyList<RateLimitOption> options, string? selectedKey)
     {
-        return options.FirstOrDefault(option => option.Key == selectedKey)
+        return options.FirstOrDefault(option => option.Key.Equals(selectedKey, StringComparison.OrdinalIgnoreCase))
             ?? options.FirstOrDefault(option =>
                 option.Key.Equals("codex", StringComparison.OrdinalIgnoreCase)
                 || option.DisplayName.Equals("General", StringComparison.OrdinalIgnoreCase))

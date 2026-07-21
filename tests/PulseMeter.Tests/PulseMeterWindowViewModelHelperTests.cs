@@ -28,7 +28,7 @@ public sealed class PulseMeterWindowViewModelHelperTests
         Assert.Equal(7, rows.Count);
         Assert.Equal("Thursday", rows[0].Label);
         Assert.Equal("0%", rows[0].RemainingPercentText);
-        Assert.Equal("Sunday", rows[3].Label);
+        Assert.Equal("Today", rows[3].Label);
         Assert.Equal("#1F73FF", rows[3].LabelBrush);
         Assert.Equal("50%", rows[3].RemainingPercentText);
         Assert.Equal("100%", rows[4].RemainingPercentText);
@@ -48,9 +48,29 @@ public sealed class PulseMeterWindowViewModelHelperTests
         var rows = RateLimitsDailyDisplayBuilder.BuildRows([bucket], now);
 
         Assert.Equal(
-            ["Thursday", "Friday", "Saturday", "Sunday", "Monday", "Tuesday", "Wednesday"],
+            ["Thursday", "Friday", "Saturday", "Today", "Monday", "Tuesday", "Wednesday"],
             rows.Select(row => row.Label));
         Assert.Equal("#1F73FF", rows[3].LabelBrush);
+    }
+
+    [Fact]
+    public void RateLimitsDailyDisplayBuilder_BuildRows_MovesTodayLabelToTheNewCalendarDay()
+    {
+        var tuesday = new DateTimeOffset(2026, 7, 21, 12, 0, 0, TimeSpan.Zero);
+        var bucket = new RateLimitBucket
+        {
+            UsedPercent = 50,
+            WindowDurationMins = 10_080,
+            WindowLabel = "7d",
+            ResetsAtUtc = new DateTimeOffset(2026, 7, 25, 12, 0, 0, TimeSpan.Zero)
+        };
+
+        var tuesdayRows = RateLimitsDailyDisplayBuilder.BuildRows([bucket], tuesday);
+        var wednesdayRows = RateLimitsDailyDisplayBuilder.BuildRows([bucket], tuesday.AddDays(1));
+
+        Assert.Equal("Today", tuesdayRows[3].Label);
+        Assert.Equal("Tuesday", wednesdayRows[3].Label);
+        Assert.Equal("Today", wednesdayRows[4].Label);
     }
 
     [Fact]
@@ -235,6 +255,8 @@ public sealed class PulseMeterWindowViewModelHelperTests
             isExpanded: false,
             compactQuotaRows: [CompactQuotaRow(isWeekly: true)],
             statusBadgeText: "LIVE",
+            statusBadgeBrush: "#16A34A",
+            statusSummaryText: "LIVE. Updated just now.",
             expandCollapseTooltip: "Expand PulseMeter");
 
         Assert.True(dataBar.IsWeeklyOnlyCompactLayout);
@@ -243,6 +265,8 @@ public sealed class PulseMeterWindowViewModelHelperTests
             isExpanded: false,
             compactQuotaRows: [CompactQuotaRow(isWeekly: false)],
             statusBadgeText: "LIVE",
+            statusBadgeBrush: "#16A34A",
+            statusSummaryText: "LIVE. Updated just now.",
             expandCollapseTooltip: "Expand PulseMeter");
 
         Assert.False(dataBar.IsWeeklyOnlyCompactLayout);
@@ -251,9 +275,28 @@ public sealed class PulseMeterWindowViewModelHelperTests
             isExpanded: false,
             compactQuotaRows: [CompactQuotaRow(isWeekly: true), CompactQuotaRow(isWeekly: false)],
             statusBadgeText: "LIVE",
+            statusBadgeBrush: "#16A34A",
+            statusSummaryText: "LIVE. Updated just now.",
             expandCollapseTooltip: "Expand PulseMeter");
 
         Assert.False(dataBar.IsWeeklyOnlyCompactLayout);
+    }
+
+    [Fact]
+    public void CompactQuotaRow_ProvidesAConciseAccessibleSummary()
+    {
+        var row = CompactQuotaRow(isWeekly: false) with
+        {
+            UsageLimitLabel = "5 hour usage limit",
+            RemainingPercentText = "42% left",
+            ResetTimeText = "Resets 11:30 PM",
+            ResetCountdownText = "in 48m",
+            StatusText = "Warning"
+        };
+
+        Assert.Equal(
+            "5 hour usage limit. 42% left. Resets 11:30 PM in 48m. Warning.",
+            row.CompactAccessibleSummary);
     }
 
     [Fact]

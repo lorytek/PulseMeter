@@ -16,6 +16,12 @@ public enum LimitRunwayForecastConfidence
     High
 }
 
+public sealed record LimitRunwayProjectionPoint(
+    DateTimeOffset Timestamp,
+    double ExpectedUsedPercent,
+    double LowerUsedPercent,
+    double UpperUsedPercent);
+
 public sealed record LimitRunwayForecast(
     string BucketId,
     string LimitKey,
@@ -34,4 +40,6 @@ public sealed record LimitRunwayForecast(
     LimitRunwayForecastConfidence Confidence = LimitRunwayForecastConfidence.Low,
     DateTimeOffset? EarliestExhaustsAtUtc = null,
     DateTimeOffset? LatestExhaustsAtUtc = null,
-    int SampleCount = 1);
+    int SampleCount = 1,
+    double? ExhaustionProbabilityBeforeReset = null,
+    IReadOnlyList<LimitRunwayProjectionPoint>? ProjectionPoints = null);

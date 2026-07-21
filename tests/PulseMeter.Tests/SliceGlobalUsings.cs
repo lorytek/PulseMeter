@@ -38,3 +38,5 @@ global using PulseMeter.Slices.UsageAttribution.Models;
 global using PulseMeter.Slices.UsageAttribution.UI;
 global using PulseMeter.Slices.UsageSignals.Business;
 global using PulseMeter.Slices.UsageSignals.Models;
+global using PulseMeter.Slices.UsageTrend.Business;
+global using PulseMeter.Slices.UsageTrend.UI;

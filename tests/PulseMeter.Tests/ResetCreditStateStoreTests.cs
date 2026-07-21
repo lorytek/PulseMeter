@@ -26,5 +26,6 @@ public sealed class ResetCreditStateStoreTests
         Assert.NotNull(loaded);
         Assert.Equal(4, loaded.NextCreditNumber);
         Assert.Equal(new DateTimeOffset(2026, 8, 1, 12, 0, 0, TimeSpan.Zero), loaded.Credits[2].ExpiresAtUtc);
+        Assert.Empty(Directory.EnumerateFiles(Path.GetDirectoryName(path)!, "*.tmp"));
     }
 }

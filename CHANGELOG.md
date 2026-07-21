@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0
+
+- Added a graph-first Coding Runway section for 5-hour and 7-day limits, with actual usage, sustainable pace, estimated reach-limit timing, reset timing, and momentum gauges.
+- Added statistical pace and runway modelling with evidence-aware states, uncertainty timing, and plain-language outcomes for remaining capacity at reset.
+- Persisted rate-limit samples and measurement gaps across restarts, restored recent history from local Codex data, and kept each chart aligned to its real limit window.
+- Reorganized the analytical dashboard, moved Weekly Pace above Coding Runway, simplified duplicate alerts, and removed redundant forecast and selected-project sections.
+- Improved macOS-inspired presentation, chart labels and tooltips, navigation, responsive layout, accessibility text, settings validation, and visible app-version reporting.
+- Consolidated rollout analytics, strengthened atomic local persistence and sync handling, and expanded unit, layout, restart-recovery, and visual-harness coverage.
+
 ## 0.4.0
 
 - Added Project Health comparisons for recent usage, prior-period change, 30-day share, and focused project details.

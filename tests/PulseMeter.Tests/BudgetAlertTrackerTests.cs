@@ -21,6 +21,7 @@ public sealed class BudgetAlertTrackerTests
 
         var signal = Assert.Single(first.AttentionSignals);
         Assert.Equal("BUDGET", signal.BadgeText);
+        Assert.Equal(UsageAttentionSignalKind.DailyUsage, signal.Kind);
         Assert.Equal("Daily token budget is critical", signal.Title);
         Assert.Contains("950 tokens of 1.0K", signal.Detail);
         Assert.Equal("Daily token budget", rows.Label);
@@ -39,7 +40,10 @@ public sealed class BudgetAlertTrackerTests
                 BudgetAlertSettings.Default,
                 now);
 
-        Assert.Equal("Rate limit budget warning", Assert.Single(first.AttentionSignals).Title);
+        var signal = Assert.Single(first.AttentionSignals);
+        Assert.Equal("5h budget warning", signal.Title);
+        Assert.Equal(UsageAttentionSignalKind.RateLimit, signal.Kind);
+        Assert.Equal("codex|300", signal.ScopeId);
         Assert.Equal("Warning", Assert.Single(first.Rows).LevelText);
     }
 
@@ -61,7 +65,7 @@ public sealed class BudgetAlertTrackerTests
 
         var row = Assert.Single(snapshot.Rows);
         Assert.Equal("Critical", row.LevelText);
-        Assert.Equal("Rate limit budget is critical", Assert.Single(snapshot.AttentionSignals).Title);
+        Assert.Equal("5h budget is critical", Assert.Single(snapshot.AttentionSignals).Title);
     }
 
     [Fact]

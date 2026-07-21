@@ -11,7 +11,7 @@ PulseMeter is not affiliated with OpenAI.
 
 ## Download the App
 
-[Download PulseMeter 0.4.0 for Windows](https://github.com/lorytek/PulseMeter/releases/latest/download/PulseMeter-0.4.0-win-x64-portable.zip), extract the ZIP, and run `PulseMeter.exe`.
+[Download PulseMeter 0.5.0 for Windows](https://github.com/lorytek/PulseMeter/releases/latest/download/PulseMeter-0.5.0-win-x64-portable.zip), extract the ZIP, and run `PulseMeter.exe`.
 
 - A matching `.sha256` checksum file is attached to each GitHub release.
 - Windows 10 or Windows 11, 64-bit.
@@ -19,13 +19,13 @@ PulseMeter is not affiliated with OpenAI.
 
 Only run release zips you downloaded from a PulseMeter release page you trust. The `Source code (zip)` and `Source code (tar.gz)` links on GitHub Releases are automatic GitHub source archives for developers, not the portable Windows app.
 
-## New in 0.4.0
+## New in 0.5.0
 
-- Added Project Health with 7-day usage, change versus the prior 7 days, 30-day share, and focused project details.
-- Added Runway Forecast for the selected rate-limit track, using recent confirmed samples without combining unrelated models.
-- Redesigned rate-limit and Weekly Pace views with clearer reset timing, pace status, and daily allowance guidance.
-- Changed Burn Analysis to rank projects by estimated token burn and removed the retired Usage Explorer and burn-moment tables.
-- Improved Needs Attention, compact-window behavior, local privacy labels, sync stability, and multi-monitor navigation.
+- Added Coding Runway, a graph-first analytical view for 5-hour and 7-day limits with actual usage, sustainable pace, estimated limit timing, reset timing, and usage momentum.
+- Added durable rate-limit history that survives app restarts, restores recent samples, records measurement gaps, and keeps the selected window truthful.
+- Added statistical runway estimates with evidence-aware language and clearer remaining-at-reset or reach-limit-before-reset outcomes.
+- Refined the Mac-inspired dashboard hierarchy, moved Weekly Pace above Coding Runway, simplified duplicate alerts, and removed redundant forecast and project-detail panels.
+- Improved live usage collection, shared rollout analytics, atomic local persistence, navigation, accessibility, validation, and the development visual harness.
 
 ## Who This Is For
 
@@ -63,10 +63,12 @@ Want to help share PulseMeter? See [DISCOVERABILITY.md](DISCOVERABILITY.md).
 
 ## Quick Start
 
-1. Download `PulseMeter-0.4.0-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
+1. Download `PulseMeter-0.5.0-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
 2. Extract the zip to a normal folder, for example `Documents\PulseMeter`.
 3. Run `PulseMeter.exe`.
 4. If Windows shows an unknown-publisher or SmartScreen warning, choose `More info`, then `Run anyway`.
+
+Press `F5` at any time to refresh usage immediately.
 
 ## Minimum Requirements
 
@@ -125,7 +127,7 @@ If Codex CLI is not found, is not signed in, or `codex app-server` is unavailabl
 - Burn Analysis groups local session token metadata by project and does not display chat titles or prompt text; project paths and thread IDs remain local attribution metadata.
 - Automatic alert signals use local usage and rate-limit numbers; they do not read prompt text or Codex message content.
 - Idle Drain alerts do not read prompt text or Codex message content.
-- Local app settings are stored under `%LOCALAPPDATA%\PulseMeter`.
+- Local app settings and a bounded Runway Forecast observation history are stored under `%LOCALAPPDATA%\PulseMeter`. The history contains usage percentages, reset and observation times, and rate-limit labels only; it does not contain prompt or message content.
 
 See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md) for more detail.
 
@@ -147,7 +149,7 @@ Small bug fixes and documentation fixes are welcome. Larger features, dependency
 
 1. Exit PulseMeter from the tray menu.
 2. Delete the extracted PulseMeter folder.
-3. Optional: delete `%LOCALAPPDATA%\PulseMeter` to remove local settings and cached reset-credit countdowns.
+3. Optional: delete `%LOCALAPPDATA%\PulseMeter` to remove local settings, cached reset-credit countdowns, and Runway Forecast observations.
 
 ## Current Limitations
 
@@ -158,3 +160,16 @@ Small bug fixes and documentation fixes are welcome. Larger features, dependency
 - Project usage and Burn Analysis are estimates, not billing-exact accounting. Raw local thread activity is used only for ranking/share and is scaled to account usage.
 - Reset credit rows use HUD-local numbers in the UI. Real server credit IDs are not displayed or stored.
 - If the reset-credit endpoint is unavailable, PulseMeter falls back to the previous count-based reset-credit display.
+
+## Visual Harness
+
+The development-only visual harness opens the real PulseMeter window with showcase mock data and no command-line arguments:
+
+```powershell
+dotnet build tools\PulseMeter.VisualHarness\PulseMeter.VisualHarness.csproj
+tools\PulseMeter.VisualHarness\bin\Debug\net8.0-windows\PulseMeter.VisualHarness.exe
+```
+
+The harness must run from a worktree containing both `PulseMeter.slnx` and `.git`. It stores all settings and visual state under `artifacts\visual-harness\state` in that exact worktree, rejects reparse-point paths, and never falls back to `%LOCALAPPDATA%`.
+
+Its dependency graph uses `MockCodexUsageService` from the first refresh and excludes live Codex/app-server, reset-credit HTTP, project-attribution, foreground-window, idle-time, clipboard, and production tray behavior. It is for local UI inspection only and is not part of the published PulseMeter app.

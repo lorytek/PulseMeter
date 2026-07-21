@@ -40,6 +40,44 @@ internal static class MeterDisplayFormatter
         return $"{Math.Max(1, (int)Math.Ceiling(interval.TotalSeconds))}s";
     }
 
+    public static string FormatFreshness(DateTimeOffset? updatedUtc, DateTimeOffset nowUtc)
+    {
+        if (updatedUtc is not DateTimeOffset updated)
+        {
+            return "Updated unknown";
+        }
+
+        var age = nowUtc.ToUniversalTime() - updated.ToUniversalTime();
+        if (age < TimeSpan.Zero || age < TimeSpan.FromMinutes(1))
+        {
+            return "Updated just now";
+        }
+
+        if (age < TimeSpan.FromHours(1))
+        {
+            return $"Updated {Math.Max(1, (int)age.TotalMinutes)}m ago";
+        }
+
+        if (age < TimeSpan.FromDays(1))
+        {
+            return $"Updated {Math.Max(1, (int)age.TotalHours)}h ago";
+        }
+
+        if (age < TimeSpan.FromDays(7))
+        {
+            return $"Updated {Math.Max(1, (int)age.TotalDays)}d ago";
+        }
+
+        return $"Updated {updated.ToLocalTime().ToString("MMM d, yyyy", CultureInfo.InvariantCulture)}";
+    }
+
+    public static string FormatFreshnessDetail(DateTimeOffset? updatedUtc)
+    {
+        return updatedUtc is DateTimeOffset updated
+            ? $"Updated {updated.ToLocalTime().ToString("MMM d, yyyy 'at' HH:mm", CultureInfo.InvariantCulture)}"
+            : "Updated time unknown";
+    }
+
     public static string FormatWholePercent(double value)
     {
         return $"{Math.Clamp(value, 0, 100):0}%";

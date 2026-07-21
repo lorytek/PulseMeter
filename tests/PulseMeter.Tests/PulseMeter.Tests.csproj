@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\PulseMeter\PulseMeter.csproj" />
+    <ProjectReference Include="..\..\tools\PulseMeter.VisualHarness\PulseMeter.VisualHarness.csproj" />
   </ItemGroup>
 
   <ItemGroup>

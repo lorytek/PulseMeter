@@ -19,6 +19,7 @@ using PulseMeter.Shared.Commands;
 using PulseMeter.Shared.Formatting;
 using PulseMeter.Slices.UsageCollection;
 using PulseMeter.Slices.UsageSignals;
+using PulseMeter.Slices.UsageTrend;
 
 namespace PulseMeter.Slices.PulseMeterWindow.UI;
 
@@ -39,6 +40,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     private bool _isExpanded;
     private bool _isHiddenByUser;
     private bool _isRefreshing;
+    private bool _hasManualSyncFailure;
     private string _syncFeedbackText = string.Empty;
     private bool _useMockMode;
     private double _expandedLayoutScale = 1.0;
@@ -54,6 +56,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     };
     private UsageSnapshot? _lastAppliedSnapshot;
     private UsageSignalsSnapshot _usageSignals = UsageSignalsSnapshot.Empty;
+    private string? _selectedLimitKey;
 
     public PulseMeterWindowViewModel(
         IUsageService usageService,
@@ -65,6 +68,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         ExpandedHeaderViewModel? expandedHeader = null,
         NavigationRailViewModel? navigationRail = null,
         RateLimitsSectionViewModel? rateLimits = null,
+        UsageTrendSectionViewModel? usageTrend = null,
         RateLimitsDailySectionViewModel? rateLimitsDaily = null,
         RunwayForecastSectionViewModel? runwayForecast = null,
         NeedsAttentionSectionViewModel? needsAttention = null,
@@ -74,17 +78,20 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         ProjectUsageSectionViewModel? projectUsage = null,
         UsageAttributionSectionViewModel? usageAttribution = null,
         IUsageSignalsTracker? usageSignalsTracker = null,
-        IBudgetAlertTracker? budgetAlertTracker = null)
+        IBudgetAlertTracker? budgetAlertTracker = null,
+        string? selectedLimitKey = null)
     {
         _usageService = usageService;
         _usageSignalsTracker = usageSignalsTracker ?? new UsageSignalsTracker(new ZeroUserIdleTimeProvider());
         _budgetAlertTracker = budgetAlertTracker ?? new BudgetAlertTracker();
+        _selectedLimitKey = string.IsNullOrWhiteSpace(selectedLimitKey) ? null : selectedLimitKey.Trim();
         _autoSyncSeconds = SecondsFrom(autoSyncInterval ?? TimeSpan.FromSeconds(90));
         _isAlwaysOnTop = isAlwaysOnTop;
         DataBar = dataBar ?? new DataBarViewModel();
         ExpandedHeader = expandedHeader ?? new ExpandedHeaderViewModel();
         NavigationRail = navigationRail ?? new NavigationRailViewModel();
         RateLimits = rateLimits ?? new RateLimitsSectionViewModel(new RateLimitsPresenter());
+        UsageTrend = usageTrend ?? new UsageTrendSectionViewModel(new UsageTrendPresenter());
         RateLimitsDaily = rateLimitsDaily ?? new RateLimitsDailySectionViewModel(new RateLimitsDailyPresenter());
         RunwayForecast = runwayForecast ?? new RunwayForecastSectionViewModel(new RunwayForecastPresenter());
         NeedsAttention = needsAttention ?? new NeedsAttentionSectionViewModel(new NeedsAttentionPresenter());
@@ -117,6 +124,8 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     public NavigationRailViewModel NavigationRail { get; }
 
     public RateLimitsSectionViewModel RateLimits { get; }
+
+    public UsageTrendSectionViewModel UsageTrend { get; }
 
     public RateLimitsDailySectionViewModel RateLimitsDaily { get; }
 
@@ -185,6 +194,8 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     }
 
     public bool HasStatusMessage => !string.IsNullOrWhiteSpace(StatusMessage);
+
+    public bool HasSectionStatusMessage => HasStatusMessage && !HasActionableSyncIssue;
 
     public bool HasWindowPosition => WindowLeft.HasValue && WindowTop.HasValue;
 
@@ -330,7 +341,9 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(CompactSummary));
                 OnPropertyChanged(nameof(CompactQuotaSummaryText));
                 OnPropertyChanged(nameof(HasSyncFeedback));
+                NotifySyncIssuePropertiesChanged();
                 OnPropertyChanged(nameof(StatusBadgeText));
+                OnPropertyChanged(nameof(StatusBadgeBrush));
                 OnPropertyChanged(nameof(SyncButtonText));
                 OnPropertyChanged(nameof(SyncFeedbackText));
                 OnPropertyChanged(nameof(SyncStatusText));
@@ -352,6 +365,8 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    public string? SelectedLimitKey => _selectedLimitKey;
+
     public bool UseMockMode
     {
         get => _useMockMode;
@@ -361,6 +376,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
             {
                 _usageService.UseMockMode = value;
                 OnPropertyChanged(nameof(StatusBadgeText));
+                OnPropertyChanged(nameof(StatusBadgeBrush));
                 RefreshTopChromeViewModels();
                 _ = RefreshAsync();
             }
@@ -409,23 +425,71 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
 
     public bool HasSyncFeedback => IsRefreshing || !string.IsNullOrWhiteSpace(_syncFeedbackText);
 
-    public string LastUpdatedText
+    public bool HasActionableSyncIssue => !IsRefreshing
+        && (_hasManualSyncFailure
+            || (!IsStartingSnapshot && EffectiveSyncStatus is SyncStatus.Stale or SyncStatus.Unavailable));
+
+    public string SyncIssueTitle => _hasManualSyncFailure
+        ? "Sync failed"
+        : EffectiveSyncStatus switch
+        {
+            SyncStatus.Unavailable => "Live source unavailable",
+            SyncStatus.Stale => "Usage data is stale",
+            _ => string.Empty
+        };
+
+    public string SyncIssueText
     {
         get
         {
-            if (_snapshot.LastUpdatedUtc is not DateTimeOffset updated)
+            if (_hasManualSyncFailure)
             {
-                return "Updated unknown";
+                return "PulseMeter could not refresh usage. Check the monitored app, then try again.";
             }
 
-            var localUpdated = updated.ToLocalTime();
-            var dayLabel = localUpdated.Date == DateTimeOffset.Now.Date
-                ? "today"
-                : localUpdated.ToString("MMM d");
+            if (EffectiveSyncStatus == SyncStatus.Unavailable)
+            {
+                return string.IsNullOrWhiteSpace(StatusMessage)
+                    ? "Start the monitored app, then try syncing again."
+                    : StatusMessage;
+            }
 
-            return $"Updated {dayLabel} {localUpdated:HH:mm}";
+            return EffectiveSyncStatus == SyncStatus.Stale
+                ? $"{LastUpdatedText}. Retry to refresh usage."
+                : string.Empty;
         }
     }
+
+    public string SyncIssueAccessibleLabel => $"{SyncIssueTitle}. {SyncIssueText}".Trim();
+
+    public string CompactStatusSummaryText
+    {
+        get
+        {
+            var summary = $"{StatusBadgeText}. {LastUpdatedDetailText}.";
+            return HasActionableSyncIssue
+                ? $"{summary} {SyncIssueTitle}. {SyncIssueText}"
+                : summary;
+        }
+    }
+
+    public string SyncIssueBackground => _hasManualSyncFailure || EffectiveSyncStatus == SyncStatus.Unavailable
+        ? "#FEF2F2"
+        : "#FFF7ED";
+
+    public string SyncIssueBorderBrush => _hasManualSyncFailure || EffectiveSyncStatus == SyncStatus.Unavailable
+        ? "#FCA5A5"
+        : "#FDBA74";
+
+    public string SyncIssueForeground => _hasManualSyncFailure || EffectiveSyncStatus == SyncStatus.Unavailable
+        ? "#B91C1C"
+        : "#C2410C";
+
+    public string LastUpdatedText => MeterDisplayFormatter.FormatFreshness(
+        _snapshot.LastUpdatedUtc,
+        DateTimeOffset.UtcNow);
+
+    public string LastUpdatedDetailText => MeterDisplayFormatter.FormatFreshnessDetail(_snapshot.LastUpdatedUtc);
 
     public string ResetCreditsHeaderText => ResetCreditsSection.ResetCreditsHeaderText;
 
@@ -439,7 +503,24 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         ? "SYNCING"
         : UseMockMode || _snapshot.SyncStatus == SyncStatus.Mocked ? "MOCK DATA" : SyncStatusText.ToUpperInvariant();
 
+    public string StatusBadgeBrush => IsRefreshing
+        ? "#1F73FF"
+        : EffectiveSyncStatus switch
+        {
+            SyncStatus.Live or SyncStatus.Mocked => "#16A34A",
+            SyncStatus.Stale => "#D97706",
+            SyncStatus.Unavailable => "#DC2626",
+            _ => "#64748B"
+        };
+
     public string StatusMessage => _snapshot.StatusMessage ?? string.Empty;
+
+    public string StatusMessageBrush => EffectiveSyncStatus switch
+    {
+        SyncStatus.Unavailable => "#DC2626",
+        SyncStatus.Stale => "#D97706",
+        _ => "#64748B"
+    };
 
     public string SyncButtonText => IsRefreshing ? "Syncing..." : "Sync now";
 
@@ -457,6 +538,8 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     private SyncStatus EffectiveSyncStatus => _snapshot.SyncStatus == SyncStatus.Live && IsLiveSnapshotOverdue
         ? SyncStatus.Stale
         : _snapshot.SyncStatus;
+
+    private bool IsStartingSnapshot => _snapshot.Source.Equals("Starting", StringComparison.OrdinalIgnoreCase);
 
     private bool IsLiveSnapshotOverdue
     {
@@ -583,6 +666,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
 
         RebuildLimitOptions();
         RateLimits.ApplyUsageSignals(_usageSignals);
+        UsageTrend.ApplySignals(_usageSignals, SelectedLimitOption?.Key, nowUtc);
         RunwayForecast.ApplySignals(_usageSignals, SelectedLimitOption?.Key, nowUtc);
         RefreshResetCredits(DateTimeOffset.UtcNow, updateFromSnapshot: true);
 
@@ -606,7 +690,9 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(CompactQuotaSummaryText));
         OnPropertyChanged(nameof(ExpandedQuotaSummaryText));
         OnPropertyChanged(nameof(LastUpdatedText));
+        OnPropertyChanged(nameof(LastUpdatedDetailText));
         OnPropertyChanged(nameof(StatusBadgeText));
+        OnPropertyChanged(nameof(StatusBadgeBrush));
         OnPropertyChanged(nameof(SyncStatusText));
         RefreshResetCredits(DateTimeOffset.UtcNow, updateFromSnapshot: false);
         OnPropertyChanged(nameof(HasThreadContext));
@@ -614,6 +700,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ThreadTokenText));
         RebuildDailyUsageRows();
         RefreshUsageAttributionRows(DateTimeOffset.UtcNow);
+        UsageTrend.Refresh(DateTimeOffset.UtcNow);
         RunwayForecast.Refresh(DateTimeOffset.UtcNow);
         NeedsAttention.Refresh(DateTimeOffset.UtcNow);
         RefreshAccountDashboardProperties();
@@ -625,6 +712,11 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     public PulseMeterWindowState CaptureWindowState()
     {
         return new PulseMeterWindowState(IsExpanded, _expandedWindowWidth, _expandedWindowHeight, WindowLeft, WindowTop);
+    }
+
+    public void FlushUsageHistory()
+    {
+        _usageSignalsTracker.Flush();
     }
 
     public void RememberWindowSize(double width, double height)
@@ -773,6 +865,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         try
         {
             var snapshot = await _usageService.GetSnapshotAsync();
+            _hasManualSyncFailure = false;
             if (!ReferenceEquals(_lastAppliedSnapshot, snapshot))
             {
                 ApplySnapshot(snapshot);
@@ -781,7 +874,9 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            SetSyncFeedback($"Sync failed: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine(ex);
+            _hasManualSyncFailure = true;
+            SetSyncFeedback("Sync failed. Try again.");
         }
         finally
         {
@@ -824,12 +919,19 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
             IsExpanded,
             CompactQuotaRows,
             StatusBadgeText,
+            StatusBadgeBrush,
+            CompactStatusSummaryText,
             ExpandCollapseTooltip);
 
         ExpandedHeader.ApplyState(
             CompactTitleText,
             StatusBadgeText,
+            StatusBadgeBrush,
+            LastUpdatedText,
+            LastUpdatedDetailText,
             ExpandCollapseTooltip,
+            SyncButtonText,
+            IsRefreshing,
             SyncNowCommand);
     }
 
@@ -837,7 +939,15 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     {
         if (e.PropertyName == nameof(RateLimitsSectionViewModel.SelectedLimitOption))
         {
+            var selectedKey = RateLimits.SelectedLimitOption?.Key;
+            if (!string.Equals(_selectedLimitKey, selectedKey, StringComparison.Ordinal))
+            {
+                _selectedLimitKey = selectedKey;
+                OnPropertyChanged(nameof(SelectedLimitKey));
+            }
+
             RefreshDailyRateLimitRows();
+            UsageTrend.SelectLimit(SelectedLimitOption?.Key, DateTimeOffset.UtcNow);
             RunwayForecast.SelectLimit(SelectedLimitOption?.Key, DateTimeOffset.UtcNow);
             OnPropertyChanged(nameof(SelectedLimitOption));
         }
@@ -898,7 +1008,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
 
     private void RebuildLimitOptions()
     {
-        RateLimits.ApplyBuckets(Buckets, DateTimeOffset.UtcNow);
+        RateLimits.ApplyBuckets(Buckets, DateTimeOffset.UtcNow, _selectedLimitKey);
         RefreshDailyRateLimitRows();
         OnPropertyChanged(nameof(SelectedLimitOption));
     }
@@ -1034,13 +1144,17 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(CompactQuotaSummaryText));
         OnPropertyChanged(nameof(ExpandedQuotaSummaryText));
         OnPropertyChanged(nameof(HasStatusMessage));
+        NotifySyncIssuePropertiesChanged();
         OnPropertyChanged(nameof(LastUpdatedText));
+        OnPropertyChanged(nameof(LastUpdatedDetailText));
         OnPropertyChanged(nameof(ResetCreditsHeaderText));
         OnPropertyChanged(nameof(ResetCreditsAvailableText));
         OnPropertyChanged(nameof(SafeToStartText));
         OnPropertyChanged(nameof(SourceText));
         OnPropertyChanged(nameof(StatusBadgeText));
+        OnPropertyChanged(nameof(StatusBadgeBrush));
         OnPropertyChanged(nameof(StatusMessage));
+        OnPropertyChanged(nameof(StatusMessageBrush));
         OnPropertyChanged(nameof(SyncFeedbackText));
         OnPropertyChanged(nameof(SyncStatusText));
         OnPropertyChanged(nameof(HasThreadContext));
@@ -1061,7 +1175,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(TodayUsageValueText));
     }
 
-    private static UsageSignalsSnapshot MergeSignals(
+    internal static UsageSignalsSnapshot MergeSignals(
         UsageSignalsSnapshot usageSignals,
         IReadOnlyList<UsageAttentionSignal> budgetSignals)
     {
@@ -1070,14 +1184,26 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
             return usageSignals;
         }
 
+        var canonicalRateLimitScopes = usageSignals.AttentionSignals
+            .Where(signal => signal.Kind == UsageAttentionSignalKind.RateLimit)
+            .Select(signal => signal.ScopeId)
+            .Where(scopeId => !string.IsNullOrWhiteSpace(scopeId))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var uniqueBudgetSignals = budgetSignals
+            .Where(signal => signal.Kind != UsageAttentionSignalKind.RateLimit
+                || string.IsNullOrWhiteSpace(signal.ScopeId)
+                || !canonicalRateLimitScopes.Contains(signal.ScopeId))
+            .ToArray();
+
         return new UsageSignalsSnapshot
         {
             RunwaySignals = usageSignals.RunwaySignals,
             RunwayForecasts = usageSignals.RunwayForecasts,
+            UsageTrends = usageSignals.UsageTrends,
             IdleDrainIncident = usageSignals.IdleDrainIncident,
             ShowAllAttentionSignals = usageSignals.ShowAllAttentionSignals,
             AttentionSignals = usageSignals.AttentionSignals
-                .Concat(budgetSignals)
+                .Concat(uniqueBudgetSignals)
                 .OrderBy(signal => signal.Priority)
                 .ToList()
         };
@@ -1114,6 +1240,19 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         _syncFeedbackText = text;
         OnPropertyChanged(nameof(HasSyncFeedback));
         OnPropertyChanged(nameof(SyncFeedbackText));
+        NotifySyncIssuePropertiesChanged();
+    }
+
+    private void NotifySyncIssuePropertiesChanged()
+    {
+        OnPropertyChanged(nameof(HasActionableSyncIssue));
+        OnPropertyChanged(nameof(HasSectionStatusMessage));
+        OnPropertyChanged(nameof(SyncIssueTitle));
+        OnPropertyChanged(nameof(SyncIssueText));
+        OnPropertyChanged(nameof(SyncIssueAccessibleLabel));
+        OnPropertyChanged(nameof(SyncIssueBackground));
+        OnPropertyChanged(nameof(SyncIssueBorderBrush));
+        OnPropertyChanged(nameof(SyncIssueForeground));
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)

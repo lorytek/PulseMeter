@@ -36,6 +36,8 @@ public sealed class ProjectUsageSectionViewModel : INotifyPropertyChanged
             _selectedProjectRow = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectedProjectTitle));
+            OnPropertyChanged(nameof(SelectedProjectPathText));
+            OnPropertyChanged(nameof(HasSelectedProject));
             OnPropertyChanged(nameof(SelectedProjectSummary));
             OnPropertyChanged(nameof(SelectedProjectChatsText));
             OnPropertyChanged(nameof(SelectedProjectMomentText));
@@ -55,6 +57,10 @@ public sealed class ProjectUsageSectionViewModel : INotifyPropertyChanged
     public string LargestDropValueText => GetLargestDrop()?.TrendText ?? "--";
 
     public string SelectedProjectTitle => SelectedProjectRow?.DisplayName ?? "Select a project";
+
+    public string SelectedProjectPathText => SelectedProjectRow?.FullPath ?? string.Empty;
+
+    public bool HasSelectedProject => SelectedProjectRow is not null;
 
     public string SelectedProjectSummary => SelectedProjectRow is null
         ? "Choose a project to see its recent activity and local attribution evidence."

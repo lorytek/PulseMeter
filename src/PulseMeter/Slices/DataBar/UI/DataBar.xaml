@@ -49,6 +49,7 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal"
+                                        AutomationProperties.Name="{Binding CompactAccessibleSummary}"
                                         VerticalAlignment="Center">
                                 <Border x:Name="CompactQuotaSeparatorLine"
                                         Width="1"
@@ -72,6 +73,8 @@
                                     </StackPanel.Style>
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="{Binding Label}"
+                                                   ToolTip="{Binding CompactAccessibleSummary}"
+                                                   AutomationProperties.Name="{Binding CompactAccessibleSummary}"
                                                    Foreground="#374151"
                                                    FontFamily="Segoe UI"
                                                    FontSize="13"
@@ -139,15 +142,19 @@
                         Grid.Column="1"
                         Margin="12,0,0,0"
                         Orientation="Horizontal"
-                        VerticalAlignment="Center">
+                        VerticalAlignment="Center"
+                        ToolTip="{Binding StatusSummaryText}"
+                        AutomationProperties.Name="{Binding StatusSummaryText}">
                 <Border Width="8"
                         Height="8"
                         Margin="0,0,6,0"
                         VerticalAlignment="Center"
-                        Background="#28B946"
+                        Background="{Binding StatusBadgeBrush}"
                         CornerRadius="4" />
                 <TextBlock Text="{Binding StatusBadgeText}"
-                           Foreground="#16A34A"
+                           ToolTip="{Binding StatusSummaryText}"
+                           AutomationProperties.Name="{Binding StatusSummaryText}"
+                           Foreground="{Binding StatusBadgeBrush}"
                            FontSize="13"
                            VerticalAlignment="Center" />
             </StackPanel>
@@ -164,6 +171,7 @@
                         Background="#E5E7EB" />
                 <Button Style="{DynamicResource CompactIconButtonStyle}"
                         ToolTip="{Binding ExpandCollapseTooltip}"
+                        AutomationProperties.Name="{Binding ExpandCollapseTooltip}"
                         Click="ExpandCollapseButton_Click">
                     <Path Width="12"
                           Height="8"
@@ -177,6 +185,7 @@
                 <Button Margin="8,0,0,0"
                         Style="{DynamicResource CompactIconButtonStyle}"
                         ToolTip="Hide PulseMeter"
+                        AutomationProperties.Name="Hide PulseMeter"
                         Click="HideButton_Click">
                     <Path Width="12"
                           Height="12"

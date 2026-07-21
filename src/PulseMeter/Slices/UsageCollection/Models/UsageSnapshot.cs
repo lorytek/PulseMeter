@@ -4,6 +4,8 @@ public sealed class UsageSnapshot
 {
     public IReadOnlyList<RateLimitBucket> Buckets { get; init; } = Array.Empty<RateLimitBucket>();
 
+    public IReadOnlyList<RateLimitHistoryPoint> RateLimitHistory { get; init; } = Array.Empty<RateLimitHistoryPoint>();
+
     public long? LifetimeTokens { get; init; }
 
     public long? PeakDailyTokens { get; init; }

@@ -6,6 +6,8 @@ namespace PulseMeter.Slices.NavigationRail.UI;
 
 public partial class NavigationRail
 {
+    private bool _restoreCustomizeFocusAfterClose;
+
     public event EventHandler<NavigationSectionRequestedEventArgs>? SectionRequested;
 
     public NavigationRail()
@@ -36,7 +38,34 @@ public partial class NavigationRail
     private void CustomizeDashboardButton_Click(object sender, RoutedEventArgs e)
     {
         CustomizeDashboardPopup.IsOpen = true;
-        Dispatcher.BeginInvoke(new Action(() => RateLimitsVisibilityCheckBox.Focus()));
+    }
+
+    private void CustomizeDashboardPopup_Opened(object? sender, EventArgs e)
+    {
+        FocusPopupControl(RateLimitsVisibilityCheckBox);
+    }
+
+    private void CustomizeDashboardPopup_Closed(object? sender, EventArgs e)
+    {
+        if (!_restoreCustomizeFocusAfterClose)
+        {
+            return;
+        }
+
+        _restoreCustomizeFocusAfterClose = false;
+        Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.ContextIdle,
+            new Action(() => CustomizeDashboardButton.Focus()));
+    }
+
+    private void VisibilityCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.CheckBox checkBox)
+        {
+            return;
+        }
+
+        FocusPopupControl(checkBox);
     }
 
     private void CustomizeDashboardPopup_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -46,9 +75,25 @@ public partial class NavigationRail
             return;
         }
 
+        _restoreCustomizeFocusAfterClose = true;
         CustomizeDashboardPopup.IsOpen = false;
-        CustomizeDashboardButton.Focus();
         e.Handled = true;
+    }
+
+    private void FocusPopupControl(System.Windows.Controls.Control control)
+    {
+        Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.ContextIdle,
+            new Action(() =>
+            {
+                if (!CustomizeDashboardPopup.IsOpen)
+                {
+                    return;
+                }
+
+                control.Focus();
+                Keyboard.Focus(control);
+            }));
     }
 
     private void ResetVisibility_Click(object sender, RoutedEventArgs e)

@@ -16,6 +16,7 @@ using PulseMeter.Platform.Persistence;
 using PulseMeter.Platform.Windows;
 using PulseMeter.Slices.UsageCollection;
 using PulseMeter.Slices.UsageSignals;
+using PulseMeter.Slices.UsageTrend;
 
 namespace PulseMeter.Bootstrap.Composition;
 
@@ -24,6 +25,14 @@ internal static class PulseMeterWindowRegistration
     private static readonly TimeSpan DefaultAutoRefreshInterval = TimeSpan.FromSeconds(90);
 
     internal static IServiceCollection AddPulseMeterWindow(this IServiceCollection services, Action shutdown)
+    {
+        services.AddPulseMeterWindowCore(shutdown);
+        services.AddSingleton<ITrayIconService, TrayIconService>();
+
+        return services;
+    }
+
+    internal static IServiceCollection AddPulseMeterWindowCore(this IServiceCollection services, Action shutdown)
     {
         services.AddSingleton(shutdown);
         services.AddSingleton(sp =>
@@ -34,6 +43,7 @@ internal static class PulseMeterWindowRegistration
             var autoSyncSeconds = appSettings?.AutoSyncSeconds ?? (int)DefaultAutoRefreshInterval.TotalSeconds;
             var navigationRail = sp.GetRequiredService<NavigationRailViewModel>();
             navigationRail.ApplyVisibility(appSettings?.DashboardVisibility);
+            navigationRail.ApplyPanelState(appSettings?.IsNavigationPanelExpanded ?? true);
 
             return new PulseMeterWindowViewModel(
                 sp.GetRequiredService<IUsageService>(),
@@ -45,6 +55,7 @@ internal static class PulseMeterWindowRegistration
                 expandedHeader: sp.GetRequiredService<ExpandedHeaderViewModel>(),
                 navigationRail: navigationRail,
                 rateLimits: sp.GetRequiredService<RateLimitsSectionViewModel>(),
+                usageTrend: sp.GetRequiredService<UsageTrendSectionViewModel>(),
                 rateLimitsDaily: sp.GetRequiredService<RateLimitsDailySectionViewModel>(),
                 runwayForecast: sp.GetRequiredService<RunwayForecastSectionViewModel>(),
                 needsAttention: sp.GetRequiredService<NeedsAttentionSectionViewModel>(),
@@ -54,7 +65,8 @@ internal static class PulseMeterWindowRegistration
                 usageAttribution: sp.GetRequiredService<UsageAttributionSectionViewModel>(),
                 dailyUsage: sp.GetRequiredService<DailyUsageSectionViewModel>(),
                 usageSignalsTracker: sp.GetRequiredService<IUsageSignalsTracker>(),
-                budgetAlertTracker: sp.GetRequiredService<IBudgetAlertTracker>());
+                budgetAlertTracker: sp.GetRequiredService<IBudgetAlertTracker>(),
+                selectedLimitKey: appSettings?.SelectedRateLimitKey);
         });
 
         services.AddSingleton(sp => new PulseMeterWindow
@@ -63,7 +75,6 @@ internal static class PulseMeterWindowRegistration
             WindowStateStore = sp.GetRequiredService<IPulseMeterWindowStateStore>()
         });
         services.AddSingleton<IPulseMeterWindow>(sp => sp.GetRequiredService<PulseMeterWindow>());
-        services.AddSingleton<ITrayIconService, TrayIconService>();
 
         return services;
     }

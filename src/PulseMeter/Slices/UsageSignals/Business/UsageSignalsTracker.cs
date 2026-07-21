@@ -11,13 +11,21 @@ public interface IUsageSignalsTracker
     UsageSignalsSnapshot Observe(UsageSnapshot snapshot, DateTimeOffset nowUtc);
 
     void DismissIdleDrain();
+
+    void Flush()
+    {
+    }
 }
 
 public sealed class UsageSignalsTracker : IUsageSignalsTracker
 {
     private static readonly TimeSpan MinimumRunwayObservation = TimeSpan.FromMinutes(2);
-    private static readonly TimeSpan ShortRunwayHistory = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan ShortRunwayHistory = TimeSpan.FromHours(3);
     private static readonly TimeSpan WeeklyRunwayHistory = TimeSpan.FromHours(24);
+    private static readonly TimeSpan MaximumTrendHistory = TimeSpan.FromDays(7);
+    private static readonly TimeSpan MeasurementGapThreshold = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan WeeklyFlatSampleCheckpointInterval = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan ShortFlatSampleCheckpointInterval = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan ShortRunwayHalfLife = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan WeeklyRunwayHalfLife = TimeSpan.FromHours(6);
     private static readonly TimeSpan MinimumIdleDrainObservation = TimeSpan.FromMinutes(5);
@@ -31,20 +39,31 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
     private const double HighProjectShareThreshold = 55;
     private const double TodayHighMedianMultiplier = 1.5;
     private const double MinimumRunwayMovement = 0.1;
+    private const double RunwayPriorShape = 0.5;
+    private const double ForecastLowerQuantile = 0.10;
+    private const double ForecastUpperQuantile = 0.90;
+    private const int ForecastProjectionPointCount = 13;
     private const int MinimumRunwaySamples = 3;
     private const int MaximumRunwaySamples = 1_024;
+    private const int MaximumPersistedRunwayBuckets = 16;
 
     private readonly IUserIdleTimeProvider _idleTimeProvider;
+    private readonly IRunwayObservationStateStore? _runwayObservationStateStore;
     // Runway needs a recent, bounded pace sample; idle drain needs a baseline that spans
     // only one continuous Windows-idle period. Keep those observations independently.
     private readonly Dictionary<string, BucketObservation> _observations = new(StringComparer.OrdinalIgnoreCase);
     private IdleDrainIncident? _idleDrainIncident;
     private string? _dismissedIdleDrainBucketId;
     private DateTimeOffset? _dismissedIdleDrainResetsAtUtc;
+    private bool _restoreComplete;
+    private bool _restoreFailedClosed;
+    private int _restoreAttempts;
+    private bool _runwayStateDirty;
 
-    public UsageSignalsTracker(IUserIdleTimeProvider idleTimeProvider)
+    public UsageSignalsTracker(IUserIdleTimeProvider idleTimeProvider, IRunwayObservationStateStore? runwayObservationStateStore = null)
     {
         _idleTimeProvider = idleTimeProvider;
+        _runwayObservationStateStore = runwayObservationStateStore;
     }
 
     public UsageSignalsSnapshot Observe(UsageSnapshot snapshot, DateTimeOffset nowUtc)
@@ -53,11 +72,13 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
 
         var runwaySignals = new List<LimitRunwaySignal>();
         var runwayForecasts = new List<LimitRunwayForecast>();
+        var usageTrends = new List<LimitUsageTrend>();
         var idleDrainIncident = _idleDrainIncident;
         if (snapshot.SyncStatus is SyncStatus.Live)
         {
+            HydrateRestoredObservations(nowUtc);
+            MergeHistoricalRateLimitPoints(snapshot, nowUtc);
             var idleTime = _idleTimeProvider.GetIdleTime();
-            var observedBucketIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var bucket in snapshot.Buckets)
             {
@@ -71,17 +92,20 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
                     continue;
                 }
 
-                observedBucketIds.Add(current.BucketId);
                 if (!_observations.TryGetValue(current.BucketId, out var observation)
                     || observation.ResetsAtUtc != current.ResetsAtUtc)
                 {
                     _observations[current.BucketId] = new BucketObservation(current);
+                    _runwayStateDirty = true;
                     runwayForecasts.Add(BuildInitialForecast(current, isMock: false));
                     continue;
                 }
 
-                AddRunwaySample(observation, current);
-                var forecast = BuildRunwayForecast(observation.RunwaySamples);
+                if (AddRunwaySample(observation, current))
+                {
+                    _runwayStateDirty = true;
+                }
+                var forecast = BuildRunwayForecast(SelectForecastSamples(observation.RunwaySamples));
                 runwayForecasts.Add(forecast);
                 var runway = TryBuildRunwaySignal(forecast, current, nowUtc);
                 if (runway is not null)
@@ -90,7 +114,12 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
                 }
 
                 var idleDrainBaseline = observation.IdleDrainBaseline;
-                if (ShouldRebaseIdleDrain(idleDrainBaseline, current, idleTime))
+                if (observation.Restored)
+                {
+                    observation.Restored = false;
+                    idleDrainBaseline = current;
+                }
+                else if (ShouldRebaseIdleDrain(idleDrainBaseline, current, idleTime))
                 {
                     idleDrainBaseline = current;
                 }
@@ -102,7 +131,14 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
                 observation.IdleDrainBaseline = idleDrainBaseline;
             }
 
-            RemoveInactiveObservationAnchors(observedBucketIds);
+            if (RemoveExpiredObservationAnchors(nowUtc))
+            {
+                _runwayStateDirty = true;
+            }
+
+            PersistRunwayObservations();
+
+            usageTrends.AddRange(BuildUsageTrends());
 
             idleDrainIncident = _idleDrainIncident;
         }
@@ -110,10 +146,11 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
         {
             runwaySignals.AddRange(BuildMockRunwaySignals(snapshot, nowUtc));
             runwayForecasts.AddRange(BuildMockRunwayForecasts(snapshot, nowUtc));
+            usageTrends.AddRange(BuildMockUsageTrends(snapshot, nowUtc));
             idleDrainIncident = BuildMockIdleDrainIncident(snapshot, nowUtc);
         }
 
-        return BuildSnapshot(snapshot, nowUtc, runwaySignals, runwayForecasts, idleDrainIncident);
+        return BuildSnapshot(snapshot, nowUtc, runwaySignals, runwayForecasts, usageTrends, idleDrainIncident);
     }
 
     public void DismissIdleDrain()
@@ -128,14 +165,303 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
         _idleDrainIncident = null;
     }
 
-    private void RemoveInactiveObservationAnchors(ISet<string> observedBucketIds)
+    public void Flush()
     {
+        PersistRunwayObservations();
+    }
+
+    private void HydrateRestoredObservations(DateTimeOffset nowUtc)
+    {
+        if (_restoreComplete || _restoreFailedClosed)
+        {
+            return;
+        }
+
+        RunwayObservationLoadResult loadResult;
+        try
+        {
+            loadResult = _runwayObservationStateStore?.Load()
+                ?? new RunwayObservationLoadResult(RunwayObservationLoadStatus.Missing);
+        }
+        catch (Exception)
+        {
+            RecordUnavailableRestoreAttempt();
+            return;
+        }
+
+        if (loadResult.Status == RunwayObservationLoadStatus.Unavailable)
+        {
+            RecordUnavailableRestoreAttempt();
+            return;
+        }
+
+        _restoreComplete = true;
+        var state = loadResult.State;
+        if (loadResult.Status != RunwayObservationLoadStatus.Loaded
+            || state is null
+            || state.SchemaVersion != RunwayObservationStateStore.CurrentSchemaVersion
+            || state.Samples is null
+            || state.Samples.Any(sample => sample is null))
+        {
+            return;
+        }
+
+        foreach (var group in state.Samples.Cast<RunwayObservationSample>()
+                     .GroupBy(sample => sample.BucketId, StringComparer.OrdinalIgnoreCase)
+                     .Take(MaximumPersistedRunwayBuckets))
+        {
+            var samples = group.ToList();
+            if (!TryRestoreBucketObservation(samples, nowUtc, out var observation))
+            {
+                continue;
+            }
+
+            _observations[group.Key] = observation;
+        }
+    }
+
+    private void RecordUnavailableRestoreAttempt()
+    {
+        _restoreAttempts++;
+        if (_restoreAttempts >= 3)
+        {
+            _restoreFailedClosed = true;
+        }
+    }
+
+    private void MergeHistoricalRateLimitPoints(UsageSnapshot snapshot, DateTimeOffset nowUtc)
+    {
+        if (snapshot.RateLimitHistory.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var bucket in snapshot.Buckets)
+        {
+            if (!TryCreateSample(bucket, nowUtc, out var current)
+                || current.ResetsAtUtc <= nowUtc)
+            {
+                continue;
+            }
+
+            var cutoff = nowUtc - ResolveTrendHistory(current.WindowDurationMins);
+            var candidates = snapshot.RateLimitHistory
+                .Where(point => string.Equals(point.LimitKey, current.LimitKey, StringComparison.OrdinalIgnoreCase)
+                    && point.WindowDurationMins == current.WindowDurationMins
+                    && point.ResetsAtUtc == current.ResetsAtUtc
+                    && point.ObservedAtUtc >= cutoff
+                    && point.ObservedAtUtc <= nowUtc
+                    && point.UsedPercent <= current.UsedPercent)
+                .Select(point => new BucketSample(
+                    current.BucketId,
+                    current.LimitKey,
+                    current.TrackLabel,
+                    current.WindowLabel,
+                    current.ForecastWindowLabel,
+                    current.WindowDurationMins,
+                    point.UsedPercent,
+                    current.ResetsAtUtc,
+                    point.ObservedAtUtc,
+                    StartsAfterMeasurementGap: false))
+                .ToList();
+
+            if (_observations.TryGetValue(current.BucketId, out var existing)
+                && existing.ResetsAtUtc == current.ResetsAtUtc)
+            {
+                candidates.AddRange(existing.RunwaySamples.Select(sample => sample with
+                {
+                    LimitKey = current.LimitKey,
+                    TrackLabel = current.TrackLabel,
+                    WindowLabel = current.WindowLabel,
+                    ForecastWindowLabel = current.ForecastWindowLabel,
+                    WindowDurationMins = current.WindowDurationMins,
+                    ResetsAtUtc = current.ResetsAtUtc
+                }));
+            }
+
+            var ordered = candidates
+                .OrderBy(sample => sample.ObservedAtUtc)
+                .ThenBy(sample => sample.UsedPercent)
+                .ToArray();
+            if (ordered.Length == 0)
+            {
+                continue;
+            }
+
+            var monotonic = new List<BucketSample>(ordered.Length);
+            foreach (var candidate in ordered)
+            {
+                if (monotonic.Count > 0
+                    && candidate.ObservedAtUtc == monotonic[^1].ObservedAtUtc)
+                {
+                    if (candidate.UsedPercent > monotonic[^1].UsedPercent)
+                    {
+                        monotonic[^1] = candidate;
+                    }
+
+                    continue;
+                }
+
+                if (monotonic.Count > 0 && candidate.UsedPercent < monotonic[^1].UsedPercent)
+                {
+                    continue;
+                }
+
+                monotonic.Add(candidate);
+            }
+
+            if (monotonic.Count == 0)
+            {
+                continue;
+            }
+
+            var merged = new BucketObservation(monotonic[0], isRestored: true);
+            for (var index = 1; index < monotonic.Count; index++)
+            {
+                AddRunwaySample(merged, monotonic[index]);
+            }
+
+            if (existing is not null && existing.RunwaySamples.SequenceEqual(merged.RunwaySamples))
+            {
+                continue;
+            }
+
+            merged.IdleDrainBaseline = current;
+            _observations[current.BucketId] = merged;
+            _runwayStateDirty = true;
+        }
+    }
+
+    private static bool TryRestoreBucketObservation(
+        IReadOnlyList<RunwayObservationSample> storedSamples,
+        DateTimeOffset nowUtc,
+        out BucketObservation observation)
+    {
+        observation = null!;
+        if (storedSamples.Count is 0 or > MaximumRunwaySamples)
+        {
+            return false;
+        }
+
+        var first = storedSamples[0];
+        if (string.IsNullOrWhiteSpace(first.BucketId)
+            || string.IsNullOrWhiteSpace(first.LimitKey)
+            || first.ResetsAtUtc <= nowUtc
+            || first.ObservedAtUtc > nowUtc
+            || !double.IsFinite(first.UsedPercent)
+            || first.UsedPercent is < 0 or > 100)
+        {
+            return false;
+        }
+
+        var history = ResolveTrendHistory(first.WindowDurationMins);
+        var cutoff = nowUtc - history;
+
+        var restored = new List<BucketSample>(storedSamples.Count);
+        BucketSample? previous = null;
+        foreach (var stored in storedSamples)
+        {
+            if (!string.Equals(stored.BucketId, first.BucketId, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(stored.LimitKey, first.LimitKey, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(stored.TrackLabel, first.TrackLabel, StringComparison.Ordinal)
+                || !string.Equals(stored.WindowLabel, first.WindowLabel, StringComparison.Ordinal)
+                || !string.Equals(stored.ForecastWindowLabel, first.ForecastWindowLabel, StringComparison.Ordinal)
+                || stored.WindowDurationMins != first.WindowDurationMins
+                || stored.ResetsAtUtc != first.ResetsAtUtc
+                || stored.ResetsAtUtc <= nowUtc
+                || stored.ObservedAtUtc > nowUtc
+                || !double.IsFinite(stored.UsedPercent)
+                || stored.UsedPercent is < 0 or > 100)
+            {
+                return false;
+            }
+
+            var sample = new BucketSample(
+                stored.BucketId,
+                stored.LimitKey,
+                stored.TrackLabel,
+                stored.WindowLabel,
+                stored.ForecastWindowLabel,
+                stored.WindowDurationMins,
+                stored.UsedPercent,
+                stored.ResetsAtUtc,
+                stored.ObservedAtUtc,
+                stored.StartsAfterMeasurementGap);
+            if (previous is BucketSample previousSample
+                && (sample.ObservedAtUtc <= previousSample.ObservedAtUtc
+                    || sample.UsedPercent < previousSample.UsedPercent))
+            {
+                return false;
+            }
+
+            previous = sample;
+            if (sample.ObservedAtUtc >= cutoff)
+            {
+                restored.Add(sample);
+            }
+        }
+
+        if (restored.Count == 0)
+        {
+            return false;
+        }
+
+        observation = new BucketObservation(restored[0], isRestored: true);
+        observation.RunwaySamples.Clear();
+        observation.RunwaySamples.AddRange(restored);
+        observation.IdleDrainBaseline = restored[^1];
+        return true;
+    }
+
+    private void PersistRunwayObservations()
+    {
+        if (_runwayObservationStateStore is null
+            || !_restoreComplete
+            || _restoreFailedClosed
+            || !_runwayStateDirty)
+        {
+            return;
+        }
+
+        var samples = _observations.Values
+            .Take(MaximumPersistedRunwayBuckets)
+            .SelectMany(observation => observation.RunwaySamples)
+            .Select(sample => new RunwayObservationSample(
+                sample.BucketId,
+                sample.LimitKey,
+                sample.TrackLabel,
+                sample.WindowLabel,
+                sample.ForecastWindowLabel,
+                sample.WindowDurationMins,
+                sample.UsedPercent,
+                sample.ResetsAtUtc,
+                sample.ObservedAtUtc,
+                sample.StartsAfterMeasurementGap))
+            .ToArray();
+        try
+        {
+            if (_runwayObservationStateStore.Save(new RunwayObservationState(RunwayObservationStateStore.CurrentSchemaVersion, samples)))
+            {
+                _runwayStateDirty = false;
+            }
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private bool RemoveExpiredObservationAnchors(DateTimeOffset nowUtc)
+    {
+        var removed = false;
         foreach (var bucketId in _observations.Keys
-                     .Where(bucketId => !observedBucketIds.Contains(bucketId))
+                     .Where(bucketId => _observations[bucketId].ResetsAtUtc <= nowUtc)
                      .ToArray())
         {
             _observations.Remove(bucketId);
+            removed = true;
         }
+
+        return removed;
     }
 
     private UsageSignalsSnapshot BuildSnapshot(
@@ -143,6 +469,7 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
         DateTimeOffset nowUtc,
         IReadOnlyList<LimitRunwaySignal> runwaySignals,
         IReadOnlyList<LimitRunwayForecast> runwayForecasts,
+        IReadOnlyList<LimitUsageTrend> usageTrends,
         IdleDrainIncident? idleDrainIncident)
     {
         return new UsageSignalsSnapshot
@@ -153,6 +480,10 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
             RunwayForecasts = runwayForecasts
                 .OrderBy(forecast => ForecastSortOrder(forecast.State))
                 .ThenBy(forecast => forecast.ExhaustsAtUtc ?? forecast.ResetsAtUtc)
+                .ToList(),
+            UsageTrends = usageTrends
+                .OrderBy(trend => trend.WindowDurationMins ?? int.MaxValue)
+                .ThenBy(trend => trend.WindowLabel, StringComparer.OrdinalIgnoreCase)
                 .ToList(),
             IdleDrainIncident = idleDrainIncident,
             ShowAllAttentionSignals = IsMockShowcaseSnapshot(snapshot),
@@ -192,7 +523,8 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
                 string.IsNullOrWhiteSpace(snapshot.StatusMessage)
                     ? "Live usage is unavailable. Sync again after the source is ready."
                     : snapshot.StatusMessage,
-                "#EF4444"));
+                "#EF4444",
+                Kind: UsageAttentionSignalKind.Sync));
             return;
         }
 
@@ -203,7 +535,8 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
                 "SYNC",
                 "Live data is stale",
                 "Showing last good usage data until the next successful sync.",
-                "#F97316"));
+                "#F97316",
+                Kind: UsageAttentionSignalKind.Sync));
         }
     }
 
@@ -217,11 +550,12 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
         signals.Add(new UsageAttentionSignal(
             2,
             "IDLE",
-            "Usage moved while idle",
+            "Usage increased while idle",
             incident.SummaryText,
             incident.AccentBrush,
             incident.DiagnosticText,
-            "idle-drain"));
+            "idle-drain",
+            UsageAttentionSignalKind.Idle));
     }
 
     private static bool IsMockShowcaseSnapshot(UsageSnapshot snapshot)
@@ -307,6 +641,15 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
                     timeToExhaustion = TimeSpan.FromTicks(resetRemaining.Ticks / 2);
                 }
 
+                var exhaustsAt = nowUtc + timeToExhaustion;
+                var earliestExhaustsAt = nowUtc + TimeSpan.FromTicks(timeToExhaustion.Ticks / 2);
+                var latestExhaustsAt = exhaustsAt.AddHours(6);
+                var latestAllowed = sample.ResetsAtUtc.AddMinutes(-2);
+                if (latestExhaustsAt > latestAllowed)
+                {
+                    latestExhaustsAt = latestAllowed;
+                }
+
                 forecasts.Add(new LimitRunwayForecast(
                     sample.BucketId,
                     sample.LimitKey,
@@ -316,12 +659,16 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
                     sample.ResetsAtUtc,
                     sample.UsedPercent,
                     LimitRunwayForecastState.AtRisk,
-                    nowUtc + timeToExhaustion,
+                    exhaustsAt,
                     0,
                     (100 - sample.UsedPercent) / Math.Max(timeToExhaustion.TotalHours, 0.01),
                     TimeSpan.FromMinutes(11),
                     IsWithinWarningWindow(sample, timeToExhaustion),
-                    IsMock: true));
+                    IsMock: true,
+                    Confidence: LimitRunwayForecastConfidence.Medium,
+                    EarliestExhaustsAtUtc: earliestExhaustsAt,
+                    LatestExhaustsAtUtc: latestExhaustsAt,
+                    SampleCount: 5));
                 continue;
             }
 
@@ -345,6 +692,76 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
         return forecasts;
     }
 
+    private IReadOnlyList<LimitUsageTrend> BuildUsageTrends()
+    {
+        return _observations.Values
+            .Where(observation => observation.RunwaySamples.Count > 0)
+            .Select(observation =>
+            {
+                var latest = observation.RunwaySamples[^1];
+                var gaps = observation.RunwaySamples
+                    .Select((sample, index) => (Sample: sample, Index: index))
+                    .Where(item => item.Index > 0 && item.Sample.StartsAfterMeasurementGap)
+                    .Select(item => new LimitUsageGap(
+                        observation.RunwaySamples[item.Index - 1].ObservedAtUtc,
+                        item.Sample.ObservedAtUtc))
+                    .ToArray();
+                return new LimitUsageTrend(
+                    latest.BucketId,
+                    latest.LimitKey,
+                    latest.TrackLabel,
+                    latest.ForecastWindowLabel,
+                    latest.WindowDurationMins,
+                    latest.ResetsAtUtc,
+                    observation.RunwaySamples
+                        .Select(sample => new LimitUsagePoint(sample.ObservedAtUtc, sample.UsedPercent))
+                        .ToArray(),
+                    IsMock: false)
+                {
+                    MeasurementGaps = gaps
+                };
+            })
+            .ToArray();
+    }
+
+    private static IReadOnlyList<LimitUsageTrend> BuildMockUsageTrends(
+        UsageSnapshot snapshot,
+        DateTimeOffset nowUtc)
+    {
+        double[] progress = [0, 0.12, 0.24, 0.31, 0.43, 0.51, 0.63, 0.73, 0.82, 0.89, 0.93, 0.97, 1];
+        var trends = new List<LimitUsageTrend>();
+
+        foreach (var bucket in snapshot.Buckets)
+        {
+            if (!TryCreateSample(bucket, nowUtc, out var sample)
+                || sample.ResetsAtUtc <= nowUtc)
+            {
+                continue;
+            }
+
+            var isWeekly = IsWeekly(sample);
+            var history = isWeekly ? TimeSpan.FromHours(24) : TimeSpan.FromMinutes(42);
+            var startPercent = Math.Max(4, sample.UsedPercent - (isWeekly ? 38 : 78));
+            var points = progress
+                .Select((ratio, index) => new LimitUsagePoint(
+                    nowUtc - history + TimeSpan.FromTicks(history.Ticks * index / (progress.Length - 1)),
+                    Math.Clamp(startPercent + ((sample.UsedPercent - startPercent) * ratio), 0, 100)))
+                .ToArray();
+
+            trends.Add(new LimitUsageTrend(
+                sample.BucketId,
+                sample.LimitKey,
+                sample.TrackLabel,
+                sample.ForecastWindowLabel,
+                sample.WindowDurationMins,
+                sample.ResetsAtUtc,
+                points,
+                IsMock: true));
+        }
+
+        return trends;
+    }
+
     private static IdleDrainIncident? BuildMockIdleDrainIncident(
         UsageSnapshot snapshot,
         DateTimeOffset nowUtc)
@@ -362,7 +779,7 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
             var idleDuration = TimeSpan.FromMinutes(9);
             var before = Math.Max(0, sample.UsedPercent - 4);
             var firstObservedAt = nowUtc - observationDuration;
-            var summary = $"Usage moved while idle: {FormatPercent(before)} -> {FormatPercent(sample.UsedPercent)} in {FormatDuration(observationDuration)}";
+            var summary = FormatIdleUsageSummary(sample.WindowLabel, before, sample.UsedPercent, observationDuration);
             var detail = $"{sample.WindowLabel} changed while Windows reported {FormatDuration(idleDuration)} idle.";
             var diagnostic = string.Join(Environment.NewLine, [
                 "PulseMeter Mock idle-drain demo",
@@ -409,7 +826,8 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
                 "RUNWAY",
                 signal.Title,
                 signal.Detail,
-                signal.AccentBrush));
+                signal.AccentBrush,
+                Kind: UsageAttentionSignalKind.Runway));
         }
     }
 
@@ -435,7 +853,9 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
             "LIMIT",
             "Weekly window is low",
             detail,
-            "#F97316"));
+            "#F97316",
+            Kind: UsageAttentionSignalKind.RateLimit,
+            ScopeId: RateLimitBucketKeys.GetWindowScope(bucket)));
     }
 
     private static void AddResetCreditSignal(
@@ -472,7 +892,8 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
             "CREDIT",
             "Reset credit expires soon",
             $"One reset credit expires in {countdown}.",
-            "#F59E0B"));
+            "#F59E0B",
+            Kind: UsageAttentionSignalKind.ResetCredit));
     }
 
     private static void AddDailyUsageSignal(
@@ -503,7 +924,8 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
             "TODAY",
             "Today is above usual",
             $"{MeterDisplayFormatter.FormatTokens(todayTokens.Value)} tokens today; {MeterDisplayFormatter.FormatTokens((long)Math.Round(median))} daily median.",
-            "#1F73FF"));
+            "#1F73FF",
+            Kind: UsageAttentionSignalKind.DailyUsage));
     }
 
     private static void AddProjectUsageSignal(List<UsageAttentionSignal> signals, UsageSnapshot snapshot)
@@ -522,7 +944,8 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
             "PROJECT",
             $"{Shorten(topProject.DisplayName, 34)} leads recent usage",
             $"{topProject.SharePercent.ToString("0.#", CultureInfo.InvariantCulture)}% of the last 30-day project estimate.",
-            "#1F73FF"));
+            "#1F73FF",
+            Kind: UsageAttentionSignalKind.ProjectUsage));
     }
 
     private void ClearExpiredIdleIncident(DateTimeOffset nowUtc, UsageSnapshot snapshot)
@@ -625,14 +1048,16 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
     private static LimitRunwayForecast BuildRunwayForecast(IReadOnlyList<BucketSample> samples)
     {
         var current = samples[^1];
-        var elapsed = current.ObservedAtUtc - samples[0].ObservedAtUtc;
+        var elapsed = CalculateMeasuredObservationDuration(samples);
         if (current.UsedPercent >= 100)
         {
+            var exhaustedRate = CalculateDiscountedUsageRate(samples);
             return BuildInitialForecast(current, isMock: false) with
             {
                 ObservationDuration = elapsed,
-                Confidence = CalculateConfidence(samples, elapsed, current.UsedPercent - samples[0].UsedPercent, 1),
-                SampleCount = samples.Count
+                Confidence = CalculateEvidenceConfidence(samples, elapsed, exhaustedRate),
+                SampleCount = samples.Count,
+                ExhaustionProbabilityBeforeReset = 1
             };
         }
 
@@ -667,39 +1092,73 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
                 SampleCount: samples.Count);
         }
 
-        var trend = CalculateRunwayTrend(samples);
-        var percentPerMinute = Math.Max(0, trend.PercentPerMinute);
-        if (percentPerMinute <= 0)
+        var rate = CalculateDiscountedUsageRate(samples);
+        if (rate.PercentPerMinute <= 0 || rate.WeightedExposureMinutes <= 0)
         {
-            return BuildInitialForecast(current, isMock: false) with
-            {
-                ObservationDuration = elapsed,
-                SampleCount = samples.Count
-            };
+            return new LimitRunwayForecast(
+                current.BucketId,
+                current.LimitKey,
+                current.TrackLabel,
+                current.ForecastWindowLabel,
+                current.WindowDurationMins,
+                current.ResetsAtUtc,
+                current.UsedPercent,
+                LimitRunwayForecastState.Stable,
+                null,
+                100 - current.UsedPercent,
+                0,
+                elapsed,
+                IsActionable: false,
+                IsMock: false,
+                Confidence: LimitRunwayForecastConfidence.Low,
+                SampleCount: samples.Count,
+                ExhaustionProbabilityBeforeReset: 0);
         }
 
-        var confidence = CalculateConfidence(samples, elapsed, usedDelta, trend.FitQuality);
+        var confidence = CalculateEvidenceConfidence(samples, elapsed, rate);
         var remaining = Math.Max(0, 100 - current.UsedPercent);
-        var timeToExhaustion = TimeSpan.FromMinutes(remaining / percentPerMinute);
+        var remainingPoints = Math.Max(1, (int)Math.Ceiling(remaining));
+        var posteriorShape = rate.WeightedIncrementCount + RunwayPriorShape;
+        var posteriorPercentPerMinute = posteriorShape / rate.WeightedExposureMinutes;
+        var timeToResetMinutes = Math.Max(0, (current.ResetsAtUtc - current.ObservedAtUtc).TotalMinutes);
+        var exhaustionProbability = GammaPoissonForecastMath.ExhaustionProbability(
+            remainingPoints,
+            posteriorShape,
+            rate.WeightedExposureMinutes,
+            timeToResetMinutes);
+        var timeToExhaustion = TimeSpan.FromMinutes(remainingPoints / posteriorPercentPerMinute);
         var exhaustsAt = current.ObservedAtUtc + timeToExhaustion;
-        var exhaustsBeforeReset = exhaustsAt < current.ResetsAtUtc;
-        var uncertainty = confidence switch
-        {
-            LimitRunwayForecastConfidence.High => (Slow: 0.85, Fast: 1.15),
-            LimitRunwayForecastConfidence.Medium => (Slow: 0.65, Fast: 1.40),
-            _ => (Slow: 0.40, Fast: 2.00)
-        };
-        var earliestExhaustsAt = current.ObservedAtUtc
-            + TimeSpan.FromMinutes(remaining / (percentPerMinute * uncertainty.Fast));
-        var latestExhaustsAt = current.ObservedAtUtc
-            + TimeSpan.FromMinutes(remaining / (percentPerMinute * uncertainty.Slow));
+        var earliestMinutes = GammaPoissonForecastMath.ExhaustionQuantileMinutes(
+            ForecastLowerQuantile,
+            remainingPoints,
+            posteriorShape,
+            rate.WeightedExposureMinutes);
+        var latestMinutes = GammaPoissonForecastMath.ExhaustionQuantileMinutes(
+            ForecastUpperQuantile,
+            remainingPoints,
+            posteriorShape,
+            rate.WeightedExposureMinutes);
+        var earliestExhaustsAt = earliestMinutes is double earliest
+            ? current.ObservedAtUtc + TimeSpan.FromMinutes(earliest)
+            : (DateTimeOffset?)null;
+        var latestExhaustsAt = latestMinutes is double latest
+            ? current.ObservedAtUtc + TimeSpan.FromMinutes(latest)
+            : (DateTimeOffset?)null;
         var projectedRemaining = Math.Max(
             0,
-            remaining - (percentPerMinute * Math.Max(0, (current.ResetsAtUtc - current.ObservedAtUtc).TotalMinutes)));
-        var isActionable = exhaustsBeforeReset
+            remaining - (posteriorPercentPerMinute * timeToResetMinutes));
+        var isAtRisk = GammaPoissonForecastMath.IsAtRisk(exhaustionProbability);
+        var isActionable = GammaPoissonForecastMath.HasActionableProbability(exhaustionProbability)
             && confidence is not LimitRunwayForecastConfidence.Low
-            && latestExhaustsAt < current.ResetsAtUtc
+            && exhaustsAt < current.ResetsAtUtc
             && IsWithinWarningWindow(current, timeToExhaustion);
+        var projectionPoints = BuildRunwayProjection(
+            current,
+            posteriorPercentPerMinute,
+            posteriorShape,
+            rate.WeightedExposureMinutes,
+            remainingPoints,
+            latestExhaustsAt ?? exhaustsAt);
 
         return new LimitRunwayForecast(
             current.BucketId,
@@ -709,96 +1168,164 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
             current.WindowDurationMins,
             current.ResetsAtUtc,
             current.UsedPercent,
-            exhaustsBeforeReset ? LimitRunwayForecastState.AtRisk : LimitRunwayForecastState.OnTrack,
+            isAtRisk ? LimitRunwayForecastState.AtRisk : LimitRunwayForecastState.OnTrack,
             exhaustsAt,
             projectedRemaining,
-            percentPerMinute * 60,
+            posteriorPercentPerMinute * 60,
             elapsed,
             isActionable,
             IsMock: false,
             Confidence: confidence,
             EarliestExhaustsAtUtc: earliestExhaustsAt,
             LatestExhaustsAtUtc: latestExhaustsAt,
-            SampleCount: samples.Count);
+            SampleCount: samples.Count,
+            ExhaustionProbabilityBeforeReset: exhaustionProbability,
+            ProjectionPoints: projectionPoints);
     }
 
-    private static RunwayTrend CalculateRunwayTrend(IReadOnlyList<BucketSample> samples)
+    private static TimeSpan CalculateMeasuredObservationDuration(IReadOnlyList<BucketSample> samples)
     {
-        var first = samples[0];
-        var current = samples[^1];
-        var halfLife = IsWeekly(current) ? WeeklyRunwayHalfLife : ShortRunwayHalfLife;
-        var weightedSamples = samples
-            .Select(sample =>
-            {
-                var x = (sample.ObservedAtUtc - first.ObservedAtUtc).TotalMinutes;
-                var age = (current.ObservedAtUtc - sample.ObservedAtUtc).TotalMinutes;
-                var weight = Math.Exp(-Math.Log(2) * age / halfLife.TotalMinutes);
-                return (X: x, Y: sample.UsedPercent, Weight: weight);
-            })
-            .ToArray();
-        var weightTotal = weightedSamples.Sum(sample => sample.Weight);
-        var meanX = weightedSamples.Sum(sample => sample.X * sample.Weight) / weightTotal;
-        var meanY = weightedSamples.Sum(sample => sample.Y * sample.Weight) / weightTotal;
-        var varianceX = weightedSamples.Sum(sample => sample.Weight * Math.Pow(sample.X - meanX, 2));
-        if (varianceX <= double.Epsilon)
+        var measuredTicks = 0L;
+        for (var index = 1; index < samples.Count; index++)
         {
-            return default;
-        }
-
-        var covariance = weightedSamples.Sum(sample => sample.Weight * (sample.X - meanX) * (sample.Y - meanY));
-        var regressionSlope = Math.Max(0, covariance / varianceX);
-        var totalVarianceY = weightedSamples.Sum(sample => sample.Weight * Math.Pow(sample.Y - meanY, 2));
-        var residualVariance = weightedSamples.Sum(sample =>
-        {
-            var fitted = meanY + (regressionSlope * (sample.X - meanX));
-            return sample.Weight * Math.Pow(sample.Y - fitted, 2);
-        });
-        var fitQuality = totalVarianceY <= double.Epsilon
-            ? 1
-            : Math.Clamp(1 - (residualVariance / totalVarianceY), 0, 1);
-
-        var recentSlope = 0d;
-        var recentDelta = 0d;
-        for (var index = samples.Count - 2; index >= 0; index--)
-        {
-            var recentElapsed = current.ObservedAtUtc - samples[index].ObservedAtUtc;
-            if (recentElapsed < MinimumRunwayObservation)
+            if (samples[index].StartsAfterMeasurementGap)
             {
                 continue;
             }
 
-            recentDelta = current.UsedPercent - samples[index].UsedPercent;
-            recentSlope = Math.Max(0, recentDelta / recentElapsed.TotalMinutes);
-            break;
+            var duration = samples[index].ObservedAtUtc - samples[index - 1].ObservedAtUtc;
+            if (duration > TimeSpan.Zero)
+            {
+                measuredTicks += duration.Ticks;
+            }
         }
 
-        var estimatedSlope = recentDelta >= 2 && recentSlope > regressionSlope * 1.5
-            ? (recentSlope * 0.65) + (regressionSlope * 0.35)
-            : regressionSlope;
-        return new RunwayTrend(estimatedSlope, fitQuality);
+        return TimeSpan.FromTicks(measuredTicks);
     }
 
-    private static LimitRunwayForecastConfidence CalculateConfidence(
+    private static DiscountedUsageRate CalculateDiscountedUsageRate(IReadOnlyList<BucketSample> samples)
+    {
+        var current = samples[^1];
+        var halfLife = IsWeekly(current) ? WeeklyRunwayHalfLife : ShortRunwayHalfLife;
+        var weightedIncrementCount = 0d;
+        var weightedExposureMinutes = 0d;
+        var positiveIntervals = 0;
+
+        for (var index = 1; index < samples.Count; index++)
+        {
+            var previous = samples[index - 1];
+            var sample = samples[index];
+            if (sample.StartsAfterMeasurementGap)
+            {
+                continue;
+            }
+
+            var exposureMinutes = (sample.ObservedAtUtc - previous.ObservedAtUtc).TotalMinutes;
+            if (exposureMinutes <= 0)
+            {
+                continue;
+            }
+
+            var midpoint = previous.ObservedAtUtc + TimeSpan.FromTicks((sample.ObservedAtUtc - previous.ObservedAtUtc).Ticks / 2);
+            var ageMinutes = Math.Max(0, (current.ObservedAtUtc - midpoint).TotalMinutes);
+            var weight = Math.Exp(-Math.Log(2) * ageMinutes / halfLife.TotalMinutes);
+            var previousCount = Math.Round(previous.UsedPercent, MidpointRounding.AwayFromZero);
+            var currentCount = Math.Round(sample.UsedPercent, MidpointRounding.AwayFromZero);
+            var increment = Math.Max(0, currentCount - previousCount);
+            if (increment > 0)
+            {
+                positiveIntervals++;
+            }
+
+            weightedIncrementCount += weight * increment;
+            weightedExposureMinutes += weight * exposureMinutes;
+        }
+
+        var percentPerMinute = weightedExposureMinutes <= 0
+            ? 0
+            : weightedIncrementCount / weightedExposureMinutes;
+        return new DiscountedUsageRate(
+            percentPerMinute,
+            weightedIncrementCount,
+            weightedExposureMinutes,
+            positiveIntervals);
+    }
+
+    private static LimitRunwayForecastConfidence CalculateEvidenceConfidence(
         IReadOnlyList<BucketSample> samples,
         TimeSpan elapsed,
-        double usedDelta,
-        double fitQuality)
+        DiscountedUsageRate rate)
     {
         var highDuration = IsWeekly(samples[^1]) ? TimeSpan.FromHours(2) : TimeSpan.FromMinutes(20);
-        if (samples.Count >= 8 && elapsed >= highDuration && usedDelta >= 5 && fitQuality >= 0.65)
+        var posteriorShape = rate.WeightedIncrementCount + RunwayPriorShape;
+        var posteriorCoefficientOfVariation = posteriorShape <= 0
+            ? double.PositiveInfinity
+            : 1 / Math.Sqrt(posteriorShape);
+        if (samples.Count >= 8
+            && rate.PositiveIntervals >= 3
+            && elapsed >= highDuration
+            && rate.WeightedIncrementCount >= 8
+            && posteriorCoefficientOfVariation <= 0.35)
         {
             return LimitRunwayForecastConfidence.High;
         }
 
         if (samples.Count >= 3
+            && rate.PositiveIntervals >= 2
             && elapsed >= MinimumRunwayObservation
-            && usedDelta >= 2
-            && (fitQuality >= 0.35 || usedDelta >= 5))
+            && rate.WeightedIncrementCount >= 2)
         {
             return LimitRunwayForecastConfidence.Medium;
         }
 
         return LimitRunwayForecastConfidence.Low;
+    }
+
+    private static IReadOnlyList<LimitRunwayProjectionPoint> BuildRunwayProjection(
+        BucketSample current,
+        double percentPerMinute,
+        double posteriorShape,
+        double posteriorExposureMinutes,
+        int remainingPoints,
+        DateTimeOffset forecastHorizon)
+    {
+        var history = IsWeekly(current) ? WeeklyRunwayHistory : ShortRunwayHistory;
+        var minimumEnd = current.ObservedAtUtc + history;
+        var desiredEnd = forecastHorizon > minimumEnd ? forecastHorizon : minimumEnd;
+        var projectionEnd = current.ResetsAtUtc <= desiredEnd ? current.ResetsAtUtc : desiredEnd;
+        if (projectionEnd <= current.ObservedAtUtc)
+        {
+            return [];
+        }
+
+        var duration = projectionEnd - current.ObservedAtUtc;
+        return Enumerable.Range(0, ForecastProjectionPointCount)
+            .Select(index =>
+            {
+                var timestamp = current.ObservedAtUtc
+                    + TimeSpan.FromTicks(duration.Ticks * index / (ForecastProjectionPointCount - 1));
+                var futureMinutes = Math.Max(0, (timestamp - current.ObservedAtUtc).TotalMinutes);
+                var lowerIncrement = GammaPoissonForecastMath.CountQuantile(
+                    ForecastLowerQuantile,
+                    remainingPoints,
+                    posteriorShape,
+                    posteriorExposureMinutes,
+                    futureMinutes);
+                var upperIncrement = GammaPoissonForecastMath.CountQuantile(
+                    ForecastUpperQuantile,
+                    remainingPoints,
+                    posteriorShape,
+                    posteriorExposureMinutes,
+                    futureMinutes);
+                var lower = Math.Clamp(current.UsedPercent + lowerIncrement, current.UsedPercent, 100);
+                var upper = Math.Clamp(current.UsedPercent + upperIncrement, lower, 100);
+                var expected = Math.Clamp(
+                    current.UsedPercent + (percentPerMinute * futureMinutes),
+                    lower,
+                    upper);
+                return new LimitRunwayProjectionPoint(timestamp, expected, lower, upper);
+            })
+            .ToArray();
     }
 
     private static bool IsWithinWarningWindow(BucketSample sample, TimeSpan timeToExhaustion)
@@ -820,21 +1347,54 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
         };
     }
 
-    private static void AddRunwaySample(BucketObservation observation, BucketSample current)
+    private static bool AddRunwaySample(BucketObservation observation, BucketSample current)
     {
         var samples = observation.RunwaySamples;
         var latest = samples[^1];
-        if (current.ObservedAtUtc <= latest.ObservedAtUtc
-            || current.ResetsAtUtc != latest.ResetsAtUtc
-            || current.UsedPercent < latest.UsedPercent)
+        if (current == latest)
+        {
+            return false;
+        }
+        if (current.ObservedAtUtc <= latest.ObservedAtUtc)
+        {
+            return false;
+        }
+
+        if (current.ResetsAtUtc != latest.ResetsAtUtc)
         {
             samples.Clear();
             samples.Add(current);
-            return;
+            return true;
         }
 
-        samples.Add(current);
-        var history = IsWeekly(current) ? WeeklyRunwayHistory : ShortRunwayHistory;
+        // Usage inside one quota window is cumulative. A lower value with the same reset
+        // identifies a stale/transient reading and must not erase the recorded history.
+        if (current.UsedPercent < latest.UsedPercent)
+        {
+            return false;
+        }
+
+        if (observation.Restored
+            && current.ObservedAtUtc - latest.ObservedAtUtc > MeasurementGapThreshold)
+        {
+            current = current with { StartsAfterMeasurementGap = true };
+        }
+
+        if (samples.Count >= 3
+            && current.UsedPercent == latest.UsedPercent
+            && samples[^2].UsedPercent == latest.UsedPercent
+            && !current.StartsAfterMeasurementGap
+            && !latest.StartsAfterMeasurementGap
+            && current.ObservedAtUtc - samples[^2].ObservedAtUtc <= ResolveFlatSampleCheckpointInterval(current))
+        {
+            samples[^1] = current;
+        }
+        else
+        {
+            samples.Add(current);
+        }
+
+        var history = ResolveTrendHistory(current.WindowDurationMins);
         var cutoff = current.ObservedAtUtc - history;
         while (samples.Count > 1 && samples[0].ObservedAtUtc < cutoff)
         {
@@ -843,8 +1403,68 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
 
         if (samples.Count > MaximumRunwaySamples)
         {
-            samples.RemoveRange(0, samples.Count - MaximumRunwaySamples);
+            CompactRunwaySamples(samples);
         }
+
+        return true;
+    }
+
+    private static IReadOnlyList<BucketSample> SelectForecastSamples(IReadOnlyList<BucketSample> samples)
+    {
+        var current = samples[^1];
+        var history = IsWeekly(current) ? WeeklyRunwayHistory : ShortRunwayHistory;
+        var cutoff = current.ObservedAtUtc - history;
+        var firstRecentIndex = 0;
+        while (firstRecentIndex < samples.Count - 1 && samples[firstRecentIndex].ObservedAtUtc < cutoff)
+        {
+            firstRecentIndex++;
+        }
+
+        return firstRecentIndex == 0 ? samples : samples.Skip(firstRecentIndex).ToArray();
+    }
+
+    private static TimeSpan ResolveTrendHistory(int? windowDurationMins)
+    {
+        if (windowDurationMins is not int minutes || minutes <= 0)
+        {
+            return WeeklyRunwayHistory;
+        }
+
+        return TimeSpan.FromMinutes(Math.Min(minutes, (int)MaximumTrendHistory.TotalMinutes));
+    }
+
+    private static TimeSpan ResolveFlatSampleCheckpointInterval(BucketSample sample) =>
+        IsWeekly(sample) ? WeeklyFlatSampleCheckpointInterval : ShortFlatSampleCheckpointInterval;
+
+    private static void CompactRunwaySamples(List<BucketSample> samples)
+    {
+        var source = samples.ToArray();
+        var requiredIndexes = new HashSet<int> { 0, source.Length - 1 };
+        for (var index = 1; index < source.Length; index++)
+        {
+            if (!source[index].StartsAfterMeasurementGap)
+            {
+                continue;
+            }
+
+            requiredIndexes.Add(index - 1);
+            requiredIndexes.Add(index);
+        }
+
+        var selectedIndexes = requiredIndexes.Count >= MaximumRunwaySamples
+            ? requiredIndexes.OrderDescending().Take(MaximumRunwaySamples)
+            : requiredIndexes.Concat(
+                Enumerable.Range(0, MaximumRunwaySamples - requiredIndexes.Count)
+                    .Select(index => (int)Math.Round(
+                        index * (source.Length - 1d)
+                        / Math.Max(1, MaximumRunwaySamples - requiredIndexes.Count - 1d))));
+        var compacted = selectedIndexes
+            .Distinct()
+            .Order()
+            .Select(index => source[index])
+            .ToArray();
+        samples.Clear();
+        samples.AddRange(compacted);
     }
 
     private static bool ShouldRebaseIdleDrain(BucketSample baseline, BucketSample current, TimeSpan idleTime)
@@ -878,7 +1498,7 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
             return;
         }
 
-        var summary = $"Usage moved while idle: {FormatPercent(previous.UsedPercent)} -> {FormatPercent(current.UsedPercent)} in {FormatDuration(elapsed)}";
+        var summary = FormatIdleUsageSummary(current.WindowLabel, previous.UsedPercent, current.UsedPercent, elapsed);
         var detail = $"{current.WindowLabel} changed while Windows reported {FormatDuration(idleTime)} idle.";
         var diagnostic = BuildDiagnosticText(previous, current, elapsed, idleTime, snapshot);
 
@@ -1049,6 +1669,16 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
         return value.ToString("0.#", CultureInfo.InvariantCulture) + "%";
     }
 
+    private static string FormatIdleUsageSummary(string windowLabel, double beforePercent, double afterPercent, TimeSpan duration)
+    {
+        const string windowSuffix = " Window";
+        var displayLabel = windowLabel.EndsWith(windowSuffix, StringComparison.OrdinalIgnoreCase)
+            ? windowLabel[..^windowSuffix.Length]
+            : windowLabel;
+
+        return $"{displayLabel} usage increased from {FormatPercent(beforePercent)} to {FormatPercent(afterPercent)} in {FormatDuration(duration)}.";
+    }
+
     private static string FormatDuration(TimeSpan value)
     {
         if (value.TotalMinutes < 1)
@@ -1075,22 +1705,30 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
         int? WindowDurationMins,
         double UsedPercent,
         DateTimeOffset ResetsAtUtc,
-        DateTimeOffset ObservedAtUtc);
+        DateTimeOffset ObservedAtUtc,
+        bool StartsAfterMeasurementGap = false);
 
     private sealed class BucketObservation
     {
-        public BucketObservation(BucketSample initial)
+        public BucketObservation(BucketSample initial, bool isRestored = false)
         {
             RunwaySamples.Add(initial);
             IdleDrainBaseline = initial;
+            Restored = isRestored;
         }
 
         public List<BucketSample> RunwaySamples { get; } = [];
 
         public BucketSample IdleDrainBaseline { get; set; }
 
+        public bool Restored { get; set; }
+
         public DateTimeOffset ResetsAtUtc => RunwaySamples[^1].ResetsAtUtc;
     }
 
-    private readonly record struct RunwayTrend(double PercentPerMinute, double FitQuality);
+    private readonly record struct DiscountedUsageRate(
+        double PercentPerMinute,
+        double WeightedIncrementCount,
+        double WeightedExposureMinutes,
+        int PositiveIntervals);
 }

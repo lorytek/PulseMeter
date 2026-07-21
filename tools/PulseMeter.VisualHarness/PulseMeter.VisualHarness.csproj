@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>PulseMeter.VisualHarness</AssemblyName>
+    <RootNamespace>PulseMeter.VisualHarness</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PulseMeter\PulseMeter.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="..\..\src\PulseMeter\Assets\PulseMeter.ico"
+              Link="Assets\PulseMeter.ico" />
+    <Resource Include="..\..\src\PulseMeter\Assets\PulseMeterLogo.png"
+              Link="Assets\PulseMeterLogo.png" />
+  </ItemGroup>
+
+</Project>

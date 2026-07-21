@@ -1,0 +1,323 @@
+<UserControl x:Class="PulseMeter.Slices.UsageTrend.UI.UsageTrendSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:PulseMeter.Slices.UsageTrend.UI">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </UserControl.Resources>
+
+    <Border x:Name="UsageTrendPanel"
+            Margin="0,12,0,0"
+            Padding="0"
+            Style="{DynamicResource LightCardStyle}"
+            AutomationProperties.Name="{Binding AccessibleSummary}">
+        <StackPanel>
+            <Grid Margin="16,10,14,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Text="Coding runway"
+                           Foreground="#0F172A"
+                           FontFamily="Segoe UI"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center" />
+
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <Border Height="34"
+                            Margin="0,0,8,0"
+                            Padding="2"
+                            Background="#F8FAFC"
+                            BorderBrush="#DCE3EC"
+                            BorderThickness="1"
+                            CornerRadius="9">
+                        <ListBox ItemsSource="{Binding WindowOptions}"
+                                 SelectedItem="{Binding SelectedWindow, Mode=TwoWay}"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Padding="0"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                 AutomationProperties.Name="Usage limit window"
+                                 AutomationProperties.HelpText="Choose either the 5-hour or 7-day chart. Only the selected chart is shown.">
+                            <ListBox.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ListBox.ItemsPanel>
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="MinWidth" Value="64" />
+                                    <Setter Property="Height" Value="28" />
+                                    <Setter Property="Padding" Value="0" />
+                                    <Setter Property="Margin" Value="0" />
+                                    <Setter Property="Foreground" Value="#64748B" />
+                                    <Setter Property="FontSize" Value="12" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <Border x:Name="Segment"
+                                                        Padding="10,0"
+                                                        Background="Transparent"
+                                                        CornerRadius="7">
+                                                    <TextBlock Text="{Binding Label}"
+                                                               Foreground="{TemplateBinding Foreground}"
+                                                               FontSize="{TemplateBinding FontSize}"
+                                                               FontWeight="{TemplateBinding FontWeight}"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center" />
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsSelected" Value="True">
+                                                        <Setter TargetName="Segment" Property="Background" Value="#EAF2FF" />
+                                                        <Setter Property="Foreground" Value="#1F73FF" />
+                                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                                    </Trigger>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="Segment" Property="Background" Value="#F1F5F9" />
+                                                    </Trigger>
+                                                    <MultiTrigger>
+                                                        <MultiTrigger.Conditions>
+                                                            <Condition Property="IsSelected" Value="True" />
+                                                            <Condition Property="IsMouseOver" Value="True" />
+                                                        </MultiTrigger.Conditions>
+                                                        <Setter TargetName="Segment" Property="Background" Value="#E4EEFF" />
+                                                    </MultiTrigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                        </ListBox>
+                    </Border>
+
+                    <ToggleButton Width="34"
+                                  Height="34"
+                                  Margin="0,0,6,0"
+                                  IsChecked="{Binding ShowRange, Mode=TwoWay}"
+                                  ToolTip="Show or hide the possible-limit window"
+                                  AutomationProperties.Name="Show possible-limit window"
+                                  AutomationProperties.HelpText="Shows the window when usage may reach the limit."
+                                  Style="{DynamicResource LightIconToggleButtonStyle}">
+                        <TextBlock Text="&#xE9D9;"
+                                   FontFamily="Segoe MDL2 Assets"
+                                   FontSize="13" />
+                    </ToggleButton>
+
+                    <ToggleButton Width="34"
+                                  Height="34"
+                                  Margin="0,0,6,0"
+                                  IsChecked="{Binding ShowProjection, Mode=TwoWay}"
+                                  ToolTip="Show or hide the current-pace forecast"
+                                  AutomationProperties.Name="Show current pace projection"
+                                  Style="{DynamicResource LightIconToggleButtonStyle}">
+                        <TextBlock Text="&#xE9D2;"
+                                   FontFamily="Segoe MDL2 Assets"
+                                   FontSize="13" />
+                    </ToggleButton>
+
+                    <Button Width="34"
+                            Height="34"
+                            Command="{Binding ResetChartCommand}"
+                            ToolTip="Reset chart view"
+                            AutomationProperties.Name="Reset chart view"
+                            Style="{DynamicResource CompactIconButtonStyle}">
+                        <TextBlock Text="&#xE72C;"
+                                   FontFamily="Segoe MDL2 Assets"
+                                   FontSize="13" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <StackPanel>
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Setter Property="Visibility" Value="Visible" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasChart}" Value="False">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
+
+                <StackPanel Margin="16,10,16,0">
+                    <TextBlock Text="{Binding RunwayHeadline}"
+                               Foreground="#0F172A"
+                               FontFamily="Segoe UI"
+                               FontSize="28"
+                               FontWeight="Bold"
+                               LineHeight="34"
+                               TextWrapping="Wrap" />
+
+                    <WrapPanel Margin="0,7,0,0"
+                               VerticalAlignment="Center">
+                        <TextBlock Text="{Binding ForecastLeadText}"
+                                   Foreground="#475569"
+                                   FontSize="13" />
+                        <TextBlock Margin="5,0,0,0"
+                                   Text="{Binding ForecastWhenText}"
+                                   Foreground="#D97706"
+                                   FontSize="13"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Margin="16,0,0,0"
+                                   Text="{Binding ConfidenceText}"
+                                   Foreground="#2563EB"
+                                   FontSize="12" />
+                    </WrapPanel>
+                </StackPanel>
+
+                <Grid Margin="16,16,16,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.35*" />
+                        <ColumnDefinition Width="1" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="1" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="1" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Margin="0,0,14,0" HorizontalAlignment="Center">
+                        <local:UsageMomentumGauge Width="160"
+                                                  Height="58"
+                                                  HorizontalAlignment="Center"
+                                                  Value="{Binding MomentumGaugeValue}" />
+                        <TextBlock Margin="0,1,0,0"
+                                   Text="Usage momentum"
+                                   Foreground="#334155"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   TextAlignment="Center" />
+                        <TextBlock Margin="0,2,0,0"
+                                   Text="{Binding MomentumValueText}"
+                                   Foreground="#2563EB"
+                                   FontSize="24"
+                                   FontWeight="SemiBold"
+                                   TextAlignment="Center" />
+                        <TextBlock Margin="0,1,0,0"
+                                   Text="{Binding MomentumStateText}"
+                                   FontSize="11.5"
+                                   FontWeight="SemiBold"
+                                   TextAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="#64748B" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding MomentumStateText}" Value="usage accelerating">
+                                            <Setter Property="Foreground" Value="#D97706" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding MomentumStateText}" Value="usage slowing">
+                                            <Setter Property="Foreground" Value="#16A34A" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock Margin="0,1,0,0"
+                                   Text="{Binding MomentumBaselineText}"
+                                   Foreground="#94A3B8"
+                                   FontSize="10.5"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <Border Grid.Column="1" Background="#E2E8F0" />
+
+                    <StackPanel Grid.Column="2" Margin="18,0,14,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding CurrentPaceText}"
+                                   Foreground="#2563EB"
+                                   FontSize="24"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Margin="0,2,0,0"
+                                   Text="current pace"
+                                   Foreground="#64748B"
+                                   FontSize="11.5" />
+                    </StackPanel>
+
+                    <Border Grid.Column="3" Background="#E2E8F0" />
+
+                    <StackPanel Grid.Column="4" Margin="18,0,14,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding SustainablePaceText}"
+                                   Foreground="#2563EB"
+                                   FontSize="24"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Margin="0,2,0,0"
+                                   Text="sustainable"
+                                   Foreground="#64748B"
+                                   FontSize="11.5" />
+                    </StackPanel>
+
+                    <Border Grid.Column="5" Background="#E2E8F0" />
+
+                    <StackPanel Grid.Column="6" Margin="18,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding PaceComparisonText}"
+                                   FontSize="22"
+                                   FontWeight="SemiBold">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="#16A34A" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding PaceComparisonLabel}"
+                                                     Value="will reach limit before reset">
+                                            <Setter Property="Foreground" Value="#DC2626" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding PaceComparisonLabel}"
+                                                     Value="outcome at reset">
+                                            <Setter Property="Foreground" Value="#64748B" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock Margin="0,2,0,0"
+                                   Text="{Binding PaceComparisonLabel}"
+                                   Foreground="#64748B"
+                                   FontSize="11.5"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+
+                <Border Height="1"
+                        Margin="16,14,16,0"
+                        Background="#E2E8F0" />
+
+                <local:UsageTrendChart Height="380"
+                                       Margin="8,8,8,8"
+                                       HorizontalAlignment="Stretch"
+                                       VerticalAlignment="Stretch"
+                                       Model="{Binding ChartModel}"
+                                       AutomationProperties.Name="{Binding AccessibleSummary}" />
+            </StackPanel>
+
+            <Border Margin="16,8,16,18"
+                    Padding="14"
+                    Background="#F8FAFC"
+                    BorderBrush="#E2E8F0"
+                    BorderThickness="1"
+                    CornerRadius="6">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasChart}" Value="False">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <TextBlock Text="{Binding EmptyStateText}"
+                           Foreground="#64748B"
+                           FontSize="13"
+                           TextWrapping="Wrap" />
+            </Border>
+        </StackPanel>
+    </Border>
+</UserControl>

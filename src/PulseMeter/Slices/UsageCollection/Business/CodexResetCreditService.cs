@@ -15,6 +15,8 @@ public sealed class CodexResetCreditService : ICodexResetCreditService
 {
     private const string ResetCreditsUrl = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits";
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(8);
+    private const long MinUnixTimeSeconds = -62_135_596_800;
+    private const long MaxUnixTimeSeconds = 253_402_300_799;
 
     private readonly string _authPath;
     private readonly HttpMessageHandler? _handler;
@@ -190,7 +192,7 @@ public sealed class CodexResetCreditService : ICodexResetCreditService
 
         if (property.ValueKind == JsonValueKind.Number && property.TryGetInt64(out var unixSeconds))
         {
-            return DateTimeOffset.FromUnixTimeSeconds(unixSeconds);
+            return TryFromUnixTimeSeconds(unixSeconds);
         }
 
         if (property.ValueKind != JsonValueKind.String)
@@ -201,10 +203,17 @@ public sealed class CodexResetCreditService : ICodexResetCreditService
         var text = property.GetString();
         if (long.TryParse(text, out var parsedUnixSeconds))
         {
-            return DateTimeOffset.FromUnixTimeSeconds(parsedUnixSeconds);
+            return TryFromUnixTimeSeconds(parsedUnixSeconds);
         }
 
         return DateTimeOffset.TryParse(text, out var parsedDate) ? parsedDate.ToUniversalTime() : null;
+    }
+
+    private static DateTimeOffset? TryFromUnixTimeSeconds(long unixSeconds)
+    {
+        return unixSeconds is < MinUnixTimeSeconds or > MaxUnixTimeSeconds
+            ? null
+            : DateTimeOffset.FromUnixTimeSeconds(unixSeconds);
     }
 
     private sealed record CodexAuthSession(string AccessToken, string? AccountId);

@@ -21,7 +21,7 @@
                         VerticalAlignment="Center"
                         SnapsToDevicePixels="True">
                     <Border.Background>
-                        <ImageBrush ImageSource="/Assets/PulseMeterLogo.png"
+                        <ImageBrush ImageSource="/PulseMeter;component/Assets/PulseMeterLogo.png"
                                     Stretch="UniformToFill"
                                     Viewbox="0.38,0.31,0.20,0.26"
                                     ViewboxUnits="RelativeToBoundingBox" />
@@ -37,23 +37,38 @@
             <StackPanel Grid.Column="1"
                         Orientation="Horizontal"
                         VerticalAlignment="Top">
-                <StackPanel Orientation="Horizontal"
-                            VerticalAlignment="Center">
-                    <Border Width="10"
-                            Height="10"
+                <StackPanel Margin="0,0,18,0"
                             VerticalAlignment="Center"
-                            Background="#28B946"
-                            CornerRadius="5" />
-                    <TextBlock Margin="8,0,18,0"
-                               Text="{Binding StatusBadgeText}"
-                               Foreground="#111827"
-                               FontSize="13"
-                               VerticalAlignment="Center" />
+                            ToolTip="{Binding StatusSummaryText}"
+                            AutomationProperties.Name="{Binding StatusSummaryText}">
+                    <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Right">
+                        <Border Width="10"
+                                Height="10"
+                                VerticalAlignment="Center"
+                                Background="{Binding StatusBadgeBrush}"
+                                CornerRadius="5" />
+                        <TextBlock Margin="8,0,0,0"
+                                   Text="{Binding StatusBadgeText}"
+                                   Foreground="{Binding StatusBadgeBrush}"
+                                   FontSize="13"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Margin="0,2,0,0"
+                               Text="{Binding LastUpdatedText}"
+                               ToolTip="{Binding LastUpdatedDetailText}"
+                               AutomationProperties.Name="{Binding LastUpdatedDetailText}"
+                               Foreground="#6B7280"
+                               FontSize="11"
+                               HorizontalAlignment="Right" />
                 </StackPanel>
 
                 <Button Height="40"
                         Margin="0,0,8,0"
                         Command="{Binding SyncNowCommand}"
+                        ToolTip="{Binding SyncButtonTooltip}"
+                        AutomationProperties.Name="{Binding SyncButtonAccessibleLabel}"
+                        AutomationProperties.AcceleratorKey="F5"
                         Style="{DynamicResource LightButtonStyle}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="&#xE72C;"
@@ -61,20 +76,32 @@
                                    FontSize="15"
                                    VerticalAlignment="Center" />
                         <TextBlock Margin="9,0,0,0"
-                                   Text="Sync"
+                                   Text="{Binding SyncButtonText}"
                                    VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
+                <ToggleButton Margin="0,0,8,0"
+                              IsChecked="{Binding DataContext.IsAlwaysOnTop, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"
+                              ToolTip="Keep PulseMeter on top"
+                              AutomationProperties.Name="Always on top"
+                              AutomationProperties.HelpText="Keep PulseMeter above other windows"
+                              Style="{DynamicResource LightIconToggleButtonStyle}">
+                    <TextBlock Text="&#xE718;"
+                               FontFamily="Segoe MDL2 Assets"
+                               FontSize="15" />
+                </ToggleButton>
                 <Button Content="&#xE70E;"
                         Click="ExpandCollapseButton_Click"
                         FontFamily="Segoe MDL2 Assets"
                         FontSize="13"
                         Style="{DynamicResource LightIconButtonStyle}"
-                        ToolTip="{Binding ExpandCollapseTooltip}" />
+                        ToolTip="{Binding ExpandCollapseTooltip}"
+                        AutomationProperties.Name="{Binding ExpandCollapseTooltip}" />
                 <Button Margin="8,0,0,0"
                         Click="HideButton_Click"
                         Style="{DynamicResource LightIconButtonStyle}"
-                        ToolTip="Hide PulseMeter">
+                        ToolTip="Hide PulseMeter"
+                        AutomationProperties.Name="Hide PulseMeter">
                     <Path Width="12"
                           Height="12"
                           Stroke="#111827"

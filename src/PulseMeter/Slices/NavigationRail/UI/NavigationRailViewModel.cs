@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using PulseMeter.Platform.Persistence;
 using PulseMeter.Slices.NavigationRail.Models;
@@ -9,6 +10,7 @@ public sealed class NavigationRailViewModel : INotifyPropertyChanged
 {
     private const double ExpandedWidth = 205;
     private const double CollapsedWidth = 64;
+    private const int CustomizableSectionCount = 8;
 
     private bool _isNavigationPanelExpanded = true;
     private bool _isRateLimitsVisible = true;
@@ -100,17 +102,83 @@ public sealed class NavigationRailViewModel : INotifyPropertyChanged
         : "Expand navigation";
 
     public string NavigationPanelToggleGlyph => IsNavigationPanelExpanded
-        ? "\u2039"
-        : "\u203A";
+        ? "\uE76B"
+        : "\uE76C";
+
+    public string ApplicationVersionText { get; } = BuildApplicationVersionText();
+
+    public int VisibleSectionCount =>
+        (IsRateLimitsVisible ? 1 : 0) +
+        (IsRateLimitsDailyVisible ? 1 : 0) +
+        (IsRunwayForecastVisible ? 1 : 0) +
+        (IsResetCreditsVisible ? 1 : 0) +
+        (IsAccountUsageVisible ? 1 : 0) +
+        (IsProjectUsageVisible ? 1 : 0) +
+        (IsUsageAttributionVisible ? 1 : 0) +
+        (IsDailyUsageVisible ? 1 : 0);
+
+    public string VisibleSectionSummaryText => $"{VisibleSectionCount} of {CustomizableSectionCount} visible · changes save automatically";
+
+    public bool HasHiddenSections => VisibleSectionCount < CustomizableSectionCount;
+
+    private static string BuildApplicationVersionText()
+    {
+        var informationalVersion = typeof(NavigationRailViewModel)
+            .Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion;
+        var version = informationalVersion?.Split('+', 2)[0]
+            ?? typeof(NavigationRailViewModel).Assembly.GetName().Version?.ToString(3)
+            ?? "Unknown";
+        return $"PulseMeter · v{version}";
+    }
 
     public void ToggleNavigationPanel()
     {
         IsNavigationPanelExpanded = !IsNavigationPanelExpanded;
     }
 
+    public void ApplyPanelState(bool isExpanded)
+    {
+        IsNavigationPanelExpanded = isExpanded;
+    }
+
     public void SelectSection(NavigationSection section)
     {
         SelectedSection = IsSectionVisible(section) ? section : NavigationSection.Overview;
+    }
+
+    public void RevealAndSelectSection(NavigationSection section)
+    {
+        switch (section)
+        {
+            case NavigationSection.RateLimits:
+                IsRateLimitsVisible = true;
+                break;
+            case NavigationSection.WeeklyPace:
+                IsRateLimitsDailyVisible = true;
+                break;
+            case NavigationSection.RunwayForecast:
+                IsRunwayForecastVisible = true;
+                break;
+            case NavigationSection.ResetCredits:
+                IsResetCreditsVisible = true;
+                break;
+            case NavigationSection.AccountUsage:
+                IsAccountUsageVisible = true;
+                break;
+            case NavigationSection.ProjectUsage:
+                IsProjectUsageVisible = true;
+                break;
+            case NavigationSection.BurnAnalysis:
+                IsUsageAttributionVisible = true;
+                break;
+            case NavigationSection.DailyUsage:
+                IsDailyUsageVisible = true;
+                break;
+        }
+
+        SelectSection(section);
     }
 
     public void ApplyVisibility(DashboardVisibilitySettings? visibility)
@@ -150,6 +218,10 @@ public sealed class NavigationRailViewModel : INotifyPropertyChanged
         {
             SelectedSection = NavigationSection.Overview;
         }
+
+        OnPropertyChanged(nameof(VisibleSectionCount));
+        OnPropertyChanged(nameof(VisibleSectionSummaryText));
+        OnPropertyChanged(nameof(HasHiddenSections));
 
         return true;
     }

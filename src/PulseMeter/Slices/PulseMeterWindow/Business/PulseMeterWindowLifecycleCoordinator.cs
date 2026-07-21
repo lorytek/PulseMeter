@@ -77,6 +77,11 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
 
     public void Stop()
     {
+        _dispatcher.Invoke(StopCore);
+    }
+
+    private void StopCore()
+    {
         if (_stopped)
         {
             return;
@@ -87,21 +92,14 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
         _foregroundTimer?.Stop();
         _refreshTimer?.Stop();
 
+        _viewModel.FlushUsageHistory();
+
         _usageService.SnapshotUpdated -= OnSnapshotUpdated;
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
 
         _appSettingsStore.Save(CaptureAppSettings(_viewModel));
         _windowStateStore.Save(_viewModel.CaptureWindowState());
         _trayIconService.Dispose();
-
-        if (_usageService is IAsyncDisposable asyncDisposable)
-        {
-            asyncDisposable.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        }
-        else if (_usageService is IDisposable disposable)
-        {
-            disposable.Dispose();
-        }
     }
 
     private void StartTimers()
@@ -127,7 +125,9 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(PulseMeterWindowViewModel.AutoSyncSeconds)
+            or nameof(PulseMeterWindowViewModel.SelectedLimitKey)
             or nameof(PulseMeterWindowViewModel.IsAlwaysOnTop)
+            or nameof(PulseMeterWindowViewModel.IsNavigationPanelExpanded)
             or nameof(PulseMeterWindowViewModel.IsRateLimitsVisible)
             or nameof(PulseMeterWindowViewModel.IsRateLimitsDailyVisible)
             or nameof(PulseMeterWindowViewModel.IsRunwayForecastVisible)
@@ -152,7 +152,9 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
         return new PulseMeterAppSettings(
             viewModel.AutoSyncSeconds,
             viewModel.IsAlwaysOnTop,
-            viewModel.NavigationRail.CaptureVisibility());
+            viewModel.NavigationRail.CaptureVisibility(),
+            viewModel.SelectedLimitKey,
+            viewModel.IsNavigationPanelExpanded);
     }
 
     private void UpdateForegroundVisibility()

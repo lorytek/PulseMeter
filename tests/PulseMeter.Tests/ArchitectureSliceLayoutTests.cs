@@ -239,12 +239,21 @@ public sealed class ArchitectureSliceLayoutTests
         Assert.Empty(textViolations);
     }
 
+    [Theory]
+    [InlineData("PulseMeter_abcd1234_wpftmp.csproj")]
+    [InlineData("pulsemeter_ABCD1234_WPFTMP.CSPROJ")]
+    public void GeneratedWpfTemporaryProjects_AreIgnoredByArchitectureChecks(string fileName)
+    {
+        Assert.True(IsGeneratedOrBuildOutput(Path.Combine("src", "PulseMeter", fileName)));
+    }
+
     private static bool IsGeneratedOrBuildOutput(string path)
     {
         var parts = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
         return parts.Any(part => part.Equals("bin", StringComparison.OrdinalIgnoreCase)
-            || part.Equals("obj", StringComparison.OrdinalIgnoreCase));
+            || part.Equals("obj", StringComparison.OrdinalIgnoreCase))
+            || Path.GetFileName(path).EndsWith("_wpftmp.csproj", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsSliceLayer(string value)

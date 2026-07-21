@@ -8,6 +8,7 @@ using PulseMeter.Slices.PulseMeterWindow;
 using PulseMeter.Slices.PulseMeterWindow.Business;
 using PulseMeter.Slices.NavigationRail.Models;
 using PulseMeter.Slices.NavigationRail.UI;
+using PulseMeter.Slices.NeedsAttention.UI;
 using PulseMeter.Platform.Persistence;
 using PulseMeter.Platform.Windows;
 using WpfComboBoxItem = System.Windows.Controls.ComboBoxItem;
@@ -129,18 +130,51 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
 
     private void NavigationRail_SectionRequested(object? sender, NavigationSectionRequestedEventArgs e)
     {
+        NavigateToSection(e.Section, restoreHiddenSection: false);
+    }
+
+    private void UsageTrendSection_SectionRequested(object? sender, NavigationSectionRequestedEventArgs e)
+    {
+        NavigateToSection(e.Section, restoreHiddenSection: false);
+    }
+
+    private void NeedsAttentionSection_ReviewRequested(object? sender, NeedsAttentionReviewRequestedEventArgs e)
+    {
+        NavigateToSection(GetNavigationSection(e.Target), restoreHiddenSection: true);
+    }
+
+    private static NavigationSection GetNavigationSection(NeedsAttentionReviewTarget target)
+    {
+        return target switch
+        {
+            NeedsAttentionReviewTarget.RunwayForecast => NavigationSection.RunwayForecast,
+            NeedsAttentionReviewTarget.RateLimits => NavigationSection.RateLimits,
+            NeedsAttentionReviewTarget.ResetCredits => NavigationSection.ResetCredits,
+            NeedsAttentionReviewTarget.DailyUsage => NavigationSection.DailyUsage,
+            NeedsAttentionReviewTarget.ProjectUsage => NavigationSection.ProjectUsage,
+            _ => NavigationSection.Overview
+        };
+    }
+
+    private void NavigateToSection(NavigationSection section, bool restoreHiddenSection)
+    {
         if (_boundViewModel is null)
         {
             return;
         }
 
-        if (e.Section == NavigationSection.Overview)
+        if (restoreHiddenSection)
+        {
+            _boundViewModel.NavigationRail.RevealAndSelectSection(section);
+        }
+
+        if (section == NavigationSection.Overview)
         {
             ExpandedContentScrollViewer.ScrollToTop();
             return;
         }
 
-        var target = GetSectionTarget(e.Section);
+        var target = GetSectionTarget(section);
         if (target is null || target.Visibility != Visibility.Visible)
         {
             _boundViewModel.NavigationRail.SelectSection(NavigationSection.Overview);
@@ -172,7 +206,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         {
             (NavigationSection.RateLimits, (FrameworkElement)RateLimitsSection),
             (NavigationSection.WeeklyPace, (FrameworkElement)WeeklyPaceSection),
-            (NavigationSection.RunwayForecast, (FrameworkElement)RunwayForecastSection),
+            (NavigationSection.RunwayForecast, (FrameworkElement)UsageTrendSection),
             (NavigationSection.ResetCredits, (FrameworkElement)ResetCreditsSection),
             (NavigationSection.AccountUsage, (FrameworkElement)AccountUsageSection),
             (NavigationSection.ProjectUsage, (FrameworkElement)ProjectUsageSection),
@@ -194,8 +228,8 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         return section switch
         {
             NavigationSection.RateLimits => RateLimitsSection,
+            NavigationSection.RunwayForecast => UsageTrendSection,
             NavigationSection.WeeklyPace => WeeklyPaceSection,
-            NavigationSection.RunwayForecast => RunwayForecastSection,
             NavigationSection.ResetCredits => ResetCreditsSection,
             NavigationSection.AccountUsage => AccountUsageSection,
             NavigationSection.ProjectUsage => ProjectUsageSection,

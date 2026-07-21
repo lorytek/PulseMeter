@@ -11,8 +11,8 @@
         xmlns:rateLimits="clr-namespace:PulseMeter.Slices.RateLimits.UI"
         xmlns:rateLimitsDaily="clr-namespace:PulseMeter.Slices.RateLimitsDaily.UI"
         xmlns:resetCredits="clr-namespace:PulseMeter.Slices.ResetCredits.UI"
-        xmlns:runwayForecast="clr-namespace:PulseMeter.Slices.RunwayForecast.UI"
         xmlns:usageAttribution="clr-namespace:PulseMeter.Slices.UsageAttribution.UI"
+        xmlns:usageTrend="clr-namespace:PulseMeter.Slices.UsageTrend.UI"
         Title="PulseMeter"
         Width="{Binding WindowWidth}"
         Height="{Binding WindowHeight}"
@@ -25,16 +25,19 @@
         Topmost="{Binding IsAlwaysOnTop}"
         AllowsTransparency="True"
         Background="Transparent"
-        Icon="/Assets/PulseMeter.ico"
+        Icon="/PulseMeter;component/Assets/PulseMeter.ico"
         SizeChanged="Window_SizeChanged">
     <Window.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="/Shared/Styles/PulseMeterControls.xaml" />
+                <ResourceDictionary Source="/PulseMeter;component/Shared/Styles/PulseMeterControls.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
         </ResourceDictionary>
     </Window.Resources>
+    <Window.InputBindings>
+        <KeyBinding Key="F5" Command="{Binding SyncNowCommand}" />
+    </Window.InputBindings>
     <Border x:Name="WindowSurface"
             ClipToBounds="True"
             BorderThickness="1">
@@ -84,6 +87,7 @@
                     <Grid Grid.Column="1">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
 
@@ -92,14 +96,65 @@
                                                        ToggleExpandedRequested="ExpandCollapseButton_Click"
                                                        HideRequested="HideButton_Click" />
 
+                        <Border x:Name="SyncIssueBanner"
+                                Grid.Row="1"
+                                Margin="24,12,30,0"
+                                Padding="12,10"
+                                Background="{Binding SyncIssueBackground}"
+                                BorderBrush="{Binding SyncIssueBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                AutomationProperties.LiveSetting="Assertive"
+                                AutomationProperties.Name="{Binding SyncIssueAccessibleLabel}"
+                                Visibility="{Binding HasActionableSyncIssue, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Text="&#xE7BA;"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="15"
+                                           Foreground="{Binding SyncIssueForeground}"
+                                           VerticalAlignment="Center" />
+
+                                <StackPanel Grid.Column="1"
+                                            Margin="10,0,14,0"
+                                            VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding SyncIssueTitle}"
+                                               Foreground="{Binding SyncIssueForeground}"
+                                               FontSize="12"
+                                               FontWeight="SemiBold" />
+                                    <TextBlock Margin="0,2,0,0"
+                                               Text="{Binding SyncIssueText}"
+                                               Foreground="#4B5563"
+                                               FontSize="11.5"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+
+                                <Button Grid.Column="2"
+                                        MinWidth="64"
+                                        Height="32"
+                                        Padding="12,0"
+                                        Command="{Binding SyncNowCommand}"
+                                        Content="Retry"
+                                        ToolTip="Retry usage sync"
+                                        AutomationProperties.Name="Retry usage sync"
+                                        Style="{DynamicResource LightButtonStyle}" />
+                            </Grid>
+                        </Border>
+
                         <ScrollViewer x:Name="ExpandedContentScrollViewer"
-                                      Grid.Row="1"
+                                      Grid.Row="2"
                                       VerticalScrollBarVisibility="Hidden"
                                       HorizontalScrollBarVisibility="Disabled"
                                       ScrollChanged="ExpandedContentScrollViewer_ScrollChanged">
                         <StackPanel Margin="24,14,30,28">
                             <needsAttention:NeedsAttentionSection DataContext="{Binding NeedsAttention}"
-                                                                   x:Name="NeedsAttentionSection" />
+                                                                   x:Name="NeedsAttentionSection"
+                                                                   ReviewRequested="NeedsAttentionSection_ReviewRequested" />
 
                             <rateLimits:RateLimitsSection DataContext="{Binding RateLimits}"
                                                            x:Name="RateLimitsSection" />
@@ -107,8 +162,10 @@
                             <rateLimitsDaily:RateLimitsDailySection DataContext="{Binding RateLimitsDaily}"
                                                                      x:Name="WeeklyPaceSection" />
 
-                            <runwayForecast:RunwayForecastSection DataContext="{Binding RunwayForecast}"
-                                                                   x:Name="RunwayForecastSection" />
+                            <usageTrend:UsageTrendSection DataContext="{Binding UsageTrend}"
+                                                           x:Name="UsageTrendSection"
+                                                           Visibility="{Binding DataContext.IsRunwayForecastVisible, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                                           SectionRequested="UsageTrendSection_SectionRequested" />
 
                             <resetCredits:ResetCreditsSection DataContext="{Binding ResetCreditsSection}"
                                                               x:Name="ResetCreditsSection" />

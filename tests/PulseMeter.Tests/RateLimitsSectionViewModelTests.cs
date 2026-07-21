@@ -89,7 +89,7 @@ public sealed class RateLimitsSectionViewModelTests
                 Assert.True(shortWindow.HasRunwayForecast);
                 Assert.True(shortWindow.IsPaceDetailVisible);
                 Assert.Equal("5h Window", shortWindow.RowTitleText);
-                Assert.Equal("\uE917", shortWindow.RowIconGlyph);
+                Assert.Equal("\uE823", shortWindow.RowIconGlyph);
                 Assert.Equal("\uE7BA", shortWindow.PaceIconGlyph);
                 Assert.True(shortWindow.HasCriticalRingArc);
                 Assert.Contains(" A 43 43 ", shortWindow.CriticalRingArcData);

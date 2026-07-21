@@ -28,6 +28,7 @@ public static class CodexUsageParser
         return new UsageSnapshot
         {
             Buckets = snapshot.Buckets,
+            RateLimitHistory = snapshot.RateLimitHistory,
             LifetimeTokens = ReadLong(summary, "lifetimeTokens"),
             PeakDailyTokens = ReadLong(summary, "peakDailyTokens"),
             LongestRunningTurnSec = ReadInt(summary, "longestRunningTurnSec"),
@@ -96,6 +97,7 @@ public static class CodexUsageParser
         return new UsageSnapshot
         {
             Buckets = snapshot.Buckets,
+            RateLimitHistory = snapshot.RateLimitHistory,
             LifetimeTokens = snapshot.LifetimeTokens,
             PeakDailyTokens = snapshot.PeakDailyTokens,
             LongestRunningTurnSec = snapshot.LongestRunningTurnSec,
@@ -121,6 +123,7 @@ public static class CodexUsageParser
         return new UsageSnapshot
         {
             Buckets = snapshot.Buckets,
+            RateLimitHistory = snapshot.RateLimitHistory,
             LifetimeTokens = snapshot.LifetimeTokens,
             PeakDailyTokens = snapshot.PeakDailyTokens,
             LongestRunningTurnSec = snapshot.LongestRunningTurnSec,
@@ -146,6 +149,7 @@ public static class CodexUsageParser
         return new UsageSnapshot
         {
             Buckets = snapshot.Buckets,
+            RateLimitHistory = snapshot.RateLimitHistory,
             LifetimeTokens = snapshot.LifetimeTokens,
             PeakDailyTokens = snapshot.PeakDailyTokens,
             LongestRunningTurnSec = snapshot.LongestRunningTurnSec,
@@ -174,6 +178,7 @@ public static class CodexUsageParser
         return new UsageSnapshot
         {
             Buckets = snapshot.Buckets,
+            RateLimitHistory = snapshot.RateLimitHistory,
             LifetimeTokens = snapshot.LifetimeTokens,
             PeakDailyTokens = snapshot.PeakDailyTokens,
             LongestRunningTurnSec = snapshot.LongestRunningTurnSec,
@@ -199,6 +204,7 @@ public static class CodexUsageParser
         return new UsageSnapshot
         {
             Buckets = snapshot.Buckets,
+            RateLimitHistory = snapshot.RateLimitHistory,
             LifetimeTokens = snapshot.LifetimeTokens,
             PeakDailyTokens = snapshot.PeakDailyTokens,
             LongestRunningTurnSec = snapshot.LongestRunningTurnSec,
@@ -207,6 +213,34 @@ public static class CodexUsageParser
             DailyBuckets = snapshot.DailyBuckets,
             ProjectUsageRows = snapshot.ProjectUsageRows,
             UsageAttribution = usageAttribution,
+            ResetCreditsAvailable = snapshot.ResetCreditsAvailable,
+            ResetCreditsExpiresAtUtc = snapshot.ResetCreditsExpiresAtUtc,
+            ResetCredits = snapshot.ResetCredits,
+            RecentActiveThread = snapshot.RecentActiveThread,
+            SyncStatus = snapshot.SyncStatus,
+            LastUpdatedUtc = snapshot.LastUpdatedUtc,
+            Source = snapshot.Source,
+            StatusMessage = snapshot.StatusMessage,
+            RawRateLimitsJson = snapshot.RawRateLimitsJson
+        };
+    }
+
+    public static UsageSnapshot WithRateLimitHistory(
+        UsageSnapshot snapshot,
+        IReadOnlyList<RateLimitHistoryPoint> rateLimitHistory)
+    {
+        return new UsageSnapshot
+        {
+            Buckets = snapshot.Buckets,
+            RateLimitHistory = rateLimitHistory,
+            LifetimeTokens = snapshot.LifetimeTokens,
+            PeakDailyTokens = snapshot.PeakDailyTokens,
+            LongestRunningTurnSec = snapshot.LongestRunningTurnSec,
+            CurrentStreakDays = snapshot.CurrentStreakDays,
+            LongestStreakDays = snapshot.LongestStreakDays,
+            DailyBuckets = snapshot.DailyBuckets,
+            ProjectUsageRows = snapshot.ProjectUsageRows,
+            UsageAttribution = snapshot.UsageAttribution,
             ResetCreditsAvailable = snapshot.ResetCreditsAvailable,
             ResetCreditsExpiresAtUtc = snapshot.ResetCreditsExpiresAtUtc,
             ResetCredits = snapshot.ResetCredits,

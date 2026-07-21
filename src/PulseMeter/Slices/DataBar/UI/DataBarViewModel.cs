@@ -9,6 +9,8 @@ public sealed class DataBarViewModel : INotifyPropertyChanged
 {
     private bool _isExpanded;
     private string _statusBadgeText = string.Empty;
+    private string _statusBadgeBrush = "#64748B";
+    private string _statusSummaryText = string.Empty;
     private string _expandCollapseTooltip = string.Empty;
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -30,6 +32,18 @@ public sealed class DataBarViewModel : INotifyPropertyChanged
         private set => SetField(ref _statusBadgeText, value);
     }
 
+    public string StatusBadgeBrush
+    {
+        get => _statusBadgeBrush;
+        private set => SetField(ref _statusBadgeBrush, value);
+    }
+
+    public string StatusSummaryText
+    {
+        get => _statusSummaryText;
+        private set => SetField(ref _statusSummaryText, value);
+    }
+
     public string ExpandCollapseTooltip
     {
         get => _expandCollapseTooltip;
@@ -40,10 +54,14 @@ public sealed class DataBarViewModel : INotifyPropertyChanged
         bool isExpanded,
         IEnumerable<QuotaDisplayRow> compactQuotaRows,
         string statusBadgeText,
+        string statusBadgeBrush,
+        string statusSummaryText,
         string expandCollapseTooltip)
     {
         IsExpanded = isExpanded;
         StatusBadgeText = statusBadgeText;
+        StatusBadgeBrush = statusBadgeBrush;
+        StatusSummaryText = statusSummaryText;
         ExpandCollapseTooltip = expandCollapseTooltip;
 
         CompactQuotaRows.Clear();

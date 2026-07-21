@@ -32,6 +32,7 @@
                               ItemsSource="{Binding LimitOptions}"
                               SelectedItem="{Binding SelectedLimitOption, Mode=TwoWay}"
                               DisplayMemberPath="DisplayName"
+                              AutomationProperties.Name="Rate limit track"
                               Style="{DynamicResource LightComboBoxStyle}" />
                 </StackPanel>
             </Grid>
@@ -188,12 +189,15 @@
                 </ItemsControl>
             </Grid>
 
-            <TextBlock Margin="0,16,0,0"
-                       Text="{Binding DataContext.StatusMessage, RelativeSource={RelativeSource AncestorType=Window}}"
-                       Foreground="#DC2626"
+            <TextBlock x:Name="StatusMessageTextBlock"
+                       Margin="0,16,0,0"
+                       Text="{Binding DataContext.StatusMessage, RelativeSource={RelativeSource AncestorType=Window}, NotifyOnTargetUpdated=True}"
+                       Foreground="{Binding DataContext.StatusMessageBrush, RelativeSource={RelativeSource AncestorType=Window}}"
                        FontSize="12"
                        TextWrapping="Wrap"
-                       Visibility="{Binding DataContext.HasStatusMessage, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                       AutomationProperties.LiveSetting="Polite"
+                       TargetUpdated="StatusMessage_OnTargetUpdated"
+                       Visibility="{Binding DataContext.HasSectionStatusMessage, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}" />
         </StackPanel>
     </Border>
 </UserControl>

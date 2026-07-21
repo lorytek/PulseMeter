@@ -95,7 +95,11 @@
                                     </Border>
                                     <TextBlock Margin="8,0,0,0" Text="{Binding ForecastText}" Foreground="#111827" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
-                                <TextBlock Margin="0,4,0,0" Text="{Binding DetailText}" Foreground="#4B5563" FontSize="11.5" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Margin="0,4,0,0"
+                                           Text="{Binding DetailText}"
+                                           Foreground="#4B5563"
+                                           FontSize="11.5"
+                                           TextWrapping="Wrap" />
                                 <TextBlock Margin="0,2,0,0" Text="{Binding EvidenceText}" Foreground="#6B7280" FontSize="10.5" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
 

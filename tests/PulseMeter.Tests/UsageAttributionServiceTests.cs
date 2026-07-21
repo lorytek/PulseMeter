@@ -30,6 +30,7 @@ public sealed class UsageAttributionServiceTests
             row =>
             {
                 Assert.Equal("PulseMeter", row.ProjectDisplayName);
+                Assert.Equal("PulseMeter chat · 07 Jul 12:00", row.DisplayName);
                 Assert.Equal(1_000, row.RawLocalTokens);
                 Assert.Equal(10_000, row.EstimatedTokens);
                 Assert.Equal(66.7, row.SharePercent, precision: 1);

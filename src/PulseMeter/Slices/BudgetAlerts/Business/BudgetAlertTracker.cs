@@ -75,7 +75,8 @@ public sealed class BudgetAlertTracker : IBudgetAlertTracker
             "BUDGET",
             title,
             detail,
-            accent));
+            accent,
+            Kind: UsageAttentionSignalKind.DailyUsage));
 
     }
 
@@ -102,9 +103,11 @@ public sealed class BudgetAlertTracker : IBudgetAlertTracker
             var detail = bucket.ResetCountdown == "reset unknown"
                 ? $"{label} is {usedPercent:0}% used."
                 : $"{label} is {usedPercent:0}% used; {bucket.ResetText}.";
+            var titleLabel = FormatAttentionWindowLabel(
+                string.IsNullOrWhiteSpace(bucket.WindowLabel) ? label : bucket.WindowLabel);
             var title = level == BudgetAlertLevel.Critical
-                ? "Rate limit budget is critical"
-                : "Rate limit budget warning";
+                ? $"{titleLabel} budget is critical"
+                : $"{titleLabel} budget warning";
             var accent = AccentFor(level);
             var key = BuildRateLimitRowKey(bucket, level);
 
@@ -120,7 +123,9 @@ public sealed class BudgetAlertTracker : IBudgetAlertTracker
                 "BUDGET",
                 title,
                 detail,
-                accent));
+                accent,
+                Kind: UsageAttentionSignalKind.RateLimit,
+                ScopeId: RateLimitBucketKeys.GetWindowScope(bucket)));
 
         }
     }
@@ -172,5 +177,13 @@ public sealed class BudgetAlertTracker : IBudgetAlertTracker
         return tokens < 1_000
             ? $"{tokens.ToString("N0", CultureInfo.InvariantCulture)} tokens"
             : $"{MeterDisplayFormatter.FormatTokens(tokens)} tokens";
+    }
+
+    private static string FormatAttentionWindowLabel(string label)
+    {
+        const string windowSuffix = " Window";
+        return label.EndsWith(windowSuffix, StringComparison.OrdinalIgnoreCase)
+            ? label[..^windowSuffix.Length]
+            : label;
     }
 }

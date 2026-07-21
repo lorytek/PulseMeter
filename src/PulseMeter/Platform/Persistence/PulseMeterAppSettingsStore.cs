@@ -6,7 +6,9 @@ namespace PulseMeter.Platform.Persistence;
 public sealed record PulseMeterAppSettings(
     int AutoSyncSeconds = 90,
     bool IsAlwaysOnTop = false,
-    DashboardVisibilitySettings? DashboardVisibility = null);
+    DashboardVisibilitySettings? DashboardVisibility = null,
+    string? SelectedRateLimitKey = null,
+    bool IsNavigationPanelExpanded = true);
 
 public sealed record DashboardVisibilitySettings(
     bool RateLimits = true,
@@ -67,48 +69,11 @@ public sealed class PulseMeterAppSettingsStore : IPulseMeterAppSettingsStore
 
     public PulseMeterAppSettings? Load()
     {
-        try
-        {
-            if (!File.Exists(_filePath))
-            {
-                return null;
-            }
-
-            var json = File.ReadAllText(_filePath);
-            return JsonSerializer.Deserialize<PulseMeterAppSettings>(json, JsonOptions);
-        }
-        catch (IOException)
-        {
-            return null;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return null;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
+        return AtomicJsonFileStore.Load<PulseMeterAppSettings>(_filePath, JsonOptions);
     }
 
     public void Save(PulseMeterAppSettings settings)
     {
-        try
-        {
-            var directory = Path.GetDirectoryName(_filePath);
-            if (!string.IsNullOrWhiteSpace(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            var json = JsonSerializer.Serialize(settings, JsonOptions);
-            File.WriteAllText(_filePath, json);
-        }
-        catch (IOException)
-        {
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
+        AtomicJsonFileStore.Save(_filePath, settings, JsonOptions);
     }
 }
