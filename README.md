@@ -39,11 +39,15 @@ Want to help share PulseMeter? See [DISCOVERABILITY.md](DISCOVERABILITY.md).
 
 ## Screenshots
 
-![PulseMeter Needs Attention view showing usage alerts, budget warnings, runway projections, and reset-credit signals](assets/pulsemeter-needs-attention.png)
+![PulseMeter Needs Attention view showing the highest-priority live signals and direct review actions](assets/pulsemeter-needs-attention.png)
 
 ****
 
-![PulseMeter overview showing rate limits, weekly pace, and reset credits](assets/pulsemeter-rate-limits-account-dashboard.png)
+![PulseMeter overview showing Needs Attention, rate limits, weekly pace, and Coding Runway navigation](assets/pulsemeter-rate-limits-account-dashboard.png)
+
+****
+
+![PulseMeter Coding Runway showing the selected 5-hour limit, usage momentum, pace comparison, estimated reach time, and reset](assets/pulsemeter-coding-runway.png)
 
 ****
 
