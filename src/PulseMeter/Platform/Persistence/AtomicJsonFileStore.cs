@@ -10,7 +10,7 @@ namespace PulseMeter.Platform.Persistence;
 internal static class AtomicJsonFileStore
 {
     private const int MutexWaitMilliseconds = 100;
-    private const int MutexWaitAttempts = 3;
+    private const int MutexWaitAttempts = 20;
     private const int ReadAttempts = 3;
     private static readonly TimeSpan StaleTemporaryFileAge = TimeSpan.FromMinutes(10);
     private static readonly ConcurrentDictionary<string, object> PathLocks = new(StringComparer.OrdinalIgnoreCase);
