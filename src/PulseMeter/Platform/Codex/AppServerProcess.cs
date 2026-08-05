@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 
+using PulseMeter.Platform.Diagnostics;
+
 namespace PulseMeter.Platform.Codex;
 
 public interface IAppServerProcess : IDisposable
@@ -73,7 +75,7 @@ public sealed class AppServerProcess : IAppServerProcess
             {
                 if (!string.IsNullOrWhiteSpace(args.Data))
                 {
-                    Debug.WriteLine("[app-server] " + args.Data);
+                    PrivacySafeDiagnostics.WriteInfo("app-server wrote to stderr");
                 }
             };
             process.BeginErrorReadLine();

@@ -6,4 +6,7 @@ public sealed record DailyRateLimitDisplayRow(
     string RemainingPercentText,
     double RemainingPercentValue,
     string RingBrush,
-    string RingArcData);
+    string RingArcData)
+{
+    public string AccessibleSummary => $"{Label}. {RemainingPercentText} remaining.";
+}

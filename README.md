@@ -11,7 +11,7 @@ PulseMeter is not affiliated with OpenAI.
 
 ## Download the App
 
-[Download PulseMeter 0.5.0 for Windows](https://github.com/lorytek/PulseMeter/releases/latest/download/PulseMeter-0.5.0-win-x64-portable.zip), extract the ZIP, and run `PulseMeter.exe`.
+[Download PulseMeter 0.6.0 for Windows](https://github.com/lorytek/PulseMeter/releases/latest/download/PulseMeter-0.6.0-win-x64-portable.zip), extract the ZIP, and run `PulseMeter.exe`.
 
 - A matching `.sha256` checksum file is attached to each GitHub release.
 - Windows 10 or Windows 11, 64-bit.
@@ -19,13 +19,14 @@ PulseMeter is not affiliated with OpenAI.
 
 Only run release zips you downloaded from a PulseMeter release page you trust. The `Source code (zip)` and `Source code (tar.gz)` links on GitHub Releases are automatic GitHub source archives for developers, not the portable Windows app.
 
-## New in 0.5.0
+## New in 0.6.0
 
-- Added Coding Runway, a graph-first analytical view for 5-hour and 7-day limits with actual usage, sustainable pace, estimated limit timing, reset timing, and usage momentum.
-- Added durable rate-limit history that survives app restarts, restores recent samples, records measurement gaps, and keeps the selected window truthful.
-- Added statistical runway estimates with evidence-aware language and clearer remaining-at-reset or reach-limit-before-reset outcomes.
-- Refined the Mac-inspired dashboard hierarchy, moved Weekly Pace above Coding Runway, simplified duplicate alerts, and removed redundant forecast and project-detail panels.
-- Improved live usage collection, shared rollout analytics, atomic local persistence, navigation, accessibility, validation, and the development visual harness.
+- Added Block Planner for checking whether 15-minute to 8-hour coding blocks fit the selected 5-hour or 7-day limit at the current pace.
+- Added recovery watching that can notify when a risky coding block becomes likely to fit or when its quota resets.
+- Made Usage Momentum state-aware: learning remains neutral and clearly shows the remaining baseline data, with an accessible preview of the completed gauge.
+- Improved Coding Runway refresh behavior, keyboard point review, persisted samples, idle-time forecasting, and exact 24-hour weekly baselines.
+- Corrected missing Daily Usage records so they show as not recorded instead of a measured zero, and removed expired reset credits from the available count.
+- Hardened startup, shutdown, single-instance activation, local persistence, privacy-safe diagnostics, and UI service boundaries.
 
 ## Who This Is For
 
@@ -67,7 +68,7 @@ Want to help share PulseMeter? See [DISCOVERABILITY.md](DISCOVERABILITY.md).
 
 ## Quick Start
 
-1. Download `PulseMeter-0.5.0-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
+1. Download `PulseMeter-0.6.0-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
 2. Extract the zip to a normal folder, for example `Documents\PulseMeter`.
 3. Run `PulseMeter.exe`.
 4. If Windows shows an unknown-publisher or SmartScreen warning, choose `More info`, then `Run anyway`.

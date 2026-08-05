@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.IO;
+using System.ComponentModel;
 using System.Windows.Forms;
 using PulseMeter.Slices.PulseMeterWindow;
 
@@ -12,6 +13,13 @@ public sealed class TrayIconService : ITrayIconService
     private readonly Action _shutdown;
     private readonly Icon _appIcon;
     private readonly NotifyIcon _notifyIcon;
+    private readonly ContextMenuStrip _contextMenu;
+    private readonly ToolStripMenuItem _mockModeItem;
+    private readonly ToolStripMenuItem _autoShowItem;
+    private readonly ToolStripMenuItem _autoHideItem;
+    private readonly ToolStripMenuItem _alwaysOnTopItem;
+    private readonly PropertyChangedEventHandler _viewModelPropertyChangedHandler;
+    private bool _disposed;
 
     public TrayIconService(IPulseMeterWindow pulseMeterWindow, PulseMeterWindowViewModel viewModel, Action shutdown)
     {
@@ -19,70 +27,101 @@ public sealed class TrayIconService : ITrayIconService
         _viewModel = viewModel;
         _shutdown = shutdown;
 
-        var menu = new ContextMenuStrip();
-        menu.Items.Add("Show PulseMeter", null, (_, _) => ShowPulseMeter());
-        menu.Items.Add("Hide PulseMeter", null, (_, _) => HidePulseMeter());
-        menu.Items.Add("Refresh", null, (_, _) => Refresh());
-        menu.Items.Add(new ToolStripSeparator());
+        _contextMenu = new ContextMenuStrip();
+        _contextMenu.Items.Add("Show PulseMeter", null, (_, _) => ShowPulseMeter());
+        _contextMenu.Items.Add("Hide PulseMeter", null, (_, _) => HidePulseMeter());
+        _contextMenu.Items.Add("Refresh", null, (_, _) => Refresh());
+        _contextMenu.Items.Add(new ToolStripSeparator());
 
-        var mockModeItem = new ToolStripMenuItem("Mock Mode")
+        _mockModeItem = new ToolStripMenuItem("Mock Mode")
         {
             Checked = _viewModel.UseMockMode,
             CheckOnClick = true
         };
-        mockModeItem.CheckedChanged += (_, _) =>
+        _mockModeItem.CheckedChanged += (_, _) =>
         {
-            _pulseMeterWindow.Invoke(() => _viewModel.UseMockMode = mockModeItem.Checked);
+            _pulseMeterWindow.Invoke(() =>
+            {
+                if (_viewModel.UseMockMode != _mockModeItem.Checked)
+                {
+                    _viewModel.UseMockMode = _mockModeItem.Checked;
+                }
+            });
         };
-        menu.Items.Add(mockModeItem);
+        _contextMenu.Items.Add(_mockModeItem);
 
-        var autoShowItem = new ToolStripMenuItem("Auto-show when monitored app focused")
+        _autoShowItem = new ToolStripMenuItem("Auto-show when monitored app focused")
         {
             Checked = _viewModel.AutoShowWhenCodexFocused,
             CheckOnClick = true
         };
-        autoShowItem.CheckedChanged += (_, _) =>
+        _autoShowItem.CheckedChanged += (_, _) =>
         {
-            _pulseMeterWindow.Invoke(() => _viewModel.AutoShowWhenCodexFocused = autoShowItem.Checked);
+            _pulseMeterWindow.Invoke(() =>
+            {
+                if (_viewModel.AutoShowWhenCodexFocused != _autoShowItem.Checked)
+                {
+                    _viewModel.AutoShowWhenCodexFocused = _autoShowItem.Checked;
+                }
+            });
         };
-        menu.Items.Add(autoShowItem);
+        _contextMenu.Items.Add(_autoShowItem);
 
-        var autoHideItem = new ToolStripMenuItem("Auto-hide when focus leaves")
+        _autoHideItem = new ToolStripMenuItem("Auto-hide when focus leaves")
         {
             Checked = _viewModel.AutoHideWhenFocusLeaves,
             CheckOnClick = true
         };
-        autoHideItem.CheckedChanged += (_, _) =>
+        _autoHideItem.CheckedChanged += (_, _) =>
         {
-            _pulseMeterWindow.Invoke(() => _viewModel.AutoHideWhenFocusLeaves = autoHideItem.Checked);
+            _pulseMeterWindow.Invoke(() =>
+            {
+                if (_viewModel.AutoHideWhenFocusLeaves != _autoHideItem.Checked)
+                {
+                    _viewModel.AutoHideWhenFocusLeaves = _autoHideItem.Checked;
+                }
+            });
         };
-        menu.Items.Add(autoHideItem);
+        _contextMenu.Items.Add(_autoHideItem);
 
-        var alwaysOnTopItem = new ToolStripMenuItem("Always on top")
+        _alwaysOnTopItem = new ToolStripMenuItem("Always on top")
         {
             Checked = _viewModel.IsAlwaysOnTop,
             CheckOnClick = true
         };
-        alwaysOnTopItem.CheckedChanged += (_, _) =>
+        _alwaysOnTopItem.CheckedChanged += (_, _) =>
         {
-            _pulseMeterWindow.Invoke(() => _viewModel.IsAlwaysOnTop = alwaysOnTopItem.Checked);
-        };
-        _viewModel.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(PulseMeterWindowViewModel.IsAlwaysOnTop))
+            _pulseMeterWindow.Invoke(() =>
             {
-                _pulseMeterWindow.Invoke(() => alwaysOnTopItem.Checked = _viewModel.IsAlwaysOnTop);
-            }
+                if (_viewModel.IsAlwaysOnTop != _alwaysOnTopItem.Checked)
+                {
+                    _viewModel.IsAlwaysOnTop = _alwaysOnTopItem.Checked;
+                }
+            });
         };
-        menu.Items.Add(alwaysOnTopItem);
+        _viewModelPropertyChangedHandler = (_, e) =>
+        {
+            if (!string.IsNullOrEmpty(e.PropertyName)
+                && e.PropertyName != nameof(PulseMeterWindowViewModel.UseMockMode)
+                && e.PropertyName != nameof(PulseMeterWindowViewModel.AutoShowWhenCodexFocused)
+                && e.PropertyName != nameof(PulseMeterWindowViewModel.AutoHideWhenFocusLeaves)
+                && e.PropertyName != nameof(PulseMeterWindowViewModel.IsAlwaysOnTop))
+            {
+                return;
+            }
 
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Exit", null, (_, _) => Exit());
+            _pulseMeterWindow.Invoke(() => SyncMenuCheckmarks(e.PropertyName));
+        };
+        _viewModel.PropertyChanged += _viewModelPropertyChangedHandler;
+        _contextMenu.Items.Add(_alwaysOnTopItem);
+
+        _contextMenu.Items.Add(new ToolStripSeparator());
+        _contextMenu.Items.Add("Exit", null, (_, _) => Exit());
 
         _appIcon = LoadAppIcon();
         _notifyIcon = new NotifyIcon
         {
-            ContextMenuStrip = menu,
+            ContextMenuStrip = _contextMenu,
             Icon = _appIcon,
             Text = "PulseMeter",
             Visible = true
@@ -91,24 +130,89 @@ public sealed class TrayIconService : ITrayIconService
         _notifyIcon.DoubleClick += (_, _) => ShowPulseMeter(expand: true);
     }
 
+    private void SyncMenuCheckmarks(string? propertyName)
+    {
+        if (string.IsNullOrEmpty(propertyName)
+            || propertyName == nameof(PulseMeterWindowViewModel.UseMockMode))
+        {
+            SetChecked(_mockModeItem, _viewModel.UseMockMode);
+        }
+
+        if (string.IsNullOrEmpty(propertyName)
+            || propertyName == nameof(PulseMeterWindowViewModel.AutoShowWhenCodexFocused))
+        {
+            SetChecked(_autoShowItem, _viewModel.AutoShowWhenCodexFocused);
+        }
+
+        if (string.IsNullOrEmpty(propertyName)
+            || propertyName == nameof(PulseMeterWindowViewModel.AutoHideWhenFocusLeaves))
+        {
+            SetChecked(_autoHideItem, _viewModel.AutoHideWhenFocusLeaves);
+        }
+
+        if (string.IsNullOrEmpty(propertyName)
+            || propertyName == nameof(PulseMeterWindowViewModel.IsAlwaysOnTop))
+        {
+            SetChecked(_alwaysOnTopItem, _viewModel.IsAlwaysOnTop);
+        }
+    }
+
+    private static void SetChecked(ToolStripMenuItem item, bool isChecked)
+    {
+        if (item.Checked != isChecked)
+        {
+            item.Checked = isChecked;
+        }
+    }
+
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _viewModel.PropertyChanged -= _viewModelPropertyChangedHandler;
         _notifyIcon.Visible = false;
         _notifyIcon.Dispose();
+        _contextMenu.Dispose();
         _appIcon.Dispose();
+    }
+
+    public void ShowNotification(string title, string message)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _notifyIcon.ShowBalloonTip(
+            timeout: 5_000,
+            tipTitle: title,
+            tipText: message,
+            tipIcon: ToolTipIcon.Info);
     }
 
     private static Icon LoadAppIcon()
     {
-        var resource = System.Windows.Application.GetResourceStream(new Uri("/Assets/PulseMeter.ico", UriKind.Relative));
-        if (resource is null)
+        try
+        {
+            var resource = System.Windows.Application.GetResourceStream(
+                new Uri("/PulseMeter;component/Assets/PulseMeter.ico", UriKind.Relative));
+            if (resource is null)
+            {
+                return LoadFallbackIcon();
+            }
+
+            using var stream = resource.Stream;
+            using var icon = new Icon(stream);
+            return (Icon)icon.Clone();
+        }
+        catch (IOException)
         {
             return LoadFallbackIcon();
         }
-
-        using var stream = resource.Stream;
-        using var icon = new Icon(stream);
-        return (Icon)icon.Clone();
     }
 
     private static Icon LoadFallbackIcon()
@@ -132,22 +236,12 @@ public sealed class TrayIconService : ITrayIconService
         {
             _viewModel.MarkShownByUser();
 
-            if (!_pulseMeterWindow.IsVisible)
-            {
-                _pulseMeterWindow.Show();
-            }
-
-            if (_pulseMeterWindow.WindowState == System.Windows.WindowState.Minimized)
-            {
-                _pulseMeterWindow.WindowState = System.Windows.WindowState.Normal;
-            }
-
             if (expand && !_viewModel.IsExpanded)
             {
                 _viewModel.ToggleExpanded();
             }
 
-            _pulseMeterWindow.Activate();
+            _pulseMeterWindow.ShowAndActivate();
         });
     }
 
@@ -168,6 +262,10 @@ public sealed class TrayIconService : ITrayIconService
     private void Exit()
     {
         Dispose();
-        _pulseMeterWindow.Invoke(_shutdown);
+        _pulseMeterWindow.Invoke(() =>
+        {
+            _pulseMeterWindow.CloseForShutdown();
+            _shutdown();
+        });
     }
 }

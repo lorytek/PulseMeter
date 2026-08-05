@@ -6,6 +6,7 @@ public enum NavigationSection
     RateLimits,
     WeeklyPace,
     RunwayForecast,
+    BlockPlanner,
     ResetCredits,
     AccountUsage,
     ProjectUsage,

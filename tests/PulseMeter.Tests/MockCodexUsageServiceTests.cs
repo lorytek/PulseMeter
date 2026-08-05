@@ -5,6 +5,20 @@ namespace PulseMeter.Tests;
 public sealed class MockCodexUsageServiceTests
 {
     [Fact]
+    public async Task ThrowingSnapshotSubscriber_DoesNotBreakMockRefreshOrOtherSubscribers()
+    {
+        var service = new MockCodexUsageService();
+        var deliveredToHealthySubscriber = 0;
+        service.SnapshotUpdated += (_, _) => throw new InvalidOperationException("Presentation failed.");
+        service.SnapshotUpdated += (_, _) => deliveredToHealthySubscriber++;
+
+        var snapshot = await service.GetSnapshotAsync();
+
+        Assert.Equal(SyncStatus.Mocked, snapshot.SyncStatus);
+        Assert.Equal(1, deliveredToHealthySubscriber);
+    }
+
+    [Fact]
     public async Task GetSnapshotAsync_ReturnsObviousMockData()
     {
         var service = new MockCodexUsageService();

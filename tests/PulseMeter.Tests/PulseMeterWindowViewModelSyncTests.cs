@@ -134,12 +134,16 @@ public sealed class PulseMeterWindowViewModelSyncTests
     {
         var service = new StubUsageService();
         var usageSignalsTracker = new CountingUsageSignalsTracker();
-        var viewModel = new PulseMeterWindowViewModel(service, usageSignalsTracker: usageSignalsTracker);
+        var viewModel = new PulseMeterWindowViewModel(
+            service,
+            TimeSpan.FromMinutes(30),
+            usageSignalsTracker: usageSignalsTracker);
         service.SnapshotUpdated += (_, snapshot) => viewModel.ApplySnapshot(snapshot);
 
         await viewModel.RefreshAsync();
 
         Assert.Equal(1, usageSignalsTracker.ObserveCallCount);
+        Assert.Equal(TimeSpan.FromMinutes(30), usageSignalsTracker.ExpectedObservationInterval);
     }
 
     [Fact]
@@ -208,6 +212,32 @@ public sealed class PulseMeterWindowViewModelSyncTests
         Assert.DoesNotContain("C:\\Users", viewModel.SyncFeedbackText, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Alice", viewModel.SyncFeedbackText, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("secret-token", viewModel.SyncFeedbackText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_CancellationDoesNotShowFailureFeedback()
+    {
+        var refreshStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var service = new StubUsageService
+        {
+            SnapshotFactory = async cancellationToken =>
+            {
+                refreshStarted.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                return new UsageSnapshot();
+            }
+        };
+        var viewModel = new PulseMeterWindowViewModel(service, TimeSpan.FromSeconds(90));
+        using var cancellation = new CancellationTokenSource();
+
+        var refresh = viewModel.RefreshAsync(cancellation.Token);
+        await refreshStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => refresh);
+        Assert.False(viewModel.IsRefreshing);
+        Assert.NotEqual("Sync failed. Try again.", viewModel.SyncFeedbackText);
+        Assert.False(viewModel.HasActionableSyncIssue);
     }
 
     [Fact]
@@ -324,7 +354,7 @@ public sealed class PulseMeterWindowViewModelSyncTests
         });
 
         Assert.Equal("1.7K tokens", viewModel.TodayUsageValueText);
-        Assert.Equal("Today used tokens: 1.7K tokens", viewModel.TodayUsageText);
+        Assert.Equal("Tokens used today: 1.7K tokens", viewModel.TodayUsageText);
     }
 
     [Fact]
@@ -347,7 +377,7 @@ public sealed class PulseMeterWindowViewModelSyncTests
         });
 
         Assert.Equal("Unavailable", viewModel.TodayUsageValueText);
-        Assert.Equal("Today used tokens: unavailable", viewModel.TodayUsageText);
+        Assert.Equal("Tokens used today: unavailable", viewModel.TodayUsageText);
         Assert.Equal("--", viewModel.TodayUsageMetricValueText);
         Assert.True(viewModel.HasAccountSummaryFreshnessWarning);
         Assert.Equal("Today's usage is not available yet.", viewModel.AccountSummaryFreshnessWarningText);
@@ -373,7 +403,7 @@ public sealed class PulseMeterWindowViewModelSyncTests
         });
 
         Assert.Equal("0 tokens", viewModel.TodayUsageValueText);
-        Assert.Equal("Today used tokens: 0 tokens", viewModel.TodayUsageText);
+        Assert.Equal("Tokens used today: 0 tokens", viewModel.TodayUsageText);
         Assert.Equal("0", viewModel.TodayUsageMetricValueText);
         Assert.False(viewModel.HasAccountSummaryFreshnessWarning);
     }
@@ -384,7 +414,7 @@ public sealed class PulseMeterWindowViewModelSyncTests
         var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
 
         Assert.Equal("Unavailable", viewModel.TodayUsageValueText);
-        Assert.Equal("Today used tokens: unavailable", viewModel.TodayUsageText);
+        Assert.Equal("Tokens used today: unavailable", viewModel.TodayUsageText);
     }
 
     [Fact]
@@ -815,6 +845,8 @@ public sealed class PulseMeterWindowViewModelSyncTests
 
         public Task<UsageSnapshot>? SnapshotTask { get; init; }
 
+        public Func<CancellationToken, Task<UsageSnapshot>>? SnapshotFactory { get; init; }
+
         public Task StartAsync(CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
@@ -826,6 +858,11 @@ public sealed class PulseMeterWindowViewModelSyncTests
             if (ExceptionToThrow is not null)
             {
                 throw ExceptionToThrow;
+            }
+
+            if (SnapshotFactory is not null)
+            {
+                return SnapshotFactory(cancellationToken);
             }
 
             if (SnapshotTask is not null)
@@ -848,10 +885,21 @@ public sealed class PulseMeterWindowViewModelSyncTests
     {
         public int ObserveCallCount { get; private set; }
 
+        public TimeSpan? ExpectedObservationInterval { get; private set; }
+
         public UsageSignalsSnapshot Observe(UsageSnapshot snapshot, DateTimeOffset nowUtc)
         {
             ObserveCallCount++;
             return UsageSignalsSnapshot.Empty;
+        }
+
+        public UsageSignalsSnapshot Observe(
+            UsageSnapshot snapshot,
+            DateTimeOffset nowUtc,
+            TimeSpan expectedObservationInterval)
+        {
+            ExpectedObservationInterval = expectedObservationInterval;
+            return Observe(snapshot, nowUtc);
         }
 
         public void DismissIdleDrain()

@@ -91,6 +91,58 @@ public sealed class ProjectUsageServiceTests
     }
 
     [Fact]
+    public async Task GetProjectUsageAsync_MergesDeletedCodexWorktreeIntoUniqueOwner()
+    {
+        var codexHome = CreateCodexHome();
+        var now = new DateTimeOffset(2026, 7, 3, 12, 0, 0, TimeSpan.Zero);
+        var ownerRollout = WriteRollout(codexHome, "owner.jsonl", now, 700);
+        var retiredRollout = WriteRollout(codexHome, "retired.jsonl", now, 300);
+        var owner = @"C:\Projects\WPF";
+        var retiredWorktree = @"C:\Users\tester\.codex\worktrees\0245\WPF";
+        CreateStateDatabase(
+            codexHome,
+            Thread("thread-owner", owner, ownerRollout, now),
+            Thread("thread-retired", retiredWorktree, retiredRollout, now));
+        var service = new ProjectUsageService(codexHome);
+
+        var rows = await service.GetProjectUsageAsync(
+            [new DailyUsageBucket { StartDate = "2026-07-03", Tokens = 10_000 }],
+            now);
+
+        var row = Assert.Single(rows);
+        Assert.Equal("WPF", row.DisplayName);
+        Assert.Equal(owner, row.FullPath);
+        Assert.Equal(1_000, row.RawLocalTokens);
+        Assert.Equal(2, row.ThreadCount);
+    }
+
+    [Fact]
+    public async Task GetProjectUsageAsync_DoesNotGuessOwnerWhenSameNamedProjectsAreAmbiguous()
+    {
+        var codexHome = CreateCodexHome();
+        var now = new DateTimeOffset(2026, 7, 3, 12, 0, 0, TimeSpan.Zero);
+        var alphaRollout = WriteRollout(codexHome, "alpha.jsonl", now, 400);
+        var betaRollout = WriteRollout(codexHome, "beta.jsonl", now, 350);
+        var retiredRollout = WriteRollout(codexHome, "retired.jsonl", now, 250);
+        var retiredWorktree = @"C:\Users\tester\.codex\worktrees\0245\WPF";
+        CreateStateDatabase(
+            codexHome,
+            Thread("thread-alpha", @"C:\Repos\Alpha\WPF", alphaRollout, now),
+            Thread("thread-beta", @"C:\Repos\Beta\WPF", betaRollout, now),
+            Thread("thread-retired", retiredWorktree, retiredRollout, now));
+        var service = new ProjectUsageService(codexHome);
+
+        var rows = await service.GetProjectUsageAsync(
+            [new DailyUsageBucket { StartDate = "2026-07-03", Tokens = 10_000 }],
+            now);
+
+        Assert.Equal(3, rows.Count);
+        Assert.Contains(rows, row => row.FullPath == @"C:\Repos\Alpha\WPF" && row.RawLocalTokens == 400);
+        Assert.Contains(rows, row => row.FullPath == @"C:\Repos\Beta\WPF" && row.RawLocalTokens == 350);
+        Assert.Contains(rows, row => row.FullPath == retiredWorktree && row.RawLocalTokens == 250);
+    }
+
+    [Fact]
     public async Task GetProjectUsageAsync_SkipsRepeatedCumulativeSnapshotsWhenCalculatingShares()
     {
         var codexHome = CreateCodexHome();
@@ -232,6 +284,32 @@ public sealed class ProjectUsageServiceTests
     }
 
     [Fact]
+    public async Task SharedRolloutSource_KeepsParsedTokenPrefixWhileActiveRolloutIsAppending()
+    {
+        var codexHome = CreateCodexHome();
+        var now = new DateTimeOffset(2026, 7, 3, 12, 0, 0, TimeSpan.Zero);
+        var rollout = WriteRollout(codexHome, "active-project.jsonl", now, 100);
+        CreateStateDatabase(codexHome, Thread("thread-active-project", @"C:\Projects\ProjectA", rollout, now));
+        var appendCount = 0;
+        var source = new SharedRolloutAnalyticsSource(
+            codexHome,
+            rateLimitParseCompleted: null,
+            rolloutParseCompleted: path =>
+            {
+                appendCount++;
+                AppendRollout(path, now.AddMinutes(appendCount), 100 * (appendCount + 1));
+            });
+        var projects = new ProjectUsageService(source);
+        var buckets = new[] { new DailyUsageBucket { StartDate = "2026-07-03", Tokens = 1_000 } };
+
+        var summaries = await source.GetSessionSummariesAsync(DateOnly.FromDateTime(now.Date).AddDays(-29));
+        var rows = await projects.GetProjectUsageAsync(buckets, now, summaries);
+
+        Assert.Equal(2, appendCount);
+        Assert.Equal(300, Assert.Single(rows).RawLocalTokens);
+    }
+
+    [Fact]
     public async Task SharedRolloutSource_ReadsExactRateLimitHistoryFromLocalTokenEvents()
     {
         var codexHome = CreateCodexHome();
@@ -256,6 +334,141 @@ public sealed class ProjectUsageServiceTests
             .Select(point => point.UsedPercent));
         Assert.All(history, point => Assert.Equal("codex", point.LimitKey));
         Assert.All(history.Where(point => point.WindowDurationMins == 10_080), point => Assert.Equal(weeklyReset, point.ResetsAtUtc));
+    }
+
+    [Fact]
+    public async Task SharedRolloutSource_KeepsParsedRateLimitPrefixWhileActiveRolloutIsAppending()
+    {
+        var codexHome = CreateCodexHome();
+        var now = new DateTimeOffset(2026, 7, 21, 10, 0, 0, TimeSpan.Zero);
+        var weeklyReset = now.AddDays(4);
+        var rollout = WriteRateLimitRollout(
+            codexHome,
+            "active-rate-history.jsonl",
+            (now.AddHours(-2), 15, 74, weeklyReset));
+        CreateStateDatabase(codexHome, Thread("thread-active-rate-history", @"C:\Projects\PulseMeter", rollout, now));
+        var appendCount = 0;
+        var source = new SharedRolloutAnalyticsSource(codexHome, path =>
+        {
+            appendCount++;
+            AppendRateLimitRollout(
+                path,
+                now.AddMinutes(appendCount),
+                15 + appendCount,
+                74 + appendCount,
+                weeklyReset);
+        });
+
+        var history = await source.GetRateLimitHistoryAsync(now.AddDays(-7));
+
+        Assert.Equal(2, appendCount);
+        Assert.Equal([15d, 16d], history
+            .Where(point => point.WindowDurationMins == 300)
+            .Select(point => point.UsedPercent));
+        Assert.Equal([74d, 75d], history
+            .Where(point => point.WindowDurationMins == 10_080)
+            .Select(point => point.UsedPercent));
+    }
+
+    [Fact]
+    public async Task SharedRolloutSource_RateLimitRefreshDoesNotWaitForProjectRolloutParsing()
+    {
+        var codexHome = CreateCodexHome();
+        var now = new DateTimeOffset(2026, 7, 21, 10, 0, 0, TimeSpan.Zero);
+        var weeklyReset = now.AddDays(4);
+        var rollout = WriteRateLimitRollout(
+            codexHome,
+            "independent-rate-history.jsonl",
+            (now.AddHours(-1), 35, 75, weeklyReset));
+        CreateStateDatabase(codexHome, Thread("thread-independent-history", @"C:\Projects\PulseMeter", rollout, now));
+        using var projectParseStarted = new ManualResetEventSlim();
+        using var releaseProjectParse = new ManualResetEventSlim();
+        var source = new SharedRolloutAnalyticsSource(
+            codexHome,
+            rateLimitParseCompleted: null,
+            rolloutParseCompleted: _ =>
+            {
+                projectParseStarted.Set();
+                releaseProjectParse.Wait();
+            });
+        var sessionRead = Task.Run(async () =>
+            await source.GetSessionSummariesAsync(DateOnly.FromDateTime(now.Date).AddDays(-29)));
+
+        try
+        {
+            Assert.True(projectParseStarted.Wait(TimeSpan.FromSeconds(5)));
+
+            var history = await Task.Run(async () =>
+                    await source.GetRateLimitHistoryAsync(now.AddDays(-7)))
+                .WaitAsync(TimeSpan.FromSeconds(2));
+
+            Assert.Equal([35d, 75d], history.Select(point => point.UsedPercent));
+        }
+        finally
+        {
+            releaseProjectParse.Set();
+            await sessionRead.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+    }
+
+    [Fact]
+    public async Task SharedRolloutSource_InvalidatesSnapshotWhenKeptOpenWalChanges()
+    {
+        var codexHome = CreateCodexHome();
+        var now = new DateTimeOffset(2026, 7, 22, 12, 0, 0, TimeSpan.Zero);
+        var firstRollout = WriteRollout(codexHome, "first.jsonl", now, 100);
+        var secondRollout = WriteRollout(codexHome, "second.jsonl", now, 200);
+        CreateStateDatabase(codexHome, Thread("thread-first", @"C:\Projects\First", firstRollout, now));
+        var source = new SharedRolloutAnalyticsSource(codexHome);
+        var cutoffDate = DateOnly.FromDateTime(now.ToLocalTime().DateTime).AddDays(-29);
+
+        var initial = await source.GetSessionSummariesAsync(cutoffDate);
+
+        using var writer = OpenStateDatabaseWriter(codexHome, useWal: true);
+        InsertThread(writer, Thread("thread-second", @"C:\Projects\Second", secondRollout, now));
+        Assert.True(File.Exists(Path.Combine(codexHome, "state_5.sqlite-wal")));
+
+        var updated = await source.GetSessionSummariesAsync(cutoffDate);
+
+        Assert.Equal(["thread-first"], initial.Select(summary => summary.ThreadId));
+        Assert.Equal(["thread-first", "thread-second"], updated.Select(summary => summary.ThreadId).Order());
+    }
+
+    [Fact]
+    public async Task SharedRolloutSource_RetriesAfterExclusiveDatabaseReadFailure()
+    {
+        var codexHome = CreateCodexHome();
+        var now = new DateTimeOffset(2026, 7, 22, 12, 0, 0, TimeSpan.Zero);
+        var firstRollout = WriteRollout(codexHome, "first.jsonl", now, 100);
+        var secondRollout = WriteRollout(codexHome, "second.jsonl", now, 200);
+        CreateStateDatabase(codexHome, Thread("thread-first", @"C:\Projects\First", firstRollout, now));
+        var source = new SharedRolloutAnalyticsSource(codexHome);
+        var cutoffDate = DateOnly.FromDateTime(now.ToLocalTime().DateTime).AddDays(-29);
+
+        var initial = await source.GetSessionSummariesAsync(cutoffDate);
+        using (var writer = OpenStateDatabaseWriter(codexHome))
+        {
+            InsertThread(writer, Thread("thread-second", @"C:\Projects\Second", secondRollout, now));
+        }
+
+        File.SetLastWriteTimeUtc(Path.Combine(codexHome, "state_5.sqlite"), DateTime.UtcNow.AddSeconds(1));
+        using (var exclusiveConnection = OpenStateDatabaseWriter(codexHome))
+        using (var exclusiveLock = exclusiveConnection.CreateCommand())
+        {
+            exclusiveLock.CommandText = "begin exclusive;";
+            exclusiveLock.ExecuteNonQuery();
+
+            var duringFailure = await source.GetSessionSummariesAsync(cutoffDate);
+
+            Assert.Equal(["thread-first"], initial.Select(summary => summary.ThreadId));
+            Assert.Equal(["thread-first"], duringFailure.Select(summary => summary.ThreadId));
+            exclusiveLock.CommandText = "rollback;";
+            exclusiveLock.ExecuteNonQuery();
+        }
+
+        var recovered = await source.GetSessionSummariesAsync(cutoffDate);
+
+        Assert.Equal(["thread-first", "thread-second"], recovered.Select(summary => summary.ThreadId).Order());
     }
 
     [Fact]
@@ -431,6 +644,34 @@ public sealed class ProjectUsageServiceTests
         return path;
     }
 
+    private static void AppendRateLimitRollout(
+        string path,
+        DateTimeOffset timestamp,
+        double primaryUsed,
+        double weeklyUsed,
+        DateTimeOffset weeklyReset)
+    {
+        File.AppendAllText(
+            path,
+            Environment.NewLine + BuildRateLimitLine(timestamp, primaryUsed, weeklyUsed, weeklyReset));
+    }
+
+    private static string BuildRateLimitLine(
+        DateTimeOffset timestamp,
+        double primaryUsed,
+        double weeklyUsed,
+        DateTimeOffset weeklyReset)
+    {
+        return "{" +
+            $"\"timestamp\":\"{timestamp:O}\"," +
+            "\"type\":\"event_msg\"," +
+            "\"payload\":{\"type\":\"token_count\",\"rate_limits\":{" +
+            "\"limit_id\":\"codex\"," +
+            $"\"primary\":{{\"used_percent\":{primaryUsed.ToString(System.Globalization.CultureInfo.InvariantCulture)},\"window_minutes\":300,\"resets_at\":{timestamp.AddHours(5).ToUnixTimeSeconds()}}}," +
+            $"\"secondary\":{{\"used_percent\":{weeklyUsed.ToString(System.Globalization.CultureInfo.InvariantCulture)},\"window_minutes\":10080,\"resets_at\":{weeklyReset.ToUnixTimeSeconds()}}}" +
+            "}}}";
+    }
+
     private static string WriteRollout(
         string codexHome,
         string fileName,
@@ -491,6 +732,34 @@ public sealed class ProjectUsageServiceTests
             command.Parameters.AddWithValue("$cwd", thread.Cwd);
             command.ExecuteNonQuery();
         }
+    }
+
+    private static SqliteConnection OpenStateDatabaseWriter(string codexHome, bool useWal = false)
+    {
+        var connection = new SqliteConnection($"Data Source={Path.Combine(codexHome, "state_5.sqlite")}");
+        connection.Open();
+        if (useWal)
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = "pragma journal_mode = wal;";
+            Assert.Equal("wal", (string?)command.ExecuteScalar());
+        }
+
+        return connection;
+    }
+
+    private static void InsertThread(SqliteConnection connection, ThreadRow thread)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            insert into threads (id, rollout_path, updated_at, cwd, tokens_used)
+            values ($id, $rollout_path, $updated_at, $cwd, 0);
+            """;
+        command.Parameters.AddWithValue("$id", thread.Id);
+        command.Parameters.AddWithValue("$rollout_path", thread.RolloutPath);
+        command.Parameters.AddWithValue("$updated_at", thread.UpdatedAtUnixSeconds);
+        command.Parameters.AddWithValue("$cwd", thread.Cwd);
+        command.ExecuteNonQuery();
     }
 
     private static void DeleteThreads(string codexHome)

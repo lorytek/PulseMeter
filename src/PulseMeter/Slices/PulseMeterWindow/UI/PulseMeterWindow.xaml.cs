@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using PulseMeter.Slices.PulseMeterWindow;
 using PulseMeter.Slices.PulseMeterWindow.Business;
 using PulseMeter.Slices.NavigationRail.Models;
@@ -19,6 +20,8 @@ using WpfSelector = System.Windows.Controls.Primitives.Selector;
 using WpfSize = System.Windows.Size;
 using WpfTextBoxBase = System.Windows.Controls.Primitives.TextBoxBase;
 
+using PulseMeter.Platform.Diagnostics;
+
 namespace PulseMeter.Slices.PulseMeterWindow.UI;
 
 public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
@@ -30,12 +33,15 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
     private const int SysCommandMask = 0xFFF0;
     private const int ScMaximize = 0xF030;
     private const int SwRestore = 9;
+    private const int SwShowNoActivate = 4;
     private const double WorkAreaPadding = 24;
 
     private PulseMeterWindowViewModel? _boundViewModel;
     private bool _isApplyingViewModelSize;
     private bool _isApplyingWindowPlacement;
     private bool _isProgrammaticSectionScroll;
+    private bool _isClosingForShutdown;
+    private DispatcherTimer? _expandCollapseFocusTimer;
     private HwndSource? _windowSource;
 
     public IPulseMeterWindowStateStore? WindowStateStore { get; set; }
@@ -54,12 +60,14 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
             handledEventsToo: true);
         DataContextChanged += OnDataContextChanged;
         SourceInitialized += OnSourceInitialized;
+        Closing += OnClosing;
         LocationChanged += Window_LocationChanged;
         StateChanged += Window_StateChanged;
         Closed += OnClosed;
         Loaded += (_, _) =>
         {
             ApplyViewModelBounds();
+            UpdateNavigationBottomSpacer();
             SaveWindowState();
         };
     }
@@ -67,6 +75,53 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
     void IPulseMeterWindow.Invoke(Action action)
     {
         Dispatcher.Invoke(action);
+    }
+
+    public void ShowAndActivate()
+    {
+        if (!IsVisible)
+        {
+            Show();
+        }
+
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        Activate();
+    }
+
+    public void ShowWithoutActivation()
+    {
+        if (!IsVisible)
+        {
+            var showActivated = ShowActivated;
+            ShowActivated = false;
+            try
+            {
+                Show();
+            }
+            finally
+            {
+                ShowActivated = showActivated;
+            }
+        }
+
+        if (WindowState == WindowState.Minimized)
+        {
+            var handle = _windowSource?.Handle ?? IntPtr.Zero;
+            if (handle != IntPtr.Zero)
+            {
+                ShowWindow(handle, SwShowNoActivate);
+            }
+        }
+    }
+
+    public void CloseForShutdown()
+    {
+        _isClosingForShutdown = true;
+        Close();
     }
 
     private void Surface_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -115,6 +170,47 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         if (DataContext is PulseMeterWindowViewModel viewModel)
         {
             viewModel.ToggleExpanded();
+            ScheduleExpandCollapseFocus(viewModel.IsExpanded);
+        }
+    }
+
+    private void ScheduleExpandCollapseFocus(bool expectedExpanded)
+    {
+        _expandCollapseFocusTimer?.Stop();
+
+        var timer = new DispatcherTimer(DispatcherPriority.Input, Dispatcher)
+        {
+            Interval = TimeSpan.FromMilliseconds(50)
+        };
+        var attemptsRemaining = 20;
+        _expandCollapseFocusTimer = timer;
+        timer.Tick += (_, _) =>
+        {
+            if (DataContext is not PulseMeterWindowViewModel currentViewModel
+                || currentViewModel.IsExpanded != expectedExpanded)
+            {
+                CompleteFocusTransfer(timer);
+                return;
+            }
+
+            var focusTransferred = expectedExpanded
+                ? ExpandedHeaderControl.FocusExpandCollapseButton()
+                : CompactDataBar.FocusExpandCollapseButton();
+            attemptsRemaining--;
+            if (focusTransferred || attemptsRemaining <= 0)
+            {
+                CompleteFocusTransfer(timer);
+            }
+        };
+        timer.Start();
+    }
+
+    private void CompleteFocusTransfer(DispatcherTimer timer)
+    {
+        timer.Stop();
+        if (ReferenceEquals(_expandCollapseFocusTimer, timer))
+        {
+            _expandCollapseFocusTimer = null;
         }
     }
 
@@ -141,6 +237,17 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
     private void NeedsAttentionSection_ReviewRequested(object? sender, NeedsAttentionReviewRequestedEventArgs e)
     {
         NavigateToSection(GetNavigationSection(e.Target), restoreHiddenSection: true);
+    }
+
+    private void DailyUsageSection_ExpansionToggling(object? sender, EventArgs e)
+    {
+        if (_boundViewModel is null)
+        {
+            return;
+        }
+
+        _boundViewModel.NavigationRail.SelectSection(NavigationSection.DailyUsage);
+        _isProgrammaticSectionScroll = true;
     }
 
     private static NavigationSection GetNavigationSection(NeedsAttentionReviewTarget target)
@@ -183,16 +290,60 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         }
 
         _isProgrammaticSectionScroll = true;
-        var targetTop = target
-            .TransformToAncestor(ExpandedContentScrollViewer)
-            .Transform(new WpfPoint())
-            .Y;
-        var targetOffset = Math.Clamp(
-            ExpandedContentScrollViewer.VerticalOffset + targetTop,
-            0,
-            ExpandedContentScrollViewer.ScrollableHeight);
-        ExpandedContentScrollViewer.ScrollToVerticalOffset(targetOffset);
-        Dispatcher.BeginInvoke(new Action(() => _isProgrammaticSectionScroll = false));
+        try
+        {
+            UpdateNavigationBottomSpacer();
+            ExpandedContentScrollViewer.UpdateLayout();
+
+            var targetTop = target
+                .TransformToAncestor(ExpandedContentScrollViewer)
+                .Transform(new WpfPoint())
+                .Y;
+            var targetOffset = Math.Clamp(
+                ExpandedContentScrollViewer.VerticalOffset + targetTop,
+                0,
+                ExpandedContentScrollViewer.ScrollableHeight);
+            ExpandedContentScrollViewer.ScrollToVerticalOffset(targetOffset);
+        }
+        catch
+        {
+            _isProgrammaticSectionScroll = false;
+            throw;
+        }
+
+        Dispatcher.BeginInvoke(
+            new Action(() => _isProgrammaticSectionScroll = false),
+            DispatcherPriority.ApplicationIdle);
+    }
+
+    private void PreserveSelectedSectionAfterDailyUsageLayoutChange()
+    {
+        if (_boundViewModel is null || !IsLoaded)
+        {
+            return;
+        }
+
+        var selectedSection = _boundViewModel.NavigationRail.SelectedSection;
+        if (selectedSection == NavigationSection.Overview)
+        {
+            Dispatcher.BeginInvoke(new Action(UpdateNavigationBottomSpacer), DispatcherPriority.Loaded);
+            return;
+        }
+
+        _isProgrammaticSectionScroll = true;
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (_boundViewModel?.NavigationRail.SelectedSection != selectedSection || !IsLoaded)
+            {
+                _isProgrammaticSectionScroll = false;
+                return;
+            }
+
+            ExpandedContentScrollViewer.UpdateLayout();
+            UpdateNavigationBottomSpacer();
+            ExpandedContentScrollViewer.UpdateLayout();
+            NavigateToSection(selectedSection, restoreHiddenSection: false);
+        }), DispatcherPriority.Loaded);
     }
 
     private void ExpandedContentScrollViewer_ScrollChanged(object sender, System.Windows.Controls.ScrollChangedEventArgs e)
@@ -202,11 +353,19 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
             return;
         }
 
+        if (Math.Abs(e.ExtentHeightChange) > 0.01
+            && _boundViewModel.NavigationRail.SelectedSection != NavigationSection.Overview)
+        {
+            PreserveSelectedSectionAfterDailyUsageLayoutChange();
+            return;
+        }
+
         var visibleSections = new[]
         {
             (NavigationSection.RateLimits, (FrameworkElement)RateLimitsSection),
             (NavigationSection.WeeklyPace, (FrameworkElement)WeeklyPaceSection),
             (NavigationSection.RunwayForecast, (FrameworkElement)UsageTrendSection),
+            (NavigationSection.BlockPlanner, (FrameworkElement)BlockPlannerSection),
             (NavigationSection.ResetCredits, (FrameworkElement)ResetCreditsSection),
             (NavigationSection.AccountUsage, (FrameworkElement)AccountUsageSection),
             (NavigationSection.ProjectUsage, (FrameworkElement)ProjectUsageSection),
@@ -214,13 +373,65 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
             (NavigationSection.DailyUsage, (FrameworkElement)DailyUsageSection)
         }.Where(item => item.Item2.Visibility == Visibility.Visible).ToList();
 
-        var viewportTop = 20d;
-        var current = visibleSections
-            .Where(item => item.Item2.TransformToAncestor(ExpandedContentScrollViewer).Transform(new WpfPoint()).Y <= viewportTop)
-            .Select(item => item.Item1)
-            .LastOrDefault();
+        var sectionBounds = visibleSections
+            .Select(item =>
+            {
+                var top = item.Item2.TransformToAncestor(ExpandedContentScrollViewer).Transform(new WpfPoint()).Y;
+                return (Section: item.Item1, Top: top, Bottom: top + item.Item2.ActualHeight);
+            })
+            .ToArray();
+        var current = SelectSectionForScroll(
+            sectionBounds,
+            ExpandedContentScrollViewer.VerticalOffset,
+            ExpandedContentScrollViewer.ViewportHeight);
 
-        _boundViewModel.NavigationRail.SelectSection(current == default ? NavigationSection.Overview : current);
+        _boundViewModel.NavigationRail.SelectSection(current);
+    }
+
+    internal static NavigationSection SelectSectionForScroll(
+        IReadOnlyList<(NavigationSection Section, double Top, double Bottom)> sections,
+        double verticalOffset,
+        double viewportHeight)
+    {
+        if (verticalOffset <= 20 || sections.Count == 0 || !double.IsFinite(viewportHeight) || viewportHeight <= 0)
+        {
+            return NavigationSection.Overview;
+        }
+
+        const double alignedTopTolerance = 48;
+        var alignedAtTop = sections
+            .Where(item => double.IsFinite(item.Top)
+                && double.IsFinite(item.Bottom)
+                && item.Top >= -alignedTopTolerance
+                && item.Top <= alignedTopTolerance
+                && item.Bottom > 0)
+            .OrderBy(item => Math.Abs(item.Top))
+            .Select(item => (NavigationSection?)item.Section)
+            .FirstOrDefault();
+        if (alignedAtTop is NavigationSection alignedSection)
+        {
+            return alignedSection;
+        }
+
+        var probe = Math.Clamp(viewportHeight * 0.35, 20, Math.Max(20, viewportHeight - 1));
+        var containing = sections
+            .Where(item => double.IsFinite(item.Top)
+                && double.IsFinite(item.Bottom)
+                && item.Top <= probe
+                && item.Bottom > probe)
+            .Select(item => (NavigationSection?)item.Section)
+            .LastOrDefault();
+        if (containing is NavigationSection section)
+        {
+            return section;
+        }
+
+        return sections
+            .Where(item => double.IsFinite(item.Top) && double.IsFinite(item.Bottom))
+            .Select(item => (item.Section, VisibleHeight: Math.Max(0, Math.Min(item.Bottom, viewportHeight) - Math.Max(item.Top, 0))))
+            .OrderByDescending(item => item.VisibleHeight)
+            .Select(item => item.VisibleHeight > 0 ? item.Section : NavigationSection.Overview)
+            .FirstOrDefault();
     }
 
     private FrameworkElement? GetSectionTarget(NavigationSection section)
@@ -229,6 +440,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         {
             NavigationSection.RateLimits => RateLimitsSection,
             NavigationSection.RunwayForecast => UsageTrendSection,
+            NavigationSection.BlockPlanner => BlockPlannerSection,
             NavigationSection.WeeklyPace => WeeklyPaceSection,
             NavigationSection.ResetCredits => ResetCreditsSection,
             NavigationSection.AccountUsage => AccountUsageSection,
@@ -237,6 +449,40 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
             NavigationSection.DailyUsage => DailyUsageSection,
             _ => null
         };
+    }
+
+    private void UpdateNavigationBottomSpacer()
+    {
+        if (NavigationBottomSpacer is null
+            || ExpandedContentScrollViewer is null
+            || DailyUsageSection is null
+            || ExpandedContentStackPanel is null)
+        {
+            return;
+        }
+
+        NavigationBottomSpacer.Height = CalculateNavigationBottomSpacerHeight(
+            ExpandedContentScrollViewer.ViewportHeight,
+            DailyUsageSection.ActualHeight,
+            ExpandedContentStackPanel.Margin.Bottom);
+    }
+
+    internal static double CalculateNavigationBottomSpacerHeight(
+        double viewportHeight,
+        double lastSectionHeight,
+        double contentBottomMargin)
+    {
+        if (!double.IsFinite(viewportHeight)
+            || !double.IsFinite(lastSectionHeight)
+            || !double.IsFinite(contentBottomMargin)
+            || viewportHeight <= 0
+            || lastSectionHeight < 0
+            || contentBottomMargin < 0)
+        {
+            return 0;
+        }
+
+        return Math.Max(0, viewportHeight - lastSectionHeight - contentBottomMargin);
     }
 
     private static bool IsInteractiveElement(DependencyObject? source)
@@ -286,7 +532,24 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
     private void OnClosed(object? sender, EventArgs e)
     {
         _windowSource?.RemoveHook(WndProc);
+        _windowSource = null;
         SaveWindowState();
+    }
+
+    private void OnClosing(object? sender, CancelEventArgs e)
+    {
+        if (_isClosingForShutdown || Dispatcher.HasShutdownStarted)
+        {
+            return;
+        }
+
+        e.Cancel = true;
+        if (DataContext is PulseMeterWindowViewModel viewModel)
+        {
+            viewModel.MarkHiddenByUser();
+        }
+
+        Hide();
     }
 
     private void MoveToTopRight(double width, double height, Rect workArea)
@@ -352,6 +615,8 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
 
     private void Window_SizeChanged(object sender, SizeChangedEventArgs e)
     {
+        UpdateNavigationBottomSpacer();
+
         if (CanRememberWindowPlacement() && DataContext is PulseMeterWindowViewModel viewModel)
         {
             if (viewModel.IsExpanded && !viewModel.HasWindowPosition)
@@ -412,6 +677,11 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(PulseMeterWindowViewModel.IsDailyUsageExpanded))
+        {
+            PreserveSelectedSectionAfterDailyUsageLayoutChange();
+        }
+
         if (e.PropertyName is nameof(PulseMeterWindowViewModel.IsExpanded)
             or nameof(PulseMeterWindowViewModel.WindowHeight)
             or nameof(PulseMeterWindowViewModel.WindowMinHeight)
@@ -471,7 +741,17 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
     {
         if (DataContext is PulseMeterWindowViewModel viewModel)
         {
-            WindowStateStore?.Save(viewModel.CaptureWindowState());
+            try
+            {
+                if (WindowStateStore?.Save(viewModel.CaptureWindowState()) is false)
+                {
+                    PrivacySafeDiagnostics.WriteInfo("window state could not be persisted; retrying later");
+                }
+            }
+            catch (Exception exception)
+            {
+                PrivacySafeDiagnostics.WriteFailure("window state persistence failed", exception);
+            }
         }
     }
 

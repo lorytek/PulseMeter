@@ -1,5 +1,7 @@
 using PulseMeter.Slices.UsageCollection;
 
+using PulseMeter.Platform.Diagnostics;
+
 namespace PulseMeter.Slices.UsageCollection.Business;
 
 public interface IMockUsageService : IUsageService
@@ -297,8 +299,29 @@ public sealed class MockCodexUsageService : IMockUsageService
             StatusMessage = "Mock showcase data: includes all alert signals, full attribution tables, and an After credit reset track for the weekly-only layout."
         };
 
-        SnapshotUpdated?.Invoke(this, snapshot);
+        PublishSnapshotUpdated(snapshot);
         return Task.FromResult(snapshot);
+    }
+
+    private void PublishSnapshotUpdated(UsageSnapshot snapshot)
+    {
+        var handlers = SnapshotUpdated;
+        if (handlers is null)
+        {
+            return;
+        }
+
+        foreach (EventHandler<UsageSnapshot> handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                handler(this, snapshot);
+            }
+            catch (Exception exception)
+            {
+                PrivacySafeDiagnostics.WriteFailure("mock snapshot subscriber failed", exception);
+            }
+        }
     }
 
 }

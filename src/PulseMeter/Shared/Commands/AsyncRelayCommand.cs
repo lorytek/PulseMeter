@@ -1,5 +1,7 @@
 ﻿using System.Windows.Input;
 
+using PulseMeter.Platform.Diagnostics;
+
 namespace PulseMeter.Shared.Commands;
 
 public sealed class AsyncRelayCommand : ICommand
@@ -22,7 +24,16 @@ public sealed class AsyncRelayCommand : ICommand
 
     public async void Execute(object? parameter)
     {
-        await ExecuteAsync();
+        try
+        {
+            await ExecuteAsync();
+        }
+        catch (Exception exception)
+        {
+            // ICommand is a UI event boundary. Letting this escape would raise the
+            // exception on the WPF dispatcher and could terminate the application.
+            PrivacySafeDiagnostics.WriteFailure("command failed", exception);
+        }
     }
 
     public Task ExecuteAsync()

@@ -5,6 +5,7 @@ using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Brush = System.Windows.Media.Brush;
 using Brushes = System.Windows.Media.Brushes;
 using Color = System.Windows.Media.Color;
@@ -34,6 +35,7 @@ public sealed class UsageTrendChart : FrameworkElement
     private const double FullTimeLabelMinimumSpacing = 42;
     private const double CompactTimeLabelMinimumSpacing = 18;
     private const double ActualHoverRadius = 18;
+    private const string ChartKeyboardHelpText = "Use the Left and Right Arrow keys to review recorded usage points. Press Escape to dismiss the selected point.";
     private static readonly TimeSpan HourlyTickMaximumWindow = TimeSpan.FromHours(12);
 
     private static readonly Typeface ChartTypeface = new("Segoe UI");
@@ -64,13 +66,16 @@ public sealed class UsageTrendChart : FrameworkElement
     private static readonly Pen ForecastLimitPen = CreateDashedPen(AmberBrush, 1.15, DashStyles.Dash);
     private static readonly Pen HoverOutlinePen = Freeze(new Pen(Brushes.White, 1.5));
     private static readonly Pen NowOutlinePen = Freeze(new Pen(BlueBrush, 2));
+    private static readonly Pen KeyboardFocusPen = Freeze(new Pen(BlueBrush, 2));
 
     private readonly ToolTip _tooltip;
-    private UsageTrendPoint? _hoveredPoint;
+    private UsageTrendPoint? _selectedPoint;
+    private bool _isKeyboardDetail;
+    private string _accessibleSummary = "Usage trend chart";
 
     public UsageTrendChart()
     {
-        Focusable = false;
+        Focusable = true;
         SnapsToDevicePixels = true;
         UseLayoutRounding = true;
         Cursor = Cursors.Cross;
@@ -80,6 +85,11 @@ public sealed class UsageTrendChart : FrameworkElement
             Placement = System.Windows.Controls.Primitives.PlacementMode.Mouse
         };
         ToolTip = _tooltip;
+        AddHandler(
+            Mouse.PreviewMouseDownEvent,
+            new MouseButtonEventHandler(OnHandledPreviewMouseDown),
+            handledEventsToo: true);
+        UpdateAccessibleDetail(null, null, announce: false);
     }
 
     /// <summary>Gets or sets the immutable data rendered by the chart.</summary>
@@ -178,10 +188,12 @@ public sealed class UsageTrendChart : FrameworkElement
         DrawResetMarker(drawingContext, viewport, model);
         DrawContextStrip(drawingContext, viewport);
 
-        if (_hoveredPoint is not null)
+        if (_selectedPoint is not null)
         {
-            DrawHoveredPoint(drawingContext, viewport, _hoveredPoint);
+            DrawHoveredPoint(drawingContext, viewport, _selectedPoint);
         }
+
+        DrawKeyboardFocusIndicator(drawingContext);
 
         if (actual.Count == 0 && projection.Count == 0 && sustainable.Count == 0 && range.Count == 0)
         {
@@ -196,7 +208,7 @@ public sealed class UsageTrendChart : FrameworkElement
         var model = Model;
         if (model is null || !TryCreateViewport(out var viewport))
         {
-            ClearHover();
+            ClearMouseDetail();
             return;
         }
 
@@ -221,25 +233,23 @@ public sealed class UsageTrendChart : FrameworkElement
 
         if (mouse.X < viewport.Left || mouse.X > viewport.Right || mouse.Y < viewport.Top || mouse.Y > viewport.Bottom)
         {
-            ClearHover();
+            ClearMouseDetail();
             return;
         }
 
         var nearest = FindActualHoverPoint(viewport, actual, mouse);
         if (nearest is not null)
         {
-            if (Equals(nearest, _hoveredPoint))
+            if (Equals(nearest, _selectedPoint) && !_isKeyboardDetail)
             {
                 return;
             }
 
-            _hoveredPoint = nearest;
             var referenceProjection = model.ShowProjection ? GetUsablePoints(model.ReferenceProjectedPoints) : [];
-            _tooltip.Content = BuildTooltip(
+            ShowPointDetail(
                 nearest,
-                FindPointAt(referenceProjection, nearest.Timestamp));
-            _tooltip.IsOpen = true;
-            InvalidateVisual();
+                FindPointAt(referenceProjection, nearest.Timestamp),
+                isKeyboardDetail: false);
             return;
         }
 
@@ -248,24 +258,143 @@ public sealed class UsageTrendChart : FrameworkElement
             return;
         }
 
-        ClearHover();
+        ClearMouseDetail();
+    }
+
+    private void OnHandledPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton == MouseButton.Left)
+        {
+            _ = Dispatcher.BeginInvoke(
+                DispatcherPriority.Input,
+                new Action(() => _ = Keyboard.Focus(this)));
+        }
     }
 
     protected override void OnMouseLeave(MouseEventArgs e)
     {
         base.OnMouseLeave(e);
-        ClearHover();
+        ClearMouseDetail();
+    }
+
+    protected override void OnGotKeyboardFocus(KeyboardFocusChangedEventArgs e)
+    {
+        base.OnGotKeyboardFocus(e);
+        InvalidateVisual();
+    }
+
+    protected override void OnLostKeyboardFocus(KeyboardFocusChangedEventArgs e)
+    {
+        base.OnLostKeyboardFocus(e);
+        if (_isKeyboardDetail)
+        {
+            DismissPointDetail();
+        }
+
+        InvalidateVisual();
+    }
+
+    protected override void OnKeyDown(System.Windows.Input.KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+
+        if (e.Handled)
+        {
+            return;
+        }
+
+        if (e.Key == System.Windows.Input.Key.Escape)
+        {
+            if (_selectedPoint is not null || _tooltip.IsOpen)
+            {
+                DismissPointDetail();
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (e.Key is not (System.Windows.Input.Key.Left or System.Windows.Input.Key.Right))
+        {
+            return;
+        }
+
+        var model = Model;
+        var actual = model is null ? [] : GetUsablePoints(model.ActualPoints);
+        if (actual.Count == 0)
+        {
+            return;
+        }
+
+        var currentIndex = _selectedPoint is null
+            ? e.Key == System.Windows.Input.Key.Left ? actual.Count - 1 : 0
+            : FindPointIndex(actual, _selectedPoint);
+        if (currentIndex < 0)
+        {
+            currentIndex = e.Key == System.Windows.Input.Key.Left ? actual.Count - 1 : 0;
+        }
+        else if (_selectedPoint is not null)
+        {
+            currentIndex = Math.Clamp(
+                currentIndex + (e.Key == System.Windows.Input.Key.Left ? -1 : 1),
+                0,
+                actual.Count - 1);
+        }
+
+        var point = actual[currentIndex];
+        var referenceProjection = model!.ShowProjection ? GetUsablePoints(model.ReferenceProjectedPoints) : [];
+        ShowPointDetail(
+            point,
+            FindPointAt(referenceProjection, point.Timestamp),
+            isKeyboardDetail: true);
+        e.Handled = true;
     }
 
     private static void OnModelChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs e)
     {
         var chart = (UsageTrendChart)dependencyObject;
-        chart.ClearHover();
-        var summary = ((UsageTrendChartModel?)e.NewValue)?.AccessibleSummary;
-        AutomationProperties.SetName(chart, string.IsNullOrWhiteSpace(summary) ? "Usage trend chart" : summary);
-        AutomationProperties.SetHelpText(chart, "Usage percentage over time, including not-measured gaps and comparison with the earlier forecast when available.");
+        var selectedTimestamp = chart._isKeyboardDetail
+            ? chart._selectedPoint?.Timestamp
+            : null;
+        var previousModel = (UsageTrendChartModel?)e.OldValue;
+        var model = (UsageTrendChartModel?)e.NewValue;
+        var summary = model?.AccessibleSummary;
+        chart._accessibleSummary = string.IsNullOrWhiteSpace(summary) ? "Usage trend chart" : summary;
+
+        if (selectedTimestamp is DateTimeOffset timestamp
+            && previousModel is not null
+            && model is not null
+            && IsSameKeyboardReviewScope(previousModel, model))
+        {
+            var actual = GetUsablePoints(model.ActualPoints);
+            var selectedPoint = actual.MinBy(point =>
+                Math.Abs(point.Timestamp.UtcDateTime.Ticks - timestamp.UtcDateTime.Ticks));
+            if (selectedPoint is not null)
+            {
+                var referenceProjection = model.ShowProjection
+                    ? GetUsablePoints(model.ReferenceProjectedPoints)
+                    : [];
+                chart.ShowPointDetail(
+                    selectedPoint,
+                    FindPointAt(referenceProjection, selectedPoint.Timestamp),
+                    isKeyboardDetail: true,
+                    announce: false);
+                return;
+            }
+        }
+
+        chart.DismissPointDetail();
+        chart.UpdateAccessibleDetail(null, null, announce: false);
         chart.InvalidateVisual();
     }
+
+    private static bool IsSameKeyboardReviewScope(
+        UsageTrendChartModel previous,
+        UsageTrendChartModel current) =>
+        previous.Mode == current.Mode
+        && previous.ResetAt == current.ResetAt
+        && previous.RangeStart == current.RangeStart
+        && previous.RangeEnd == current.RangeEnd;
 
     private bool TryCreateViewport(out Viewport viewport)
     {
@@ -828,16 +957,82 @@ public sealed class UsageTrendChart : FrameworkElement
         DrawText(context, message, new Point(x, y), 12, AxisBrush);
     }
 
-    private void ClearHover()
+    private void ClearMouseDetail()
     {
-        if (_hoveredPoint is null && !_tooltip.IsOpen)
+        if (!_isKeyboardDetail)
+        {
+            DismissPointDetail();
+        }
+    }
+
+    private void DismissPointDetail()
+    {
+        if (_selectedPoint is null && !_tooltip.IsOpen)
         {
             return;
         }
 
-        _hoveredPoint = null;
+        _selectedPoint = null;
+        _isKeyboardDetail = false;
         _tooltip.IsOpen = false;
+        UpdateAccessibleDetail(null, null, announce: false);
         InvalidateVisual();
+    }
+
+    private void ShowPointDetail(
+        UsageTrendPoint point,
+        UsageTrendPoint? referencePoint,
+        bool isKeyboardDetail,
+        bool announce = true)
+    {
+        _selectedPoint = point;
+        _isKeyboardDetail = isKeyboardDetail;
+        _tooltip.Content = BuildTooltip(point, referencePoint);
+        _tooltip.Placement = isKeyboardDetail
+            ? System.Windows.Controls.Primitives.PlacementMode.Bottom
+            : System.Windows.Controls.Primitives.PlacementMode.Mouse;
+        _tooltip.PlacementTarget = isKeyboardDetail ? this : null;
+        _tooltip.IsOpen = true;
+        UpdateAccessibleDetail(point, referencePoint, announce: isKeyboardDetail && announce);
+        InvalidateVisual();
+    }
+
+    private void UpdateAccessibleDetail(
+        UsageTrendPoint? point,
+        UsageTrendPoint? referencePoint,
+        bool announce)
+    {
+        AutomationProperties.SetName(this, _accessibleSummary);
+        AutomationProperties.SetHelpText(
+            this,
+            point is null
+                ? ChartKeyboardHelpText
+                : $"{ChartKeyboardHelpText} Selected point: {BuildTooltipText(point, referencePoint).Replace(Environment.NewLine, ". ")}");
+        AutomationProperties.SetLiveSetting(this, AutomationLiveSetting.Polite);
+
+        if (!announce)
+        {
+            return;
+        }
+
+        var peer = UIElementAutomationPeer.FromElement(this)
+            ?? UIElementAutomationPeer.CreatePeerForElement(this);
+        peer?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
+    }
+
+    private void DrawKeyboardFocusIndicator(DrawingContext context)
+    {
+        if (!IsKeyboardFocused && !IsKeyboardFocusWithin || ActualWidth < 4 || ActualHeight < 4)
+        {
+            return;
+        }
+
+        context.DrawRoundedRectangle(
+            null,
+            KeyboardFocusPen,
+            new Rect(1, 1, ActualWidth - 2, ActualHeight - 2),
+            8,
+            8);
     }
 
     private UsageTrendPoint? FindActualHoverPoint(
@@ -887,11 +1082,15 @@ public sealed class UsageTrendChart : FrameworkElement
             return false;
         }
 
-        var hadHoveredPoint = _hoveredPoint is not null;
-        _hoveredPoint = null;
+        var hadPointDetail = _selectedPoint is not null;
+        _selectedPoint = null;
+        _isKeyboardDetail = false;
         _tooltip.Content = BuildForecastWindowTooltip(rawStart, rawEnd, model.ForecastLimitAt);
+        _tooltip.Placement = System.Windows.Controls.Primitives.PlacementMode.Mouse;
+        _tooltip.PlacementTarget = null;
         _tooltip.IsOpen = true;
-        if (hadHoveredPoint)
+        UpdateAccessibleDetail(null, null, announce: false);
+        if (hadPointDetail)
         {
             InvalidateVisual();
         }
@@ -914,18 +1113,24 @@ public sealed class UsageTrendChart : FrameworkElement
         UsageTrendPoint point,
         UsageTrendPoint? referencePoint)
     {
-        var comparison = referencePoint is null
-            ? string.Empty
-            : BuildTooltipComparison(point.UsedPercent - referencePoint.UsedPercent, referencePoint.UsedPercent);
-
         return new TextBlock
         {
             FontFamily = new FontFamily("Segoe UI"),
             FontSize = 12,
             LineHeight = 19,
             Padding = new Thickness(2),
-            Text = $"{FormatTooltipTimestamp(point.Timestamp)}\nActual usage  {ClampPercent(point.UsedPercent):0}%{comparison}"
+            Text = BuildTooltipText(point, referencePoint)
         };
+    }
+
+    internal static string BuildTooltipText(
+        UsageTrendPoint point,
+        UsageTrendPoint? referencePoint)
+    {
+        var comparison = referencePoint is null
+            ? string.Empty
+            : BuildTooltipComparison(point.UsedPercent - referencePoint.UsedPercent, referencePoint.UsedPercent);
+        return $"{FormatTooltipTimestamp(point.Timestamp)}\nActual usage  {ClampPercent(point.UsedPercent):0}%{comparison}";
     }
 
     private static UIElement BuildForecastWindowTooltip(
@@ -1009,6 +1214,19 @@ public sealed class UsageTrendChart : FrameworkElement
 
     private static IReadOnlyList<UsageTrendPoint> GetUsablePoints(IReadOnlyList<UsageTrendPoint>? points) =>
         (points ?? []).Where(point => double.IsFinite(point.UsedPercent)).OrderBy(point => point.Timestamp).ToArray();
+
+    private static int FindPointIndex(IReadOnlyList<UsageTrendPoint> points, UsageTrendPoint point)
+    {
+        for (var index = 0; index < points.Count; index++)
+        {
+            if (Equals(points[index], point))
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
 
     private static IReadOnlyList<UsageTrendBandPoint> GetUsableBandPoints(IReadOnlyList<UsageTrendBandPoint>? points) =>
         (points ?? []).Where(point => double.IsFinite(point.LowerPercent) && double.IsFinite(point.UpperPercent)).OrderBy(point => point.Timestamp).ToArray();
@@ -1468,9 +1686,16 @@ public sealed class UsageTrendChart : FrameworkElement
 
         protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Custom;
 
-        protected override bool IsControlElementCore() => true;
+        protected override bool IsControlElementCore() => IsAvailableToAutomation();
 
-        protected override bool IsContentElementCore() => true;
+        protected override bool IsContentElementCore() => IsAvailableToAutomation();
+
+        private bool IsAvailableToAutomation()
+        {
+            var owner = (UsageTrendChart)Owner;
+            return owner.Visibility == Visibility.Visible
+                && (owner.IsVisible || PresentationSource.FromVisual(owner) is null);
+        }
     }
 
     private readonly record struct Viewport(

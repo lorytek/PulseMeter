@@ -14,7 +14,7 @@ public interface IPulseMeterWindowStateStore
 {
     PulseMeterWindowState? Load();
 
-    void Save(PulseMeterWindowState state);
+    bool Save(PulseMeterWindowState state);
 }
 
 public sealed class PulseMeterWindowStateStore : IPulseMeterWindowStateStore
@@ -39,8 +39,8 @@ public sealed class PulseMeterWindowStateStore : IPulseMeterWindowStateStore
         return AtomicJsonFileStore.Load<PulseMeterWindowState>(_filePath, JsonOptions);
     }
 
-    public void Save(PulseMeterWindowState state)
+    public bool Save(PulseMeterWindowState state)
     {
-        AtomicJsonFileStore.Save(_filePath, state, JsonOptions);
+        return AtomicJsonFileStore.Save(_filePath, state, JsonOptions);
     }
 }

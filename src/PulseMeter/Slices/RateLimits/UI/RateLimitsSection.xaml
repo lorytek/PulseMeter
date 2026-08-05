@@ -50,6 +50,11 @@
                         Visibility="{Binding HasMultipleSelectedQuotaRows, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 <ItemsControl Grid.ColumnSpan="3"
                               ItemsSource="{Binding SelectedQuotaRows}">
+                    <ItemsControl.ItemContainerStyle>
+                        <Style TargetType="ContentPresenter">
+                            <Setter Property="AutomationProperties.Name" Value="{Binding CompactAccessibleSummary}" />
+                        </Style>
+                    </ItemsControl.ItemContainerStyle>
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                             <UniformGrid Columns="{Binding DataContext.SelectedQuotaColumnCount, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />

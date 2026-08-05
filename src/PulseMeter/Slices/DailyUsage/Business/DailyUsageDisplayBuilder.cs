@@ -36,19 +36,25 @@ internal static class DailyUsageDisplayBuilder
             foreach (var offset in Enumerable.Range(0, DailyUsageDisplayDays))
             {
                 var date = today.AddDays(-offset);
-                var tokens = datedBuckets
+                var matchingBuckets = datedBuckets
                     .Where(row => row.Date == date)
-                    .Sum(row => TotalTokens(row.Bucket));
-                rows.Add(new DailyUsageAggregateRow(date, tokens));
+                    .Select(row => row.Bucket)
+                    .ToList();
+                var hasRecordedUsage = matchingBuckets.Any(HasTokenData);
+                var tokens = matchingBuckets.Sum(TotalTokens);
+                rows.Add(new DailyUsageAggregateRow(date, tokens, hasRecordedUsage));
             }
 
             foreach (var offset in Enumerable.Range(0, DailyUsageMedianWindowDays))
             {
                 var date = today.AddDays(-offset);
-                var tokens = datedBuckets
+                var matchingBuckets = datedBuckets
                     .Where(row => row.Date == date)
-                    .Sum(row => TotalTokens(row.Bucket));
-                medianRows.Add(new DailyUsageAggregateRow(date, tokens));
+                    .Select(row => row.Bucket)
+                    .ToList();
+                var hasRecordedUsage = matchingBuckets.Any(HasTokenData);
+                var tokens = matchingBuckets.Sum(TotalTokens);
+                medianRows.Add(new DailyUsageAggregateRow(date, tokens, hasRecordedUsage));
             }
         }
 
@@ -63,11 +69,12 @@ internal static class DailyUsageDisplayBuilder
 
                 return new DailyUsageDisplayRow(
                     FormatDailyUsageDateText(row.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), today),
-                    MeterDisplayFormatter.FormatTokens(totalTokens),
-                    FormatMedianComparisonText(totalTokens, medianBaseline),
-                    medianBaseline is not null,
+                    row.HasRecordedUsage ? MeterDisplayFormatter.FormatTokens(totalTokens) : "Not recorded",
+                    row.HasRecordedUsage ? FormatMedianComparisonText(totalTokens, medianBaseline) : string.Empty,
+                    row.HasRecordedUsage && medianBaseline is not null,
                     percent,
-                    sparklineHeight);
+                    sparklineHeight,
+                    row.HasRecordedUsage);
             })
             .ToList();
 
@@ -141,12 +148,19 @@ internal static class DailyUsageDisplayBuilder
         return bucket.TotalTokens ?? 0;
     }
 
+    private static bool HasTokenData(DailyUsageBucket bucket)
+    {
+        return bucket.Tokens.HasValue
+            || bucket.InputTokens.HasValue
+            || bucket.OutputTokens.HasValue;
+    }
+
     private static DailyUsageMedianBaseline? GetRecentDailyTokenMedian(
         IReadOnlyList<DailyUsageAggregateRow> rows,
         DateOnly today)
     {
         var baselineRows = rows
-            .Where(row => row.Date < today && row.Tokens > 0)
+            .Where(row => row.Date < today && row.HasRecordedUsage && row.Tokens > 0)
             .ToList();
 
         var values = baselineRows
@@ -199,5 +213,5 @@ internal static class DailyUsageDisplayBuilder
         return date.ToDateTime(TimeOnly.MinValue).ToString("dddd", CultureInfo.InvariantCulture);
     }
 
-    private sealed record DailyUsageAggregateRow(DateOnly Date, long Tokens);
+    private sealed record DailyUsageAggregateRow(DateOnly Date, long Tokens, bool HasRecordedUsage);
 }

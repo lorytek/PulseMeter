@@ -17,15 +17,24 @@ internal static class WindowResizeHitTester
 
     public static int? GetResizeHitTest(WpfPoint point, double width, double height)
     {
-        if (width <= 0 || height <= 0)
+        if (!double.IsFinite(width)
+            || !double.IsFinite(height)
+            || !double.IsFinite(point.X)
+            || !double.IsFinite(point.Y)
+            || width <= 0
+            || height <= 0
+            || point.X < 0
+            || point.X > width
+            || point.Y < 0
+            || point.Y > height)
         {
             return null;
         }
 
-        var isLeft = point.X >= 0 && point.X < ResizeBorderThickness;
-        var isRight = point.X <= width && point.X > width - ResizeBorderThickness;
-        var isTop = point.Y >= 0 && point.Y < ResizeBorderThickness;
-        var isBottom = point.Y <= height && point.Y > height - ResizeBorderThickness;
+        var isLeft = point.X < ResizeBorderThickness;
+        var isRight = point.X >= width - ResizeBorderThickness;
+        var isTop = point.Y < ResizeBorderThickness;
+        var isBottom = point.Y >= height - ResizeBorderThickness;
 
         if (isTop && isLeft)
         {

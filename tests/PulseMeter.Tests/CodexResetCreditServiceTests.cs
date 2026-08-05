@@ -143,6 +143,29 @@ public sealed class CodexResetCreditServiceTests
         Assert.Equal("https://chatgpt.com/backend-api/wham/rate-limit-reset-credits", handler.Request?.RequestUri?.ToString());
     }
 
+    [Fact]
+    public async Task TryFetchAsync_PropagatesCallerCancellation()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "PulseMeter.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var authPath = Path.Combine(directory, "auth.json");
+        await File.WriteAllTextAsync(authPath, """
+            {
+              "tokens": {
+                "access_token": "test-access-token"
+              }
+            }
+            """);
+        var service = new CodexResetCreditService(
+            authPath,
+            new CapturingHandler(new HttpResponseMessage(HttpStatusCode.OK)));
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => service.TryFetchAsync(cancellation.Token));
+    }
+
     private sealed class CapturingHandler : HttpMessageHandler
     {
         private readonly HttpResponseMessage _response;

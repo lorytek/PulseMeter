@@ -226,7 +226,7 @@ public sealed class PulseMeterWindowViewModelSelectionTests
         });
 
         Assert.True(viewModel.HasDailyRateLimitRows);
-        Assert.Equal("Daily allowance to stay within your weekly limit.", viewModel.RateLimitsDailySummaryText);
+        Assert.Equal("Allowance remaining for each day in this weekly limit.", viewModel.RateLimitsDailySummaryText);
         Assert.False(viewModel.HasRateLimitsDailyWarning);
         Assert.Equal(string.Empty, viewModel.RateLimitsDailyWarningText);
         var onPaceWeekly = Assert.Single(viewModel.SelectedQuotaRows, row => row.IsWeekly);

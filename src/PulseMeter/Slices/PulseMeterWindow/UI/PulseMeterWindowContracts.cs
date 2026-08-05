@@ -14,7 +14,13 @@ public interface IPulseMeterWindow
 
     void Show();
 
+    void ShowWithoutActivation();
+
+    void ShowAndActivate();
+
     void Hide();
+
+    void CloseForShutdown();
 
     bool Activate();
 }

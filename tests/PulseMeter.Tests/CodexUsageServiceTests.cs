@@ -24,6 +24,26 @@ public sealed class CodexUsageServiceTests
     }
 
     [Fact]
+    public async Task ThrowingSnapshotSubscriber_DoesNotBreakRefreshOrOtherSubscribers()
+    {
+        var client = new StubJsonRpcClient(
+            ("initialize", "{}"),
+            ("account/rateLimits/read", RateLimitsJson(60, DateTimeOffset.UtcNow.AddHours(2))),
+            ("account/usage/read", "{\"dailyUsageBuckets\":[],\"summary\":{}}"),
+            ("thread/loaded/list", "[]"));
+        await using var service = CreateService(
+            jsonRpcClientFactory: new StubJsonRpcClientFactory(client));
+        var deliveredToHealthySubscriber = 0;
+        service.SnapshotUpdated += (_, _) => throw new InvalidOperationException("Presentation failed.");
+        service.SnapshotUpdated += (_, _) => deliveredToHealthySubscriber++;
+
+        var snapshot = await service.GetSnapshotAsync();
+
+        Assert.Equal(SyncStatus.Live, snapshot.SyncStatus);
+        Assert.Equal(1, deliveredToHealthySubscriber);
+    }
+
+    [Fact]
     public async Task FallbackWithoutLastGoodLiveSnapshot_ShowsUnavailableInsteadOfMockData()
     {
         await using var service = CreateService();
@@ -280,6 +300,57 @@ public sealed class CodexUsageServiceTests
         Assert.Equal(SyncStatus.Live, snapshot.SyncStatus);
         Assert.Equal(2_500, snapshot.LifetimeTokens);
         Assert.Single(snapshot.DailyBuckets);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_PreservesLastConfirmedResetCreditsWhenLookupBecomesUnavailable()
+    {
+        var reset = DateTimeOffset.UtcNow.AddHours(2);
+        var credit = new ResetCreditSnapshot(
+            DateTimeOffset.UtcNow.AddDays(-1),
+            DateTimeOffset.UtcNow.AddDays(5),
+            "available");
+        var client = new SequentialRateLimitJsonRpcClient(
+            RateLimitsJson(60, reset),
+            RateLimitsJson(61, reset.AddMinutes(-1)));
+        await using var service = CreateService(
+            resetCreditService: new NullableSequentialResetCreditService(
+                new ResetCreditFetchResult(1, [credit]),
+                null),
+            jsonRpcClientFactory: new StubJsonRpcClientFactory(client));
+
+        var baseline = await service.GetSnapshotAsync();
+        var refreshed = await service.GetSnapshotAsync();
+
+        Assert.Equal(1, baseline.ResetCreditsAvailable);
+        Assert.Equal(1, refreshed.ResetCreditsAvailable);
+        Assert.Equal(credit.ExpiresAtUtc, refreshed.ResetCreditsExpiresAtUtc);
+        Assert.Equal([credit], refreshed.ResetCredits);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_AcceptsExplicitZeroResetCreditsAfterConfirmedCredits()
+    {
+        var reset = DateTimeOffset.UtcNow.AddHours(2);
+        var credit = new ResetCreditSnapshot(
+            DateTimeOffset.UtcNow.AddDays(-1),
+            DateTimeOffset.UtcNow.AddDays(5),
+            "available");
+        var client = new SequentialRateLimitJsonRpcClient(
+            RateLimitsJson(60, reset),
+            RateLimitsJson(61, reset.AddMinutes(-1)));
+        await using var service = CreateService(
+            resetCreditService: new NullableSequentialResetCreditService(
+                new ResetCreditFetchResult(1, [credit]),
+                new ResetCreditFetchResult(0, [])),
+            jsonRpcClientFactory: new StubJsonRpcClientFactory(client));
+
+        await service.GetSnapshotAsync();
+        var refreshed = await service.GetSnapshotAsync();
+
+        Assert.Equal(0, refreshed.ResetCreditsAvailable);
+        Assert.Null(refreshed.ResetCreditsExpiresAtUtc);
+        Assert.Empty(refreshed.ResetCredits);
     }
 
     [Fact]
@@ -723,6 +794,17 @@ public sealed class CodexUsageServiceTests
         {
             return Task.FromResult<ResetCreditFetchResult?>(
                 new ResetCreditFetchResult(_availableCounts.Dequeue(), []));
+        }
+    }
+
+    private sealed class NullableSequentialResetCreditService(params ResetCreditFetchResult?[] results)
+        : ICodexResetCreditService
+    {
+        private readonly Queue<ResetCreditFetchResult?> _results = new(results);
+
+        public Task<ResetCreditFetchResult?> TryFetchAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(_results.Dequeue());
         }
     }
 

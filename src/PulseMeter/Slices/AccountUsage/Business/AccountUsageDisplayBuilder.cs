@@ -47,8 +47,8 @@ internal static class AccountUsageDisplayBuilder
     {
         var value = TodayUsageValueText(snapshot, today);
         return value == "Unavailable"
-            ? "Today used tokens: unavailable"
-            : $"Today used tokens: {value}";
+            ? "Tokens used today: unavailable"
+            : $"Tokens used today: {value}";
     }
 
     public static string TodayUsageMetricValueText(UsageSnapshot snapshot, DateOnly today)

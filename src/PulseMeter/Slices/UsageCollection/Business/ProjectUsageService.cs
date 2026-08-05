@@ -88,11 +88,21 @@ public sealed class ProjectUsageService : IProjectUsageService
         var today = DateOnly.FromDateTime(now.ToLocalTime().DateTime);
         var recentWeekStart = today.AddDays(-6);
         var previousWeekStart = today.AddDays(-13);
+        var preparedSessions = sessions
+            .Select(session => new PreparedProjectSession(
+                session,
+                NormalizeProjectPath(session.Cwd),
+                LocalProjectPathNormalizer.TryGetCodexWorktreeProjectName(session.Cwd, out var projectName)
+                    ? projectName
+                    : null))
+            .ToList();
+        var uniqueOwners = FindUniqueWorktreeOwners(preparedSessions);
         var aggregates = new Dictionary<string, ProjectUsageAggregate>(StringComparer.OrdinalIgnoreCase);
-        foreach (var session in sessions)
+        foreach (var preparedSession in preparedSessions)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var fullPath = NormalizeProjectPath(session.Cwd);
+            var session = preparedSession.Session;
+            var fullPath = ResolveProjectPath(preparedSession, uniqueOwners);
             if (!aggregates.TryGetValue(fullPath, out var aggregate))
             {
                 aggregate = new ProjectUsageAggregate(fullPath);
@@ -116,6 +126,60 @@ public sealed class ProjectUsageService : IProjectUsageService
             .ThenBy(row => row.DisplayName, StringComparer.OrdinalIgnoreCase)
             .Take(_maxRows)
             .ToList();
+    }
+
+    private static IReadOnlyDictionary<string, string> FindUniqueWorktreeOwners(
+        IReadOnlyList<PreparedProjectSession> sessions)
+    {
+        var unresolvedProjectNames = sessions
+            .Where(session => session.WorktreeProjectName is not null
+                && LocalProjectPathNormalizer.TryGetCodexWorktreeProjectName(session.NormalizedPath, out _))
+            .Select(session => session.WorktreeProjectName!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var projectName in unresolvedProjectNames)
+        {
+            var candidates = sessions
+                .Where(session => IsOwnerCandidate(session, projectName))
+                .Select(session => session.NormalizedPath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(2)
+                .ToList();
+            if (candidates.Count == 1)
+            {
+                owners[projectName] = candidates[0];
+            }
+        }
+
+        return owners;
+    }
+
+    private static bool IsOwnerCandidate(PreparedProjectSession session, string projectName)
+    {
+        if (session.NormalizedPath == "(unknown project)"
+            || LocalProjectPathNormalizer.TryGetCodexWorktreeProjectName(session.NormalizedPath, out _)
+            || !GetBaseDisplayName(session.NormalizedPath).Equals(projectName, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return session.WorktreeProjectName is null
+            || session.WorktreeProjectName.Equals(projectName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ResolveProjectPath(
+        PreparedProjectSession session,
+        IReadOnlyDictionary<string, string> uniqueOwners)
+    {
+        if (session.WorktreeProjectName is not null
+            && LocalProjectPathNormalizer.TryGetCodexWorktreeProjectName(session.NormalizedPath, out _)
+            && uniqueOwners.TryGetValue(session.WorktreeProjectName, out var ownerPath))
+        {
+            return ownerPath;
+        }
+
+        return session.NormalizedPath;
     }
 
     private static ProjectUsageRow ToProjectUsageRow(ProjectUsageAggregate aggregate, IReadOnlyDictionary<string, int> baseNameCounts, long totalRawTokens, long accountTotal)
@@ -153,6 +217,11 @@ public sealed class ProjectUsageService : IProjectUsageService
     private static string NormalizeProjectPath(string path) => LocalProjectPathNormalizer.Normalize(path);
     private static string GetBaseDisplayName(string fullPath) => fullPath == "(unknown project)" ? "Unknown project" : Path.GetFileName(fullPath) is { Length: > 0 } name ? name : fullPath;
     private static string GetParentDisplayName(string fullPath) => Path.GetDirectoryName(fullPath) is { } parent && Path.GetFileName(parent) is { Length: > 0 } name ? name : "unknown";
+
+    private sealed record PreparedProjectSession(
+        SharedRolloutSessionSummary Session,
+        string NormalizedPath,
+        string? WorktreeProjectName);
 
     private sealed class ProjectUsageAggregate
     {
