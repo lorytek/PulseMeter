@@ -48,20 +48,83 @@ public static class MouseWheelScrollRelay
             return;
         }
 
+        eventArgs.Handled = TryRelayMouseWheelToParent(
+            element,
+            eventArgs.Delta,
+            SystemParameters.WheelScrollLines);
+    }
+
+    internal static bool TryRelayMouseWheelToParent(
+        UIElement element,
+        int wheelDelta,
+        int wheelScrollLines)
+    {
+        if (wheelDelta == 0)
+        {
+            return false;
+        }
+
         var parentScrollViewer = FindParentScrollViewer(element);
         if (parentScrollViewer is null)
         {
-            return;
+            return false;
         }
 
-        var scrollDistance = SystemParameters.WheelScrollLines == -1
-            ? parentScrollViewer.ViewportHeight
-            : Math.Max(1, SystemParameters.WheelScrollLines) * 16;
-        var wheelSteps = Math.Max(1, Math.Abs(eventArgs.Delta) / Mouse.MouseWheelDeltaForOneLine);
-        var targetOffset = parentScrollViewer.VerticalOffset - Math.Sign(eventArgs.Delta) * scrollDistance * wheelSteps;
+        var scrollDistance = CalculateScrollDistance(
+            wheelScrollLines,
+            parentScrollViewer.ViewportHeight);
+        var targetOffset = CalculateTargetOffset(
+            parentScrollViewer.VerticalOffset,
+            parentScrollViewer.ScrollableHeight,
+            wheelDelta,
+            scrollDistance);
+
+        if (Math.Abs(targetOffset - parentScrollViewer.VerticalOffset) < 0.01)
+        {
+            return false;
+        }
 
         parentScrollViewer.ScrollToVerticalOffset(targetOffset);
-        eventArgs.Handled = true;
+        return true;
+    }
+
+    internal static double CalculateScrollDistance(int wheelScrollLines, double viewportHeight)
+    {
+        if (wheelScrollLines == 0)
+        {
+            return 0;
+        }
+
+        if (wheelScrollLines < 0)
+        {
+            return double.IsFinite(viewportHeight) ? Math.Max(0, viewportHeight) : 0;
+        }
+
+        return wheelScrollLines * 16d;
+    }
+
+    internal static double CalculateTargetOffset(
+        double currentOffset,
+        double scrollableHeight,
+        int wheelDelta,
+        double scrollDistance)
+    {
+        var maximumOffset = double.IsFinite(scrollableHeight)
+            ? Math.Max(0, scrollableHeight)
+            : 0;
+        var normalizedCurrentOffset = double.IsFinite(currentOffset)
+            ? Math.Clamp(currentOffset, 0, maximumOffset)
+            : 0;
+
+        if (wheelDelta == 0 || !double.IsFinite(scrollDistance) || scrollDistance <= 0)
+        {
+            return normalizedCurrentOffset;
+        }
+
+        var wheelSteps = Math.Abs((double)wheelDelta) / Mouse.MouseWheelDeltaForOneLine;
+        var requestedOffset = normalizedCurrentOffset
+            - Math.Sign(wheelDelta) * scrollDistance * wheelSteps;
+        return Math.Clamp(requestedOffset, 0, maximumOffset);
     }
 
     private static ScrollViewer? FindParentScrollViewer(DependencyObject element)

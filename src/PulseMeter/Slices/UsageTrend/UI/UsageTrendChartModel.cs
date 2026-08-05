@@ -31,7 +31,17 @@ public sealed record UsageMomentumSummary(
     string ValueText,
     string StateText,
     string BaselineText,
-    double GaugeValue);
+    double GaugeValue)
+{
+    /// <summary>True until enough comparable history exists for a measured momentum result.</summary>
+    public bool IsLearning { get; init; }
+
+    /// <summary>Baseline evidence collected so far, normalized to the selected window's target.</summary>
+    public double BaselineProgress { get; init; } = 1;
+
+    /// <summary>Plain-language description exposed to assistive technology.</summary>
+    public string AccessibleSummary { get; init; } = string.Empty;
+}
 
 /// <summary>Decision-oriented copy and metrics shown above the usage chart.</summary>
 public sealed record UsageTrendRunwaySummary(
@@ -47,6 +57,38 @@ public sealed record UsageTrendRunwaySummary(
     string PaceComparisonLabel,
     string RecommendationText,
     bool CanOpenPacingPlan);
+
+/// <summary>A forecast-only assessment of whether a selected coding block is likely to fit at the current pace.</summary>
+public enum UsageTrendBlockAdvisorStatus
+{
+    StillLearning,
+    LikelyFits,
+    MayBeInterrupted,
+    UnlikelyToFit,
+    WaitForReset
+}
+
+/// <summary>A forecast-only assessment of whether a selected coding block is likely to fit at the current pace.</summary>
+public sealed record UsageTrendBlockAdvisor(
+    string State,
+    string Detail,
+    string AccessibleSummary,
+    IReadOnlyList<UsageTrendBlockOption> Options,
+    UsageTrendBlockAdvisorStatus Status);
+
+/// <summary>One compact duration choice in the next-block advisor.</summary>
+public sealed record UsageTrendBlockOption(
+    int DurationMinutes,
+    string Label,
+    bool IsSelected,
+    string AutomationName,
+    string AutomationHelpText);
+
+/// <summary>The earliest reliable constraint across the active five-hour and seven-day limits.</summary>
+public sealed record UsageTrendNextConstraint(
+    string Headline,
+    string Detail,
+    string AccessibleSummary);
 
 /// <summary>Immutable data used to render a <see cref="UsageTrendChart"/>.</summary>
 public sealed record UsageTrendChartModel(
@@ -74,4 +116,8 @@ public sealed record UsageTrendChartModel(
     public IReadOnlyList<UsageTrendGap> MeasurementGaps { get; init; } = [];
 
     public DateTimeOffset? ReferenceForecastCapturedAt { get; init; }
+
+    public UsageTrendBlockAdvisor? BlockAdvisor { get; init; }
+
+    public UsageTrendNextConstraint? NextConstraint { get; init; }
 }

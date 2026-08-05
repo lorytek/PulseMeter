@@ -21,7 +21,12 @@ public sealed class UserIdleTimeProvider : IUserIdleTimeProvider
             return TimeSpan.Zero;
         }
 
-        var elapsedMs = GetTickCount64() - info.Time;
+        return CalculateIdleTime(GetTickCount64(), info.Time);
+    }
+
+    internal static TimeSpan CalculateIdleTime(ulong currentTickCount, uint lastInputTickCount)
+    {
+        var elapsedMs = unchecked((uint)currentTickCount - lastInputTickCount);
         return TimeSpan.FromMilliseconds(elapsedMs);
     }
 

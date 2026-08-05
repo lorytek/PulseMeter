@@ -32,4 +32,8 @@ public sealed record NeedsAttentionItem(
     };
 
     public bool HasActions => CanCopyDiagnostic || CanDismiss || CanReview;
+
+    public string AccessibleSummary => string.IsNullOrWhiteSpace(Detail)
+        ? $"{BadgeText}. {Title}."
+        : $"{BadgeText}. {Title}. {Detail}";
 }

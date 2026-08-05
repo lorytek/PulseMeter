@@ -91,7 +91,7 @@
                                         </Grid.ColumnDefinitions>
 
                                         <StackPanel x:Name="TodayMetricCard">
-                                            <TextBlock Text="Today used tokens"
+                                            <TextBlock Text="Tokens used today"
                                                        Foreground="#111827"
                                                        FontSize="14" />
                                             <TextBlock Margin="0,16,0,0"

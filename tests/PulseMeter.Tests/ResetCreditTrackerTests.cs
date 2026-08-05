@@ -42,6 +42,20 @@ public sealed class ResetCreditTrackerTests
     }
 
     [Fact]
+    public void Update_KeepsLastKnownCreditsWhenAvailabilityIsTemporarilyUnavailable()
+    {
+        var tracker = new ResetCreditTracker();
+        var now = new DateTimeOffset(2026, 7, 2, 12, 0, 0, TimeSpan.Zero);
+        tracker.Update(2, null, now);
+
+        var unavailable = tracker.Update(null, null, now.AddMinutes(5));
+
+        Assert.Equal(2, tracker.KnownAvailableCount);
+        Assert.Equal([1, 2], unavailable.Select(credit => credit.Number));
+        Assert.True(tracker.CaptureState().HasObservedAvailableCount);
+    }
+
+    [Fact]
     public void Refresh_UpdatesExpiryTextWhenClockMovesAcrossDisplayBoundary()
     {
         var tracker = new ResetCreditTracker();
@@ -52,6 +66,55 @@ public sealed class ResetCreditTrackerTests
 
         Assert.Equal("Credit 1 - expires in 2 hours", Assert.Single(initial).DisplayText);
         Assert.Equal("Credit 1 - expires in 59 minutes", Assert.Single(refreshed).DisplayText);
+    }
+
+    [Fact]
+    public void Refresh_RemovesExpiredCreditsFromTheAvailableCount()
+    {
+        var tracker = new ResetCreditTracker();
+        var now = new DateTimeOffset(2026, 7, 2, 12, 0, 0, TimeSpan.Zero);
+
+        tracker.Update(
+            2,
+            null,
+            [
+                new ResetCreditSnapshot(now.AddDays(-1), now.AddHours(1), "available"),
+                new ResetCreditSnapshot(now.AddDays(-1), now.AddDays(2), "available")
+            ],
+            now);
+
+        var refreshed = tracker.Refresh(now.AddHours(2));
+
+        Assert.Equal(1, tracker.KnownAvailableCount);
+        Assert.Equal("Credit 2 - expires " + now.AddDays(2).ToLocalTime().ToString("MMM d, h:mm tt", CultureInfo.InvariantCulture) + " (in 2 days)", Assert.Single(refreshed).DisplayText);
+    }
+
+    [Fact]
+    public void SectionRefresh_PersistsExpiredCreditRemovalAndUpdatesVisibleCount()
+    {
+        var now = new DateTimeOffset(2026, 7, 2, 12, 0, 0, TimeSpan.Zero);
+        var store = new StubResetCreditStateStore();
+        var section = new ResetCreditsSectionViewModel(new ResetCreditsPresenter(store));
+        section.ApplySnapshot(
+            new UsageSnapshot
+            {
+                ResetCreditsAvailable = 2,
+                ResetCredits =
+                [
+                    new ResetCreditSnapshot(now.AddDays(-1), now.AddHours(1), "available"),
+                    new ResetCreditSnapshot(now.AddDays(-1), now.AddDays(2), "available")
+                ]
+            },
+            now,
+            shouldPersist: true);
+
+        section.Refresh(now.AddHours(2));
+
+        Assert.Equal("1 reset credit available", section.ResetCreditsHeaderText);
+        Assert.Equal("1 available", section.ResetCreditsAvailableText);
+        Assert.Single(section.ResetCredits);
+        Assert.NotNull(store.SavedState);
+        Assert.Single(store.SavedState.Credits);
     }
 
     [Fact]
@@ -96,6 +159,34 @@ public sealed class ResetCreditTrackerTests
     }
 
     [Fact]
+    public void Restore_IgnoresNullAndOutOfRangePersistedCredits()
+    {
+        var tracker = new ResetCreditTracker(new ResetCreditTrackerState(
+            HasObservedAvailableCount: true,
+            NextCreditNumber: int.MaxValue,
+            Credits:
+            [
+                null!,
+                new ResetCreditState(0, null),
+                new ResetCreditState(ResetCreditTracker.MaximumPersistedCreditNumber + 1, null),
+                new ResetCreditState(1, null)
+            ]));
+
+        var state = tracker.CaptureState();
+
+        Assert.Equal(ResetCreditTracker.MaximumPersistedCreditNumber, state.NextCreditNumber);
+        Assert.Equal([1], state.Credits.Select(credit => credit.Number));
+    }
+
+    [Fact]
+    public void Restore_TreatsNullCreditListAsAnEmptyState()
+    {
+        var tracker = new ResetCreditTracker(new ResetCreditTrackerState(true, 3, null!));
+
+        Assert.Empty(tracker.Refresh(DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
     public void PulseMeterWindowViewModel_LoadsPersistedResetCreditStateOnStartup()
     {
         var store = new StubResetCreditStateStore(new ResetCreditTrackerState(
@@ -109,6 +200,31 @@ public sealed class ResetCreditTrackerTests
         var viewModel = new PulseMeterWindowViewModel(new StubUsageService(), resetCreditStateStore: store);
 
         Assert.Equal("Credit 3 - expires in 30 days", Assert.Single(viewModel.ResetCredits).DisplayText);
+    }
+
+    [Fact]
+    public void PulseMeterWindowViewModel_KeepsPersistedCreditsWhenFirstLiveReadingIsUnavailable()
+    {
+        var store = new StubResetCreditStateStore(new ResetCreditTrackerState(
+            HasObservedAvailableCount: true,
+            NextCreditNumber: 3,
+            Credits:
+            [
+                new ResetCreditState(1, null),
+                new ResetCreditState(2, null)
+            ]));
+        var viewModel = new PulseMeterWindowViewModel(new StubUsageService(), resetCreditStateStore: store);
+
+        viewModel.ApplySnapshot(new UsageSnapshot
+        {
+            ResetCreditsAvailable = null,
+            SyncStatus = SyncStatus.Live
+        });
+
+        Assert.Equal("Last known: 2 reset credits available", viewModel.ResetCreditsHeaderText);
+        Assert.Equal("2 last known", viewModel.ResetCreditsAvailableText);
+        Assert.Equal([1, 2], viewModel.ResetCredits.Select(credit => credit.Number));
+        Assert.Null(store.SavedState);
     }
 
     [Fact]
@@ -220,8 +336,8 @@ public sealed class ResetCreditTrackerTests
 
         Assert.Equal(
             [
-                $"Credit 1 - expires {earlierExpiry.ToLocalTime().ToString("MMM d HH:mm", CultureInfo.InvariantCulture)} (in 4 days)",
-                $"Credit 2 - expires {laterExpiry.ToLocalTime().ToString("MMM d HH:mm", CultureInfo.InvariantCulture)} (in 10 days)"
+                $"Credit 1 - expires {earlierExpiry.ToLocalTime().ToString("MMM d, h:mm tt", CultureInfo.InvariantCulture)} (in 4 days)",
+                $"Credit 2 - expires {laterExpiry.ToLocalTime().ToString("MMM d, h:mm tt", CultureInfo.InvariantCulture)} (in 10 days)"
             ],
             updated.Select(credit => credit.DisplayText));
     }
@@ -249,8 +365,58 @@ public sealed class ResetCreditTrackerTests
             now.AddHours(1));
 
         Assert.Equal(
-            $"Credit 1 - expires {remainingExpiry.ToLocalTime().ToString("MMM d HH:mm", CultureInfo.InvariantCulture)} (in 6 days)",
+            $"Credit 1 - expires {remainingExpiry.ToLocalTime().ToString("MMM d, h:mm tt", CultureInfo.InvariantCulture)} (in 6 days)",
             Assert.Single(afterUse).DisplayText);
+    }
+
+    [Fact]
+    public void Update_UsesAuthoritativeAvailableCountWhenCreditDetailsAreIncomplete()
+    {
+        var tracker = new ResetCreditTracker();
+        var now = new DateTimeOffset(2026, 7, 2, 12, 0, 0, TimeSpan.Zero);
+        var exactExpiry = now.AddDays(5);
+
+        var updated = tracker.Update(
+            2,
+            null,
+            [new ResetCreditSnapshot(now.AddDays(-1), exactExpiry, "available")],
+            now);
+
+        Assert.Equal(2, updated.Count);
+        Assert.Contains(exactExpiry.ToLocalTime().ToString("MMM d, h:mm tt", CultureInfo.InvariantCulture), updated[0].DisplayText);
+        Assert.Equal("Credit 2 - expiry unavailable", updated[1].DisplayText);
+    }
+
+    [Fact]
+    public void Update_DoesNotShowMoreExactCreditsThanTheAuthoritativeAvailableCount()
+    {
+        var tracker = new ResetCreditTracker();
+        var now = new DateTimeOffset(2026, 7, 2, 12, 0, 0, TimeSpan.Zero);
+
+        var updated = tracker.Update(
+            1,
+            null,
+            [
+                new ResetCreditSnapshot(now.AddDays(-2), now.AddDays(2), "available"),
+                new ResetCreditSnapshot(now.AddDays(-1), now.AddDays(3), "available")
+            ],
+            now);
+
+        Assert.Single(updated);
+    }
+
+    [Fact]
+    public void Update_CapsUntrustedAvailableCountToThePersistenceLimit()
+    {
+        var tracker = new ResetCreditTracker();
+        var now = new DateTimeOffset(2026, 7, 2, 12, 0, 0, TimeSpan.Zero);
+
+        var updated = tracker.Update(int.MaxValue, null, now);
+
+        Assert.Equal(ResetCreditTracker.MaximumPersistedCredits, updated.Count);
+        Assert.Equal(
+            ResetCreditTracker.MaximumPersistedCredits,
+            tracker.CaptureState().Credits?.Count);
     }
 
     private sealed class StubUsageService : IUsageService
@@ -288,9 +454,10 @@ public sealed class ResetCreditTrackerTests
             return _loadedState;
         }
 
-        public void Save(ResetCreditTrackerState state)
+        public bool Save(ResetCreditTrackerState state)
         {
             SavedState = state;
+            return true;
         }
     }
 }

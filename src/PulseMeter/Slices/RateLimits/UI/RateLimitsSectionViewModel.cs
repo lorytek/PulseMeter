@@ -12,6 +12,7 @@ public sealed class RateLimitsSectionViewModel : INotifyPropertyChanged
     private UsageSignalsSnapshot _signals = UsageSignalsSnapshot.Empty;
     private DateTimeOffset _lastUpdatedAt = DateTimeOffset.UtcNow;
     private bool _isAheadOfWeeklyPace;
+    private bool _isRebuildingLimitOptions;
     private string _weeklyPaceDetailText = string.Empty;
 
     public RateLimitsSectionViewModel(IRateLimitsPresenter presenter)
@@ -38,6 +39,11 @@ public sealed class RateLimitsSectionViewModel : INotifyPropertyChanged
         get => _selectedLimitOption;
         set
         {
+            if (_isRebuildingLimitOptions)
+            {
+                return;
+            }
+
             if (EqualityComparer<RateLimitOption?>.Default.Equals(_selectedLimitOption, value))
             {
                 return;
@@ -72,15 +78,26 @@ public sealed class RateLimitsSectionViewModel : INotifyPropertyChanged
         _lastUpdatedAt = now;
         var selectedKey = SelectedLimitOption?.Key ?? preferredLimitKey;
         _buckets = buckets.ToList();
-        var options = _presenter.BuildOptions(_buckets);
+        var options = _presenter.BuildOptions(_buckets).ToArray();
 
-        LimitOptions.Clear();
-        foreach (var option in options)
+        if (!LimitOptions.SequenceEqual(options))
         {
-            LimitOptions.Add(option);
+            _isRebuildingLimitOptions = true;
+            try
+            {
+                LimitOptions.Clear();
+                foreach (var option in options)
+                {
+                    LimitOptions.Add(option);
+                }
+            }
+            finally
+            {
+                _isRebuildingLimitOptions = false;
+            }
         }
 
-        _selectedLimitOption = _presenter.SelectOption(options, selectedKey);
+        _selectedLimitOption = _presenter.SelectOption(LimitOptions, selectedKey);
         OnPropertyChanged(nameof(SelectedLimitOption));
         RefreshSelectedBuckets(now);
         RefreshRunwayHintProperties();

@@ -3,6 +3,13 @@
 public interface IUiDispatcher
 {
     void Invoke(Action action);
+
+    Task InvokeAsync(Func<Task> action)
+    {
+        Task? invokedTask = null;
+        Invoke(() => invokedTask = action());
+        return invokedTask ?? Task.CompletedTask;
+    }
 }
 
 public sealed class WpfUiDispatcher : IUiDispatcher

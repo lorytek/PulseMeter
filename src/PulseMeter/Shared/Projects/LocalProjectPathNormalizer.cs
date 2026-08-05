@@ -25,9 +25,15 @@ public static class LocalProjectPathNormalizer
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
         {
+            return "(unknown project)";
         }
 
         normalized = normalized.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (TryResolveCodexWorktreeOwner(normalized, out var worktreeOwner))
+        {
+            normalized = worktreeOwner;
+        }
+
         var generatedRunIndex = GeneratedRunDirectoryNames
             .Select(directoryName => FindDirectorySegment(normalized, directoryName))
             .Where(index => index > 0)
@@ -78,6 +84,34 @@ public static class LocalProjectPathNormalizer
             : normalized;
     }
 
+    internal static bool TryGetCodexWorktreeProjectName(string path, out string projectName)
+    {
+        projectName = string.Empty;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        var segments = path.Split(
+            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        for (var index = 0; index <= segments.Length - 4; index++)
+        {
+            if (!segments[index].Equals(".codex", StringComparison.OrdinalIgnoreCase)
+                || !segments[index + 1].Equals("worktrees", StringComparison.OrdinalIgnoreCase)
+                || string.IsNullOrWhiteSpace(segments[index + 2])
+                || string.IsNullOrWhiteSpace(segments[index + 3]))
+            {
+                continue;
+            }
+
+            projectName = segments[index + 3];
+            return true;
+        }
+
+        return false;
+    }
+
     private static int FindDirectorySegment(string path, string directoryName)
     {
         var marker = $"{Path.DirectorySeparatorChar}{directoryName}{Path.DirectorySeparatorChar}";
@@ -89,6 +123,90 @@ public static class LocalProjectPathNormalizer
 
         marker = $"{Path.AltDirectorySeparatorChar}{directoryName}{Path.AltDirectorySeparatorChar}";
         return path.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryResolveCodexWorktreeOwner(string path, out string ownerPath)
+    {
+        ownerPath = string.Empty;
+        if (FindDirectorySegment(path, ".codex") < 0
+            || FindDirectorySegment(path, "worktrees") < 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            var directory = new DirectoryInfo(path);
+            for (var depth = 0; directory is not null && depth < 16; depth++, directory = directory.Parent)
+            {
+                var gitFile = Path.Combine(directory.FullName, ".git");
+                if (!File.Exists(gitFile))
+                {
+                    continue;
+                }
+
+                var gitDirectory = ResolveGitPath(directory.FullName, File.ReadLines(gitFile).FirstOrDefault(), "gitdir:");
+                if (gitDirectory is null)
+                {
+                    return false;
+                }
+
+                var commonDirectoryFile = Path.Combine(gitDirectory, "commondir");
+                if (!File.Exists(commonDirectoryFile))
+                {
+                    return false;
+                }
+
+                var commonGitDirectory = ResolveGitPath(gitDirectory, File.ReadLines(commonDirectoryFile).FirstOrDefault());
+                if (commonGitDirectory is null
+                    || !string.Equals(Path.GetFileName(commonGitDirectory), ".git", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                var owner = Directory.GetParent(commonGitDirectory)?.FullName;
+                if (string.IsNullOrWhiteSpace(owner) || !Directory.Exists(owner))
+                {
+                    return false;
+                }
+
+                ownerPath = Path.GetFullPath(owner)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                return true;
+            }
+        }
+        catch (Exception ex) when (ex is IOException
+            or UnauthorizedAccessException
+            or ArgumentException
+            or NotSupportedException
+            or PathTooLongException)
+        {
+            return false;
+        }
+
+        return false;
+    }
+
+    private static string? ResolveGitPath(string baseDirectory, string? value, string? prefix = null)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var path = value.Trim();
+        if (prefix is not null)
+        {
+            if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            path = path[prefix.Length..].Trim();
+        }
+
+        return Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(baseDirectory, path))
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
     }
 
     private static bool IsPathWithin(string path, string parent)

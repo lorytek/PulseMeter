@@ -2,6 +2,7 @@ using System.IO;
 using System.Diagnostics;
 using System.Text.Json;
 using PulseMeter.Platform.Codex;
+using PulseMeter.Platform.Diagnostics;
 
 namespace PulseMeter.Slices.UsageCollection.Business;
 
@@ -82,7 +83,7 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
             if (UseMockMode)
             {
                 var mock = await _mockUsageService.GetSnapshotAsync(refreshCancellation.Token).ConfigureAwait(false);
-                SnapshotUpdated?.Invoke(this, mock);
+                PublishSnapshotUpdated(mock);
                 return mock;
             }
 
@@ -96,7 +97,7 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
         {
             await ResetConnectionAsync().ConfigureAwait(false);
             var fallback = await BuildFallbackSnapshotAsync(ex, refreshCancellation.Token).ConfigureAwait(false);
-            SnapshotUpdated?.Invoke(this, fallback);
+            PublishSnapshotUpdated(fallback);
             return fallback;
         }
         finally
@@ -242,7 +243,7 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
                     SyncStatus.Stale,
                     "AppServer",
                     "Rate-limit readings disagreed; showing the last confirmed values.");
-                SnapshotUpdated?.Invoke(this, stale);
+                PublishSnapshotUpdated(stale);
                 return stale;
             }
 
@@ -283,7 +284,7 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
 
         var stored = StoreLiveSnapshot(snapshot);
         snapshot = stored.Snapshot;
-        SnapshotUpdated?.Invoke(this, snapshot);
+        PublishSnapshotUpdated(snapshot);
 
         if (snapshot.DailyBuckets.Count > 0)
         {
@@ -302,7 +303,7 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
 
         var now = DateTimeOffset.UtcNow;
         var rateLimits = await client.SendRequestAsync("account/rateLimits/read", null, timeout.Token).ConfigureAwait(false);
-        Debug.WriteLine("[pulsemeter] account/rateLimits/read raw result: " + rateLimits.GetRawText());
+        PrivacySafeDiagnostics.WriteInfo("account rate-limit response received");
         return CodexUsageParser.ParseRateLimits(rateLimits, now, "AppServer");
     }
 
@@ -373,7 +374,7 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[pulsemeter] project analytics refresh failed: " + ex.GetType().Name);
+            PrivacySafeDiagnostics.WriteFailure("project analytics refresh failed", ex);
             return null;
         }
     }
@@ -422,7 +423,7 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[pulsemeter] rate-limit history refresh failed: " + ex.GetType().Name);
+            PrivacySafeDiagnostics.WriteFailure("rate-limit history refresh failed", ex);
             return snapshot;
         }
     }
@@ -448,7 +449,7 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[pulsemeter] attribution analytics refresh failed: " + ex.GetType().Name);
+            PrivacySafeDiagnostics.WriteFailure("attribution analytics refresh failed", ex);
             return null;
         }
     }
@@ -461,6 +462,16 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
                 && _lastGoodLiveSnapshot is { RateLimitHistory.Count: > 0 } previous)
             {
                 snapshot = CodexUsageParser.WithRateLimitHistory(snapshot, previous.RateLimitHistory);
+            }
+
+            if (snapshot.ResetCreditsAvailable is null
+                && _lastGoodLiveSnapshot is { ResetCreditsAvailable: not null } previousCredits)
+            {
+                snapshot = CodexUsageParser.WithResetCreditMetadata(
+                    snapshot,
+                    previousCredits.ResetCreditsAvailable,
+                    snapshot.ResetCreditsExpiresAtUtc ?? previousCredits.ResetCreditsExpiresAtUtc,
+                    snapshot.ResetCredits.Count > 0 ? snapshot.ResetCredits : previousCredits.ResetCredits);
             }
 
             if (snapshot.DailyBuckets.Count > 0 && _lastGoodLiveSnapshot is not null)
@@ -524,7 +535,7 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine("[pulsemeter] analytics refresh failed: " + ex.GetType().Name);
+                    PrivacySafeDiagnostics.WriteFailure("analytics refresh failed", ex);
                 }
             }
         }
@@ -581,7 +592,7 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("[pulsemeter] rollout analytics refresh failed: " + ex.GetType().Name);
+            PrivacySafeDiagnostics.WriteFailure("rollout analytics refresh failed", ex);
             return;
         }
 
@@ -625,7 +636,7 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
             _lastGoodLiveSnapshot = updatedSnapshot;
         }
 
-        SnapshotUpdated?.Invoke(this, updatedSnapshot);
+        PublishSnapshotUpdated(updatedSnapshot);
     }
 
     private async Task<IJsonRpcClient> EnsureClientAsync(
@@ -803,7 +814,7 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
 
                 if (updated is not null)
                 {
-                    SnapshotUpdated?.Invoke(this, updated);
+                    PublishSnapshotUpdated(updated);
                 }
             }
         }
@@ -828,6 +839,29 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
         }
     }
 
+    private void PublishSnapshotUpdated(UsageSnapshot snapshot)
+    {
+        var handlers = SnapshotUpdated;
+        if (handlers is null)
+        {
+            return;
+        }
+
+        foreach (EventHandler<UsageSnapshot> handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                handler(this, snapshot);
+            }
+            catch (Exception ex)
+            {
+                // A presentation subscriber must not break the live data connection,
+                // prevent other subscribers from updating, or kill a refresh pump.
+                PrivacySafeDiagnostics.WriteFailure("snapshot subscriber failed", ex);
+            }
+        }
+    }
+
     private async Task RefreshNotificationPumpAsync()
     {
         try
@@ -844,7 +878,7 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
                 }
                 catch (Exception ex) when (ex is JsonRpcException or JsonException or IOException or UnauthorizedAccessException or InvalidOperationException)
                 {
-                    Debug.WriteLine("[pulsemeter] notification refresh failed: " + ex.GetType().Name);
+                    PrivacySafeDiagnostics.WriteFailure("notification refresh failed", ex);
                 }
             }
         }

@@ -101,12 +101,23 @@ public static class CodexExecutableResolver
     private static IEnumerable<string> GetPathCandidates()
     {
         var pathValue = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
-        var extensions = OperatingSystem.IsWindows()
+        return GetPathCandidates(pathValue, OperatingSystem.IsWindows());
+    }
+
+    internal static IEnumerable<string> GetPathCandidates(string pathValue, bool isWindows)
+    {
+        var extensions = isWindows
             ? [".exe", ".cmd", ".bat"]
             : new[] { string.Empty };
 
-        foreach (var directory in pathValue.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        foreach (var pathEntry in pathValue.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
+            var directory = pathEntry.Trim('"');
+            if (string.IsNullOrWhiteSpace(directory))
+            {
+                continue;
+            }
+
             foreach (var extension in extensions)
             {
                 yield return Path.Combine(directory, "codex" + extension);

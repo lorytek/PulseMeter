@@ -6,4 +6,8 @@ public sealed record UsageAttributionProjectDisplayRow(
     string EstimatedTokensText,
     string ShareText,
     string ActivityText,
-    string TooltipText);
+    string TooltipText)
+{
+    public string AccessibleSummary =>
+        $"{DisplayName}. {ShareText} share. Estimated {EstimatedTokensText} tokens. {ActivityText}";
+}

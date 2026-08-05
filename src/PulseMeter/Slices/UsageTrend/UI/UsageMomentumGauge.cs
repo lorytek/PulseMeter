@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Automation.Peers;
 using System.Windows.Media;
 using Brush = System.Windows.Media.Brush;
 using Color = System.Windows.Media.Color;
@@ -31,10 +32,36 @@ public sealed class UsageMomentumGauge : FrameworkElement
         set => SetValue(ValueProperty, value);
     }
 
+    public static readonly DependencyProperty IsLearningProperty = DependencyProperty.Register(
+        nameof(IsLearning),
+        typeof(bool),
+        typeof(UsageMomentumGauge),
+        new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public bool IsLearning
+    {
+        get => (bool)GetValue(IsLearningProperty);
+        set => SetValue(IsLearningProperty, value);
+    }
+
+    public static readonly DependencyProperty BaselineProgressProperty = DependencyProperty.Register(
+        nameof(BaselineProgress),
+        typeof(double),
+        typeof(UsageMomentumGauge),
+        new FrameworkPropertyMetadata(0d, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public double BaselineProgress
+    {
+        get => (double)GetValue(BaselineProgressProperty);
+        set => SetValue(BaselineProgressProperty, value);
+    }
+
     protected override Size MeasureOverride(Size availableSize) =>
         new(
             double.IsFinite(availableSize.Width) ? Math.Min(availableSize.Width, 168) : 168,
             60);
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new UsageMomentumGaugeAutomationPeer(this);
 
     protected override void OnRender(DrawingContext context)
     {
@@ -47,6 +74,16 @@ public sealed class UsageMomentumGauge : FrameworkElement
 
         var center = new Point(ActualWidth / 2, ActualHeight * 0.88);
         var radius = Math.Min(ActualWidth * 0.43, ActualHeight * 0.78);
+
+        if (IsLearning)
+        {
+            DrawArc(context, center, radius, 200, 340, Neutral);
+            DrawTick(context, center, radius, 200);
+            DrawTick(context, center, radius, 270);
+            DrawTick(context, center, radius, 340);
+            return;
+        }
+
         DrawArc(context, center, radius, 200, 242, Green);
         DrawArc(context, center, radius, 242, 300, Neutral);
         DrawArc(context, center, radius, 300, 328, Amber);
@@ -125,5 +162,24 @@ public sealed class UsageMomentumGauge : FrameworkElement
         var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
         brush.Freeze();
         return brush;
+    }
+
+    private sealed class UsageMomentumGaugeAutomationPeer(UsageMomentumGauge owner)
+        : FrameworkElementAutomationPeer(owner)
+    {
+        protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Custom;
+
+        protected override string GetClassNameCore() => nameof(UsageMomentumGauge);
+
+        protected override bool IsControlElementCore() => IsAvailableToAutomation();
+
+        protected override bool IsContentElementCore() => IsAvailableToAutomation();
+
+        private bool IsAvailableToAutomation()
+        {
+            var owner = (UsageMomentumGauge)Owner;
+            return owner.Visibility == Visibility.Visible
+                && (owner.IsVisible || PresentationSource.FromVisual(owner) is null);
+        }
     }
 }

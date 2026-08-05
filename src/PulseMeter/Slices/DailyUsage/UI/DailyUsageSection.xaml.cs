@@ -4,6 +4,8 @@ namespace PulseMeter.Slices.DailyUsage.UI;
 
 public partial class DailyUsageSection : System.Windows.Controls.UserControl
 {
+    public event EventHandler? ExpansionToggling;
+
     public DailyUsageSection()
     {
         InitializeComponent();
@@ -13,6 +15,7 @@ public partial class DailyUsageSection : System.Windows.Controls.UserControl
     {
         if (DataContext is DailyUsageSectionViewModel viewModel)
         {
+            ExpansionToggling?.Invoke(this, EventArgs.Empty);
             viewModel.ToggleDailyUsageExpanded();
         }
     }

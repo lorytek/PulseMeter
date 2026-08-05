@@ -146,6 +146,24 @@ public static class CodexUsageParser
 
     public static UsageSnapshot WithResetCredits(UsageSnapshot snapshot, ResetCreditFetchResult resetCredits)
     {
+        var expiresAtUtc = resetCredits.Credits
+            .Select(credit => credit.ExpiresAtUtc)
+            .Where(expiresAt => expiresAt is not null)
+            .Min();
+
+        return WithResetCreditMetadata(
+            snapshot,
+            resetCredits.AvailableCount,
+            expiresAtUtc,
+            resetCredits.Credits);
+    }
+
+    public static UsageSnapshot WithResetCreditMetadata(
+        UsageSnapshot snapshot,
+        int? availableCount,
+        DateTimeOffset? expiresAtUtc,
+        IReadOnlyList<ResetCreditSnapshot> credits)
+    {
         return new UsageSnapshot
         {
             Buckets = snapshot.Buckets,
@@ -158,12 +176,9 @@ public static class CodexUsageParser
             DailyBuckets = snapshot.DailyBuckets,
             ProjectUsageRows = snapshot.ProjectUsageRows,
             UsageAttribution = snapshot.UsageAttribution,
-            ResetCreditsAvailable = resetCredits.AvailableCount,
-            ResetCreditsExpiresAtUtc = resetCredits.Credits
-                .Select(credit => credit.ExpiresAtUtc)
-                .Where(expiresAt => expiresAt is not null)
-                .Min(),
-            ResetCredits = resetCredits.Credits,
+            ResetCreditsAvailable = availableCount,
+            ResetCreditsExpiresAtUtc = expiresAtUtc,
+            ResetCredits = credits,
             RecentActiveThread = snapshot.RecentActiveThread,
             SyncStatus = snapshot.SyncStatus,
             LastUpdatedUtc = snapshot.LastUpdatedUtc,

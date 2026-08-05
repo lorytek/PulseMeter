@@ -1,3 +1,4 @@
+using System.Globalization;
 using PulseMeter.Platform.Persistence;
 
 namespace PulseMeter.Tests;
@@ -26,6 +27,29 @@ public sealed class BudgetAlertTrackerTests
         Assert.Contains("950 tokens of 1.0K", signal.Detail);
         Assert.Equal("Daily token budget", rows.Label);
         Assert.Equal("Critical", rows.LevelText);
+    }
+
+    [Fact]
+    public void Observe_ParsesStoredIsoDayIndependentlyOfTheWindowsCulture()
+    {
+        var previousCulture = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("th-TH");
+            var now = new DateTimeOffset(2026, 7, 7, 15, 0, 0, TimeSpan.Zero);
+            var tracker = new BudgetAlertTracker();
+
+            var result = tracker.Observe(
+                Snapshot(now, todayTokens: 950),
+                BudgetAlertSettings.Default with { DailyTokenBudget = 1_000 },
+                now);
+
+            Assert.Single(result.AttentionSignals);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
     }
 
     [Fact]

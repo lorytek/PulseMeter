@@ -15,6 +15,7 @@ public enum RunwayObservationLoadStatus
 {
     Loaded,
     Missing,
+    Corrupt,
     Unavailable
 }
 
@@ -50,15 +51,18 @@ public sealed class RunwayObservationStateStore : IRunwayObservationStateStore
 
     public RunwayObservationLoadResult Load()
     {
-        var state = AtomicJsonFileStore.Load<RunwayObservationState>(_filePath, JsonOptions);
-        if (state is not null)
+        var result = AtomicJsonFileStore.LoadWithStatus<RunwayObservationState>(_filePath, JsonOptions);
+        if (result.Status == AtomicJsonLoadStatus.Loaded && result.Value is { } state)
         {
             return new RunwayObservationLoadResult(RunwayObservationLoadStatus.Loaded, state);
         }
 
-        return ProbeFile(_filePath) || ProbeFile(_filePath + ".bak")
-            ? new RunwayObservationLoadResult(RunwayObservationLoadStatus.Unavailable)
-            : new RunwayObservationLoadResult(RunwayObservationLoadStatus.Missing);
+        return result.Status switch
+        {
+            AtomicJsonLoadStatus.Invalid => new RunwayObservationLoadResult(RunwayObservationLoadStatus.Corrupt),
+            AtomicJsonLoadStatus.Unavailable => new RunwayObservationLoadResult(RunwayObservationLoadStatus.Unavailable),
+            _ => new RunwayObservationLoadResult(RunwayObservationLoadStatus.Missing)
+        };
     }
 
     public bool Save(RunwayObservationState state)
@@ -66,28 +70,4 @@ public sealed class RunwayObservationStateStore : IRunwayObservationStateStore
         return AtomicJsonFileStore.Save(_filePath, state, JsonOptions);
     }
 
-    private static bool ProbeFile(string path)
-    {
-        try
-        {
-            _ = File.GetAttributes(path);
-            return true;
-        }
-        catch (FileNotFoundException)
-        {
-            return false;
-        }
-        catch (DirectoryNotFoundException)
-        {
-            return false;
-        }
-        catch (IOException)
-        {
-            return true;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return true;
-        }
-    }
 }

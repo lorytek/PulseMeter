@@ -24,6 +24,11 @@
 
                                     <ItemsControl Margin="0,16,0,0"
                                                   ItemsSource="{Binding ResetCredits}">
+                                        <ItemsControl.ItemContainerStyle>
+                                            <Style TargetType="ContentPresenter">
+                                                <Setter Property="AutomationProperties.Name" Value="{Binding DisplayText}" />
+                                            </Style>
+                                        </ItemsControl.ItemContainerStyle>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <Grid Margin="0,0,0,12">

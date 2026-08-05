@@ -13,16 +13,32 @@ public partial class App : System.Windows.Application
     {
         base.OnStartup(e);
 
-        var paths = VisualHarnessWorkspace.LocateFrom(AppContext.BaseDirectory);
-        var scenario = VisualHarnessScenarioParser.Parse(e.Args);
-        _application = new PulseMeterApplication(
-            RequestShutdown,
-            shutdown => VisualHarnessComposition.BuildServiceProvider(paths, shutdown, scenario));
-        await _application.StartAsync();
-
-        if (Windows.OfType<Window>().SingleOrDefault() is { } window)
+        try
         {
-            window.IsVisibleChanged += Window_IsVisibleChanged;
+            var paths = VisualHarnessWorkspace.LocateFromAny(
+                Environment.GetEnvironmentVariable("PULSEMETER_REPO_ROOT"),
+                Environment.CurrentDirectory,
+                AppContext.BaseDirectory);
+            var scenario = VisualHarnessScenarioParser.Parse(e.Args);
+            _application = new PulseMeterApplication(
+                RequestShutdown,
+                shutdown => VisualHarnessComposition.BuildServiceProvider(paths, shutdown, scenario));
+            await _application.StartAsync();
+
+            if (Windows.OfType<Window>().SingleOrDefault() is { } window)
+            {
+                window.IsVisibleChanged += Window_IsVisibleChanged;
+            }
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine($"PulseMeter visual harness startup failed: {exception}");
+            MessageBox.Show(
+                "The visual harness could not start. Launch it from the PulseMeter worktree or set PULSEMETER_REPO_ROOT to that folder.",
+                "PulseMeter Visual Harness",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            Shutdown(-1);
         }
     }
 
@@ -65,6 +81,10 @@ public partial class App : System.Windows.Application
             {
                 await _application.StopAsync();
             }
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine($"PulseMeter visual harness shutdown failed: {exception}");
         }
         finally
         {

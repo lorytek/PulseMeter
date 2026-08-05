@@ -8,6 +8,7 @@ namespace PulseMeter.Slices.ProjectUsage.UI;
 public sealed class ProjectUsageSectionViewModel : INotifyPropertyChanged
 {
     private readonly IProjectUsagePresenter _presenter;
+    private bool _isRebuildingRows;
     private ProjectUsageDisplayRow? _selectedProjectRow;
 
     public ProjectUsageSectionViewModel(IProjectUsagePresenter presenter)
@@ -28,6 +29,11 @@ public sealed class ProjectUsageSectionViewModel : INotifyPropertyChanged
         get => _selectedProjectRow;
         set
         {
+            if (_isRebuildingRows)
+            {
+                return;
+            }
+
             if (ReferenceEquals(_selectedProjectRow, value))
             {
                 return;
@@ -73,10 +79,20 @@ public sealed class ProjectUsageSectionViewModel : INotifyPropertyChanged
     public void ApplyRows(IEnumerable<ProjectUsageRow> rows)
     {
         var selectedPath = SelectedProjectRow?.FullPath;
-        ProjectUsageRows.Clear();
-        foreach (var row in _presenter.BuildRows(rows))
+        var rebuiltRows = _presenter.BuildRows(rows).ToArray();
+
+        _isRebuildingRows = true;
+        try
         {
-            ProjectUsageRows.Add(row);
+            ProjectUsageRows.Clear();
+            foreach (var row in rebuiltRows)
+            {
+                ProjectUsageRows.Add(row);
+            }
+        }
+        finally
+        {
+            _isRebuildingRows = false;
         }
 
         SelectedProjectRow = ProjectUsageRows.FirstOrDefault(row => string.Equals(row.FullPath, selectedPath, StringComparison.Ordinal))

@@ -59,4 +59,27 @@ public sealed class RunwayObservationStateStoreTests
         var sample = Assert.IsType<RunwayObservationSample>(Assert.Single(loaded.State!.Samples!));
         Assert.False(sample.StartsAfterMeasurementGap);
     }
+
+    [Fact]
+    public void Load_WhenPrimaryAndBackupAreCorruptAllowsFreshStateToReplaceThem()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "PulseMeter.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "runway-observations.json");
+        File.WriteAllText(path, "{ corrupt primary");
+        File.WriteAllText(path + ".bak", "{ corrupt backup");
+        var store = new RunwayObservationStateStore(path);
+
+        var corrupt = store.Load();
+
+        Assert.Equal(RunwayObservationLoadStatus.Corrupt, corrupt.Status);
+        var replacement = new RunwayObservationState(
+            RunwayObservationStateStore.CurrentSchemaVersion,
+            [new RunwayObservationSample("codex|300", "codex", "General", "5h Window", "5h", 300, 25, DateTimeOffset.UtcNow.AddHours(1), DateTimeOffset.UtcNow)]);
+        Assert.True(store.Save(replacement));
+        var loaded = store.Load();
+        Assert.Equal(RunwayObservationLoadStatus.Loaded, loaded.Status);
+        var sample = Assert.IsType<RunwayObservationSample>(Assert.Single(loaded.State!.Samples!));
+        Assert.Equal(25, sample.UsedPercent);
+    }
 }

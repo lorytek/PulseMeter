@@ -51,6 +51,7 @@
                             </ListBox.ItemsPanel>
                             <ListBox.ItemContainerStyle>
                                 <Style TargetType="ListBoxItem">
+                                    <Setter Property="AutomationProperties.Name" Value="{Binding Label}" />
                                     <Setter Property="MinWidth" Value="64" />
                                     <Setter Property="Height" Value="28" />
                                     <Setter Property="Padding" Value="0" />
@@ -65,6 +66,8 @@
                                                 <Border x:Name="Segment"
                                                         Padding="10,0"
                                                         Background="Transparent"
+                                                        BorderBrush="Transparent"
+                                                        BorderThickness="0"
                                                         CornerRadius="7">
                                                     <TextBlock Text="{Binding Label}"
                                                                Foreground="{TemplateBinding Foreground}"
@@ -89,6 +92,14 @@
                                                         </MultiTrigger.Conditions>
                                                         <Setter TargetName="Segment" Property="Background" Value="#E4EEFF" />
                                                     </MultiTrigger>
+                                                    <Trigger Property="IsKeyboardFocused" Value="True">
+                                                        <Setter TargetName="Segment" Property="BorderBrush" Value="#1F73FF" />
+                                                        <Setter TargetName="Segment" Property="BorderThickness" Value="2" />
+                                                    </Trigger>
+                                                    <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                                        <Setter TargetName="Segment" Property="BorderBrush" Value="#1F73FF" />
+                                                        <Setter TargetName="Segment" Property="BorderThickness" Value="2" />
+                                                    </Trigger>
                                                 </ControlTemplate.Triggers>
                                             </ControlTemplate>
                                         </Setter.Value>
@@ -189,19 +200,141 @@
                         <local:UsageMomentumGauge Width="160"
                                                   Height="58"
                                                   HorizontalAlignment="Center"
-                                                  Value="{Binding MomentumGaugeValue}" />
+                                                  Value="{Binding MomentumGaugeValue}"
+                                                  IsLearning="{Binding IsMomentumLearning}"
+                                                  BaselineProgress="{Binding MomentumBaselineProgress}"
+                                                  AutomationProperties.Name="{Binding MomentumAccessibleSummary}" />
                         <TextBlock Margin="0,1,0,0"
-                                   Text="Usage momentum"
+                                   Text="{Binding MomentumTitleText}"
                                    Foreground="#334155"
                                    FontSize="12"
                                    FontWeight="SemiBold"
                                    TextAlignment="Center" />
-                        <TextBlock Margin="0,2,0,0"
-                                   Text="{Binding MomentumValueText}"
-                                   Foreground="#2563EB"
-                                   FontSize="24"
-                                   FontWeight="SemiBold"
-                                   TextAlignment="Center" />
+                        <StackPanel Margin="0,2,0,0"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Center">
+                            <TextBlock Text="{Binding MomentumValueText}"
+                                       FontWeight="SemiBold"
+                                       TextAlignment="Center"
+                                       VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="#2563EB" />
+                                        <Setter Property="FontSize" Value="24" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsMomentumLearning}" Value="True">
+                                                <Setter Property="Foreground" Value="#334155" />
+                                                <Setter Property="FontSize" Value="15.5" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <Button x:Name="MomentumPreviewInfo"
+                                    Width="17"
+                                    Height="17"
+                                    Margin="5,0,0,0"
+                                    Padding="0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Cursor="Help"
+                                    Focusable="True"
+                                    KeyboardNavigation.IsTabStop="True"
+                                    Visibility="{Binding IsMomentumLearning, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                    ToolTipService.InitialShowDelay="250"
+                                    ToolTipService.ShowDuration="15000"
+                                    AutomationProperties.Name="Preview completed momentum gauge"
+                                    AutomationProperties.HelpText="Focus or hover to see an example of the momentum gauge after enough baseline data is collected. Press Escape to dismiss it."
+                                    GotKeyboardFocus="MomentumPreviewInfo_GotKeyboardFocus"
+                                    LostKeyboardFocus="MomentumPreviewInfo_LostKeyboardFocus"
+                                    PreviewKeyDown="MomentumPreviewInfo_PreviewKeyDown">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="InfoSurface"
+                                                Background="#F8FAFC"
+                                                BorderBrush="#CBD5E1"
+                                                BorderThickness="1"
+                                                CornerRadius="9">
+                                            <ContentPresenter HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center" />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="InfoSurface" Property="Background" Value="#EFF6FF" />
+                                                <Setter TargetName="InfoSurface" Property="BorderBrush" Value="#60A5FA" />
+                                            </Trigger>
+                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                                <Setter TargetName="InfoSurface" Property="Background" Value="#EFF6FF" />
+                                                <Setter TargetName="InfoSurface" Property="BorderBrush" Value="#2563EB" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                                <Button.ToolTip>
+                                    <ToolTip x:Name="MomentumPreviewToolTip"
+                                             Placement="Bottom"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             Padding="0">
+                                        <Border Width="228"
+                                                Padding="12,10"
+                                                Background="#FFFFFF"
+                                                BorderBrush="#DCE3EC"
+                                                BorderThickness="1"
+                                                CornerRadius="10">
+                                            <StackPanel>
+                                                <TextBlock Text="Example when ready"
+                                                           Foreground="#0F172A"
+                                                           FontSize="12"
+                                                           FontWeight="SemiBold" />
+                                                <TextBlock Margin="0,2,0,2"
+                                                           Text="Once the baseline is complete, this becomes a live momentum reading."
+                                                           Foreground="#64748B"
+                                                           FontSize="10.5"
+                                                           LineHeight="14"
+                                                           TextWrapping="Wrap" />
+                                                <local:UsageMomentumGauge Width="136"
+                                                                          Height="50"
+                                                                          Margin="0,2,0,0"
+                                                                          HorizontalAlignment="Center"
+                                                                          IsLearning="False"
+                                                                          Value="0.55"
+                                                                          IsHitTestVisible="False"
+                                                                          AutomationProperties.Name="Example measured momentum gauge" />
+                                                <TextBlock Margin="0,1,0,0"
+                                                           Text="Usage momentum"
+                                                           Foreground="#334155"
+                                                           FontSize="10.5"
+                                                           FontWeight="SemiBold"
+                                                           TextAlignment="Center" />
+                                                <TextBlock Margin="0,1,0,0"
+                                                           Text="&#x2197; +0.6%/h"
+                                                           Foreground="#2563EB"
+                                                           FontSize="18"
+                                                           FontWeight="SemiBold"
+                                                           TextAlignment="Center" />
+                                                <TextBlock Text="usage accelerating"
+                                                           Foreground="#D97706"
+                                                           FontSize="10.5"
+                                                           FontWeight="SemiBold"
+                                                           TextAlignment="Center" />
+                                                <TextBlock Margin="0,1,0,0"
+                                                           Text="compared with your baseline"
+                                                           Foreground="#94A3B8"
+                                                           FontSize="10"
+                                                           TextAlignment="Center" />
+                                            </StackPanel>
+                                        </Border>
+                                    </ToolTip>
+                                </Button.ToolTip>
+                                <TextBlock Text="&#xE946;"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           Foreground="#475569"
+                                           FontSize="9.5"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center" />
+                            </Button>
+                        </StackPanel>
                         <TextBlock Margin="0,1,0,0"
                                    Text="{Binding MomentumStateText}"
                                    FontSize="11.5"
@@ -216,6 +349,9 @@
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding MomentumStateText}" Value="usage slowing">
                                             <Setter Property="Foreground" Value="#16A34A" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsMomentumLearning}" Value="True">
+                                            <Setter Property="Foreground" Value="#64748B" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>

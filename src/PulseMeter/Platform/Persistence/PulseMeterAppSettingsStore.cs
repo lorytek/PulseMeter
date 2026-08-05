@@ -8,7 +8,17 @@ public sealed record PulseMeterAppSettings(
     bool IsAlwaysOnTop = false,
     DashboardVisibilitySettings? DashboardVisibility = null,
     string? SelectedRateLimitKey = null,
-    bool IsNavigationPanelExpanded = true);
+    bool IsNavigationPanelExpanded = true,
+    IReadOnlyList<RecoveryWatchSettings>? RecoveryWatches = null,
+    bool AutoShowWhenCodexFocused = true,
+    bool AutoHideWhenFocusLeaves = false);
+
+/// <summary>A one-shot next-block watch, scoped to a stable rate-limit window.</summary>
+public sealed record RecoveryWatchSettings(
+    string LimitKey,
+    int WindowDurationMins,
+    int BlockDurationMinutes,
+    DateTimeOffset ResetAtUtc);
 
 public sealed record DashboardVisibilitySettings(
     bool RateLimits = true,
@@ -18,7 +28,8 @@ public sealed record DashboardVisibilitySettings(
     bool AccountUsage = true,
     bool ProjectUsage = true,
     bool BurnAnalysis = true,
-    bool DailyUsage = true);
+    bool DailyUsage = true,
+    bool BlockPlanner = true);
 
 public sealed record BudgetAlertSettings(
     bool IsEnabled = true,
@@ -47,7 +58,7 @@ public interface IPulseMeterAppSettingsStore
 {
     PulseMeterAppSettings? Load();
 
-    void Save(PulseMeterAppSettings settings);
+    bool Save(PulseMeterAppSettings settings);
 }
 
 public sealed class PulseMeterAppSettingsStore : IPulseMeterAppSettingsStore
@@ -72,8 +83,8 @@ public sealed class PulseMeterAppSettingsStore : IPulseMeterAppSettingsStore
         return AtomicJsonFileStore.Load<PulseMeterAppSettings>(_filePath, JsonOptions);
     }
 
-    public void Save(PulseMeterAppSettings settings)
+    public bool Save(PulseMeterAppSettings settings)
     {
-        AtomicJsonFileStore.Save(_filePath, settings, JsonOptions);
+        return AtomicJsonFileStore.Save(_filePath, settings, JsonOptions);
     }
 }

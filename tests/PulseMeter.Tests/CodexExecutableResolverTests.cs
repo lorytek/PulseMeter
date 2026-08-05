@@ -59,6 +59,19 @@ public sealed class CodexExecutableResolverTests
     }
 
     [Fact]
+    public void GetPathCandidates_RemovesQuotesAroundWindowsPathEntries()
+    {
+        var pathValue = $"\"C:\\Program Files\\Codex\"{Path.PathSeparator}C:\\Tools";
+
+        var candidates = CodexExecutableResolver.GetPathCandidates(pathValue, isWindows: true).ToArray();
+
+        Assert.Contains("C:\\Program Files\\Codex\\codex.exe", candidates);
+        Assert.Contains("C:\\Program Files\\Codex\\codex.cmd", candidates);
+        Assert.Contains("C:\\Tools\\codex.exe", candidates);
+        Assert.DoesNotContain(candidates, candidate => candidate.Contains('"'));
+    }
+
+    [Fact]
     public void BuildStartInfo_RunsCmdFilesThroughCommandProcessor()
     {
         var startInfo = AppServerProcess.BuildStartInfo("C:\\Users\\ilina\\.codex\\bin\\codex.cmd");
@@ -81,5 +94,28 @@ public sealed class CodexExecutableResolverTests
         Assert.Empty(startInfo.StandardInputEncoding.GetPreamble());
         Assert.Equal(Encoding.UTF8.WebName, startInfo.StandardOutputEncoding?.WebName);
         Assert.Equal(Encoding.UTF8.WebName, startInfo.StandardErrorEncoding?.WebName);
+    }
+
+    [Fact]
+    public void Start_MalformedConfiguredPathUsesTheSafeLaunchExceptionContract()
+    {
+        var exception = Assert.Throws<AppServerLaunchException>(() => AppServerProcess.Start("codex\0.exe"));
+
+        Assert.NotNull(exception.InnerException);
+        Assert.Equal("The monitored CLI could not be started.", exception.Message);
+    }
+
+    [Fact]
+    public void Start_MissingConfiguredExecutableUsesTheSafeLaunchExceptionContract()
+    {
+        var missingExecutable = Path.Combine(
+            Path.GetTempPath(),
+            "PulseMeter.Tests",
+            Guid.NewGuid().ToString("N"),
+            "codex.exe");
+
+        var exception = Assert.Throws<AppServerLaunchException>(() => AppServerProcess.Start(missingExecutable));
+
+        Assert.IsType<System.ComponentModel.Win32Exception>(exception.InnerException);
     }
 }
