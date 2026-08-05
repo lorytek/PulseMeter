@@ -3,7 +3,7 @@
 public sealed class PublishScriptTests
 {
     [Fact]
-    public void LocalShortcut_UsesTheFirstLauncherThatPassesTheWindowsProbe()
+    public void LocalShortcut_UsesTheFirstLauncherThatPassesTheWindowsProbeWithoutShowingAConsole()
     {
         var script = File.ReadAllText(FindWorkspaceFile("scripts", "publish-local.ps1"));
 
@@ -14,11 +14,13 @@ public sealed class PublishScriptTests
         Assert.Contains("Test-PulseMeterLaunch $appExe \"\" $output", script);
         Assert.Contains("$launcherTarget = $dotnetExe", script);
         Assert.Contains("$launcherArguments = [string]::Concat('\"', $localHostDll, '\"')", script);
-        Assert.Contains("$shortcut.TargetPath = $launcherTarget", script);
+        Assert.Contains("$wscriptExe = Join-Path $env:WINDIR \"System32\\wscript.exe\"", script);
+        Assert.Contains("$script:launcherScript = Join-Path $launcherWorkingDirectory \"launch-pulsemeter.vbs\"", script);
+        Assert.Contains("shell.Run \"$escapedCommandLine\", 0, False", script);
+        Assert.Contains("$shortcut.TargetPath = $wscriptExe", script);
+        Assert.Contains("$shortcut.Arguments = [string]::Concat('\"', $launcherScript, '\"')", script);
         Assert.Contains("Both published PulseMeter launchers were blocked. Existing shortcuts were not changed.", script);
-        Assert.DoesNotContain("launch-pulsemeter.vbs", script);
-        Assert.DoesNotContain("wscript.exe", script);
-        Assert.DoesNotContain("CreateObject(\"WScript.Shell\")", script);
+        Assert.Contains("CreateObject(\"WScript.Shell\")", script);
     }
 
     [Fact]

@@ -9,6 +9,7 @@ $appExe = Join-Path $output "PulseMeter.exe"
 $localHostOutput = Join-Path $artifactsRoot "PulseMeter-local-host-$timestamp"
 $localHostDll = Join-Path $localHostOutput "PulseMeter.dll"
 $dotnetExe = Join-Path $env:ProgramFiles "dotnet\dotnet.exe"
+$wscriptExe = Join-Path $env:WINDIR "System32\wscript.exe"
 $icon = Join-Path $root "src\PulseMeter\Assets\PulseMeter.ico"
 $shortcutPath = Join-Path $root "PulseMeter.lnk"
 $desktopShortcutPath = Join-Path ([Environment]::GetFolderPath("Desktop")) "PulseMeter.lnk"
@@ -17,11 +18,33 @@ $launcherTarget = $appExe
 $launcherArguments = ""
 $launcherWorkingDirectory = $output
 $launcherDescription = "self-contained executable"
+$launcherScript = ""
+
+function Escape-VbScriptString([string]$value) {
+    return $value.Replace('"', '""')
+}
+
+function Save-PulseMeterLauncher {
+    $script:launcherScript = Join-Path $launcherWorkingDirectory "launch-pulsemeter.vbs"
+    $commandLine = [string]::Concat('"', $launcherTarget, '"')
+    if (-not [string]::IsNullOrWhiteSpace($launcherArguments)) {
+        $commandLine = [string]::Concat($commandLine, " ", $launcherArguments)
+    }
+
+    $escapedWorkingDirectory = Escape-VbScriptString $launcherWorkingDirectory
+    $escapedCommandLine = Escape-VbScriptString $commandLine
+    $launcherContent = @"
+Set shell = CreateObject("WScript.Shell")
+shell.CurrentDirectory = "$escapedWorkingDirectory"
+shell.Run "$escapedCommandLine", 0, False
+"@
+    Set-Content -LiteralPath $launcherScript -Value $launcherContent -Encoding ASCII
+}
 
 function Save-PulseMeterShortcut([string]$path) {
     $shortcut = $script:shell.CreateShortcut($path)
-    $shortcut.TargetPath = $launcherTarget
-    $shortcut.Arguments = $launcherArguments
+    $shortcut.TargetPath = $wscriptExe
+    $shortcut.Arguments = [string]::Concat('"', $launcherScript, '"')
     $shortcut.WorkingDirectory = $launcherWorkingDirectory
     $shortcut.IconLocation = $icon
     $shortcut.Save()
@@ -125,6 +148,10 @@ if (-not (Test-Path -LiteralPath $dotnetExe)) {
     throw "The local .NET host was not found: $dotnetExe"
 }
 
+if (-not (Test-Path -LiteralPath $wscriptExe)) {
+    throw "Windows Script Host was not found: $wscriptExe"
+}
+
 dotnet publish $project `
     -c Release `
     --self-contained false `
@@ -172,6 +199,7 @@ catch {
     }
 }
 
+Save-PulseMeterLauncher
 $shell = New-Object -ComObject WScript.Shell
 Save-PulseMeterShortcut $shortcutPath
 Save-PulseMeterShortcut $desktopShortcutPath
@@ -205,7 +233,9 @@ Write-Host "  $shortcutPath"
 Write-Host "Updated desktop shortcut:"
 Write-Host "  $desktopShortcutPath"
 Write-Host "Shortcut target:"
-Write-Host "  $launcherTarget ($launcherDescription)"
+Write-Host "  $wscriptExe `"$launcherScript`""
+Write-Host "Hidden launcher target:"
+Write-Host "  $launcherTarget $launcherArguments ($launcherDescription)"
 
 Start-Process -FilePath $desktopShortcutPath
 Write-Host "Relaunched PulseMeter from the verified desktop shortcut."
