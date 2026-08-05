@@ -15,7 +15,7 @@ public sealed class NeedsAttentionPresenterTests
                 Signal(6, "TODAY", "Today is above usual", "250 tokens today; 100 tokens daily median.", "#1F73FF"),
                 Signal(2, "IDLE", "Usage moved while idle", "Usage moved while idle: 82% -> 86% in 11m", "#F97316", "diagnostic", "idle-drain"),
                 Signal(4, "LIMIT", "Weekly window is low", "8% left; resets in 10h 00m.", "#F97316"),
-                Signal(3, "RUNWAY", "Projected to run out before reset", "At the current pace, 5h Window may run out in about 10m before the 5h reset.", "#F97316")
+                Signal(3, "RUNWAY", "Projected to run out before reset", "At the current pace, 5h Window may reach the limit in about 10m. The 5h reset comes later.", "#F97316")
             ]
         });
 

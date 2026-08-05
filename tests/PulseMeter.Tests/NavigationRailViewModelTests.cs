@@ -100,6 +100,7 @@ public sealed class NavigationRailViewModelTests
             RateLimits: false,
             WeeklyPace: true,
             RunwayForecast: false,
+            BlockPlanner: false,
             ResetCredits: false,
             AccountUsage: true,
             ProjectUsage: false,
@@ -110,7 +111,7 @@ public sealed class NavigationRailViewModelTests
 
         Assert.Equal(visibility, viewModel.CaptureVisibility());
         Assert.Equal(3, viewModel.VisibleSectionCount);
-        Assert.Equal("3 of 8 visible · changes save automatically", viewModel.VisibleSectionSummaryText);
+        Assert.Equal("3 of 9 visible · changes save automatically", viewModel.VisibleSectionSummaryText);
         Assert.True(viewModel.HasHiddenSections);
     }
 
@@ -121,13 +122,13 @@ public sealed class NavigationRailViewModelTests
         var changed = new List<string?>();
         viewModel.PropertyChanged += (_, eventArgs) => changed.Add(eventArgs.PropertyName);
 
-        Assert.Equal(8, viewModel.VisibleSectionCount);
+        Assert.Equal(9, viewModel.VisibleSectionCount);
         Assert.False(viewModel.HasHiddenSections);
 
         viewModel.IsDailyUsageVisible = false;
 
-        Assert.Equal(7, viewModel.VisibleSectionCount);
-        Assert.Equal("7 of 8 visible · changes save automatically", viewModel.VisibleSectionSummaryText);
+        Assert.Equal(8, viewModel.VisibleSectionCount);
+        Assert.Equal("8 of 9 visible · changes save automatically", viewModel.VisibleSectionSummaryText);
         Assert.True(viewModel.HasHiddenSections);
         Assert.Contains(nameof(NavigationRailViewModel.VisibleSectionCount), changed);
         Assert.Contains(nameof(NavigationRailViewModel.VisibleSectionSummaryText), changed);
@@ -135,7 +136,7 @@ public sealed class NavigationRailViewModelTests
 
         viewModel.ApplyVisibility(new DashboardVisibilitySettings());
 
-        Assert.Equal(8, viewModel.VisibleSectionCount);
+        Assert.Equal(9, viewModel.VisibleSectionCount);
         Assert.False(viewModel.HasHiddenSections);
     }
 

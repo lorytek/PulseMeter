@@ -22,7 +22,9 @@ public sealed class UsageSignalsTrackerTests
         Assert.Equal("5h Window", signal.WindowLabel);
         Assert.Equal("Runway: about 10m at current pace", signal.HintText);
         Assert.Equal("Projected to run out before reset", signal.Title);
-        Assert.Contains("before the 5h reset", signal.Detail);
+        Assert.Equal(
+            "At the current pace, 5h Window may reach the limit in about 10m. The 5h reset comes later.",
+            signal.Detail);
         var forecast = Assert.Single(second.RunwayForecasts);
         Assert.Equal(LimitRunwayForecastState.AtRisk, forecast.State);
         Assert.True(forecast.IsActionable);
@@ -52,11 +54,11 @@ public sealed class UsageSignalsTrackerTests
         var reset = start.AddDays(7);
         var tracker = new UsageSignalsTracker(new FixedUserIdleTimeProvider(TimeSpan.Zero));
 
-        tracker.Observe(Snapshot(start, usedPercent: 10, resetsAt: reset, windowMinutes: 10_080), start);
-        tracker.Observe(Snapshot(start.AddHours(3), usedPercent: 15, resetsAt: reset, windowMinutes: 10_080), start.AddHours(3));
+        tracker.Observe(Snapshot(start, usedPercent: 0, resetsAt: reset, windowMinutes: 10_080), start);
+        tracker.Observe(Snapshot(start.AddMinutes(15), usedPercent: 0, resetsAt: reset, windowMinutes: 10_080), start.AddMinutes(15));
         var signals = tracker.Observe(
-            Snapshot(start.AddHours(6), usedPercent: 20, resetsAt: reset, windowMinutes: 10_080),
-            start.AddHours(6));
+            Snapshot(start.AddMinutes(30), usedPercent: 1, resetsAt: reset, windowMinutes: 10_080),
+            start.AddMinutes(30));
 
         var forecast = Assert.Single(signals.RunwayForecasts);
         var likelyLimit = Assert.IsType<DateTimeOffset>(forecast.ExhaustsAtUtc);
@@ -247,10 +249,12 @@ public sealed class UsageSignalsTrackerTests
         tracker.Observe(Snapshot(now, usedPercent: 50, resetsAt: resetAt, windowMinutes: 300), now);
         var afterStaleGap = tracker.Observe(Snapshot(now.AddMinutes(20), usedPercent: 70, resetsAt: resetAt, windowMinutes: 300), now.AddMinutes(20));
         var recentObservation = tracker.Observe(Snapshot(now.AddMinutes(23), usedPercent: 85, resetsAt: resetAt, windowMinutes: 300), now.AddMinutes(23));
+        var confirmedObservation = tracker.Observe(Snapshot(now.AddMinutes(26), usedPercent: 90, resetsAt: resetAt, windowMinutes: 300), now.AddMinutes(26));
 
         Assert.Empty(afterStaleGap.RunwaySignals);
-        Assert.Single(recentObservation.RunwaySignals);
-        Assert.Null(recentObservation.IdleDrainIncident);
+        Assert.Empty(recentObservation.RunwaySignals);
+        Assert.Single(confirmedObservation.RunwaySignals);
+        Assert.Null(confirmedObservation.IdleDrainIncident);
     }
 
     [Fact]
@@ -685,6 +689,103 @@ public sealed class UsageSignalsTrackerTests
     }
 
     [Fact]
+    public void Observe_ConfiguredSparsePollingIntervalRemainsMeasured()
+    {
+        var now = new DateTimeOffset(2026, 7, 20, 21, 0, 0, TimeSpan.Zero);
+        var resetAt = now.AddDays(5);
+        var tracker = new UsageSignalsTracker(new FixedUserIdleTimeProvider(TimeSpan.Zero));
+        var pollingInterval = TimeSpan.FromMinutes(30);
+
+        tracker.Observe(Snapshot(now, 20, resetAt, 10_080), now, pollingInterval);
+        tracker.Observe(
+            Snapshot(now.AddMinutes(30), 25, resetAt, 10_080),
+            now.AddMinutes(30),
+            pollingInterval);
+        var observed = tracker.Observe(
+            Snapshot(now.AddMinutes(60), 30, resetAt, 10_080),
+            now.AddMinutes(60),
+            pollingInterval);
+
+        Assert.Empty(Assert.Single(observed.UsageTrends).MeasurementGaps);
+        var forecast = Assert.Single(observed.RunwayForecasts);
+        Assert.Equal(TimeSpan.FromMinutes(60), forecast.ObservationDuration);
+        Assert.True(Assert.IsType<double>(forecast.PercentPerHour) > 0);
+    }
+
+    [Fact]
+    public void Observe_DelayBeyondConfiguredPollingToleranceRemainsAMeasurementGap()
+    {
+        var now = new DateTimeOffset(2026, 7, 20, 21, 0, 0, TimeSpan.Zero);
+        var resetAt = now.AddDays(5);
+        var tracker = new UsageSignalsTracker(new FixedUserIdleTimeProvider(TimeSpan.Zero));
+        var pollingInterval = TimeSpan.FromMinutes(30);
+
+        tracker.Observe(Snapshot(now, 20, resetAt, 10_080), now, pollingInterval);
+        var resumed = tracker.Observe(
+            Snapshot(now.AddMinutes(60), 30, resetAt, 10_080),
+            now.AddMinutes(60),
+            pollingInterval);
+
+        Assert.Single(Assert.Single(resumed.UsageTrends).MeasurementGaps);
+        Assert.Equal(TimeSpan.Zero, Assert.Single(resumed.RunwayForecasts).ObservationDuration);
+    }
+
+    [Fact]
+    public void Observe_MarksLivePositiveUsageAfterSuspendAsMeasurementGap()
+    {
+        var now = new DateTimeOffset(2026, 7, 20, 21, 0, 0, TimeSpan.Zero);
+        var resetAt = now.AddHours(2);
+        var tracker = new UsageSignalsTracker(new FixedUserIdleTimeProvider(TimeSpan.Zero));
+
+        tracker.Observe(Snapshot(now, 20, resetAt, 300), now);
+        tracker.Observe(Snapshot(now.AddMinutes(5), 30, resetAt, 300), now.AddMinutes(5));
+        var resumed = tracker.Observe(
+            Snapshot(now.AddMinutes(30), 90, resetAt, 300),
+            now.AddMinutes(30));
+
+        var gap = Assert.Single(Assert.Single(resumed.UsageTrends).MeasurementGaps);
+        Assert.Equal(now.AddMinutes(5), gap.StartedAtUtc);
+        Assert.Equal(now.AddMinutes(30), gap.EndedAtUtc);
+
+        var forecast = Assert.Single(resumed.RunwayForecasts);
+        Assert.Equal(TimeSpan.FromMinutes(5), forecast.ObservationDuration);
+        Assert.Equal(LimitRunwayForecastConfidence.Low, forecast.Confidence);
+        Assert.True(Assert.IsType<double>(forecast.PercentPerHour) > 140);
+    }
+
+    [Fact]
+    public void Observe_RestartedFlatMeasurementGapCoolsForecastPaceWithoutAddingEvidence()
+    {
+        var now = new DateTimeOffset(2026, 7, 20, 21, 0, 0, TimeSpan.Zero);
+        var resetAt = now.AddHours(2);
+        var store = new InMemoryRunwayObservationStateStore();
+        var first = new UsageSignalsTracker(new FixedUserIdleTimeProvider(TimeSpan.Zero), store);
+
+        first.Observe(Snapshot(now, 20, resetAt, 300), now);
+        first.Observe(Snapshot(now.AddMinutes(5), 30, resetAt, 300), now.AddMinutes(5));
+        var beforeRestart = first.Observe(
+            Snapshot(now.AddMinutes(10), 40, resetAt, 300),
+            now.AddMinutes(10));
+
+        var restarted = new UsageSignalsTracker(new FixedUserIdleTimeProvider(TimeSpan.Zero), store);
+        var resumed = restarted.Observe(
+            Snapshot(now.AddMinutes(40), 40, resetAt, 300),
+            now.AddMinutes(40));
+
+        var gap = Assert.Single(Assert.Single(resumed.UsageTrends).MeasurementGaps);
+        Assert.Equal(now.AddMinutes(10), gap.StartedAtUtc);
+        Assert.Equal(now.AddMinutes(40), gap.EndedAtUtc);
+
+        var beforeRestartForecast = Assert.Single(beforeRestart.RunwayForecasts);
+        var resumedForecast = Assert.Single(resumed.RunwayForecasts);
+        Assert.Equal(TimeSpan.FromMinutes(10), resumedForecast.ObservationDuration);
+        Assert.Equal(LimitRunwayForecastConfidence.Low, resumedForecast.Confidence);
+        Assert.True(
+            Assert.IsType<double>(resumedForecast.PercentPerHour)
+            < Assert.IsType<double>(beforeRestartForecast.PercentPerHour));
+    }
+
+    [Fact]
     public void Observe_DoesNotCreateMeasurementGapDuringRegularFlatSampling()
     {
         var now = new DateTimeOffset(2026, 7, 20, 21, 0, 0, TimeSpan.Zero);
@@ -764,6 +865,30 @@ public sealed class UsageSignalsTrackerTests
     }
 
     [Fact]
+    public void Observe_RebasesRunwayWhenSystemClockMovesBehindTheLatestSample()
+    {
+        var now = new DateTimeOffset(2026, 7, 6, 20, 0, 0, TimeSpan.Zero);
+        var resetAt = now.AddHours(2);
+        var store = new InMemoryRunwayObservationStateStore();
+        var tracker = new UsageSignalsTracker(new FixedUserIdleTimeProvider(TimeSpan.Zero), store);
+        tracker.Observe(Snapshot(now, 20, resetAt, 300), now);
+        tracker.Observe(Snapshot(now.AddMinutes(10), 30, resetAt, 300), now.AddMinutes(10));
+
+        var rolledBackAt = now.AddMinutes(-30);
+        var signals = tracker.Observe(Snapshot(rolledBackAt, 31, resetAt, 300), rolledBackAt);
+
+        var forecast = Assert.Single(signals.RunwayForecasts);
+        Assert.Equal(LimitRunwayForecastState.Learning, forecast.State);
+        Assert.Equal(1, forecast.SampleCount);
+        var trend = Assert.Single(signals.UsageTrends);
+        var point = Assert.Single(trend.Points);
+        Assert.Equal(rolledBackAt, point.ObservedAtUtc);
+        Assert.Equal(31, point.UsedPercent);
+        var stored = Assert.Single(store.State!.Samples!);
+        Assert.Equal(rolledBackAt, stored!.ObservedAtUtc);
+    }
+
+    [Fact]
     public void Observe_PersistsAtMostSixteenRunwayBuckets()
     {
         var now = new DateTimeOffset(2026, 7, 6, 20, 0, 0, TimeSpan.Zero);
@@ -789,6 +914,93 @@ public sealed class UsageSignalsTrackerTests
         Assert.NotNull(store.State);
         Assert.NotNull(store.State!.Samples);
         Assert.InRange(store.State.Samples!.Select(sample => sample!.BucketId).Distinct(StringComparer.OrdinalIgnoreCase).Count(), 1, 16);
+    }
+
+    [Fact]
+    public void Observe_WhenBucketCapIsReachedPersistsTheNewestBucket()
+    {
+        var now = new DateTimeOffset(2026, 7, 6, 20, 0, 0, TimeSpan.Zero);
+        var resetAt = now.AddHours(2);
+        var store = new InMemoryRunwayObservationStateStore();
+        var tracker = new UsageSignalsTracker(new FixedUserIdleTimeProvider(TimeSpan.Zero), store);
+        tracker.Observe(new UsageSnapshot
+        {
+            SyncStatus = SyncStatus.Live,
+            Buckets = Enumerable.Range(0, 16).Select(index => new RateLimitBucket
+            {
+                LimitId = $"older-{index}",
+                Label = "5h Window",
+                WindowLabel = "5h",
+                WindowDurationMins = 300,
+                UsedPercent = 10,
+                ResetsAtUtc = resetAt,
+                ResetsAtUnixSeconds = resetAt.ToUnixTimeSeconds()
+            }).ToList()
+        }, now);
+
+        tracker.Observe(new UsageSnapshot
+        {
+            SyncStatus = SyncStatus.Live,
+            Buckets =
+            [
+                new RateLimitBucket
+                {
+                    LimitId = "newest",
+                    Label = "5h Window",
+                    WindowLabel = "5h",
+                    WindowDurationMins = 300,
+                    UsedPercent = 20,
+                    ResetsAtUtc = resetAt,
+                    ResetsAtUnixSeconds = resetAt.ToUnixTimeSeconds()
+                }
+            ]
+        }, now.AddMinutes(1));
+
+        Assert.NotNull(store.State?.Samples);
+        Assert.Equal(16, store.State!.Samples!
+            .Select(sample => sample!.BucketId)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count());
+        Assert.Contains(store.State.Samples!, sample => sample!.LimitKey == "newest");
+    }
+
+    [Fact]
+    public void Observe_WhenRestoredStateExceedsBucketCapHydratesTheNewestBucket()
+    {
+        var now = new DateTimeOffset(2026, 7, 6, 20, 0, 0, TimeSpan.Zero);
+        var resetAt = now.AddHours(2);
+        var older = Enumerable.Range(0, 16)
+            .Select(index => new RunwayObservationSample(
+                $"older-{index}|300",
+                $"older-{index}",
+                "General",
+                "5h Window",
+                "5h",
+                300,
+                10,
+                resetAt,
+                now.AddMinutes(-30 - index)))
+            .ToList();
+        older.Add(new RunwayObservationSample(
+            "codex|300",
+            "codex",
+            "General",
+            "5h Window",
+            "5h",
+            300,
+            20,
+            resetAt,
+            now.AddMinutes(-1)));
+        var store = new InMemoryRunwayObservationStateStore
+        {
+            State = new RunwayObservationState(RunwayObservationStateStore.CurrentSchemaVersion, older)
+        };
+        var tracker = new UsageSignalsTracker(new FixedUserIdleTimeProvider(TimeSpan.Zero), store);
+
+        var signals = tracker.Observe(Snapshot(now, 30, resetAt, 300), now);
+
+        var trend = Assert.Single(signals.UsageTrends, candidate => candidate.BucketId == "codex|300");
+        Assert.Equal([20d, 30d], trend.Points.Select(point => point.UsedPercent));
     }
 
     [Fact]
@@ -874,7 +1086,27 @@ public sealed class UsageSignalsTrackerTests
     }
 
     [Fact]
-    public void Observe_StopsAfterThreeUnavailableRestoreAttemptsWithoutPersisting()
+    public void Observe_ReplacesCorruptPersistedStateWithFreshLiveSample()
+    {
+        var now = new DateTimeOffset(2026, 7, 6, 20, 0, 0, TimeSpan.Zero);
+        var store = new InMemoryRunwayObservationStateStore
+        {
+            Results = new Queue<RunwayObservationLoadResult>([
+                new(RunwayObservationLoadStatus.Corrupt)
+            ])
+        };
+        var tracker = new UsageSignalsTracker(new FixedUserIdleTimeProvider(TimeSpan.Zero), store);
+
+        tracker.Observe(Snapshot(now, 20, now.AddHours(2), 300), now);
+
+        Assert.Equal(1, store.LoadCount);
+        Assert.Equal(1, store.SaveCount);
+        var sample = Assert.IsType<RunwayObservationSample>(Assert.Single(store.State!.Samples!));
+        Assert.Equal(20, sample.UsedPercent);
+    }
+
+    [Fact]
+    public void Observe_BacksOffAfterThreeUnavailableRestoreAttempts_ThenRecoversWithoutRestart()
     {
         var now = new DateTimeOffset(2026, 7, 6, 20, 0, 0, TimeSpan.Zero);
         var store = new InMemoryRunwayObservationStateStore { AlwaysUnavailable = true };
@@ -887,6 +1119,18 @@ public sealed class UsageSignalsTrackerTests
 
         Assert.Equal(3, store.LoadCount);
         Assert.Equal(0, store.SaveCount);
+
+        store.AlwaysUnavailable = false;
+        tracker.Observe(Snapshot(now.AddMinutes(6), 26, now.AddHours(2), 300), now.AddMinutes(6));
+
+        Assert.Equal(3, store.LoadCount);
+        Assert.Equal(0, store.SaveCount);
+
+        tracker.Observe(Snapshot(now.AddMinutes(7), 27, now.AddHours(2), 300), now.AddMinutes(7));
+
+        Assert.Equal(4, store.LoadCount);
+        Assert.Equal(1, store.SaveCount);
+        Assert.NotNull(store.State);
     }
 
     [Fact]

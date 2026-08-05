@@ -7,15 +7,90 @@ namespace PulseMeter.Tests;
 public sealed class CodexJsonRpcClientTests
 {
     [Fact]
-    public async Task MalformedInput_FailsPendingRequestAndClearsPendingCount()
+    public async Task MalformedInput_IsIgnoredAndTheNextResponseCompletesThePendingRequest()
     {
-        await using var client = CreateClient("{ malformed json\n", new MemoryStream());
+        const string input = """
+            { malformed json
+            {"id":1,"result":{"ok":true}}
+
+            """;
+        await using var client = CreateClient(input, new MemoryStream());
         var request = client.SendRequestAsync("test/request");
 
         await WaitForPendingRequestAsync(client);
         client.Start();
 
-        await Assert.ThrowsAnyAsync<JsonException>(() => request);
+        var result = await request.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.True(result.GetProperty("ok").GetBoolean());
+        Assert.Equal(0, client.PendingRequestCount);
+    }
+
+    [Fact]
+    public async Task InvalidRootAndNotificationMethod_AreIgnoredWithoutTerminatingTheReadLoop()
+    {
+        const string input = """
+            []
+            {"method":42,"params":{"value":1}}
+            {"id":1,"result":{"ok":true}}
+
+            """;
+        await using var client = CreateClient(input, new MemoryStream());
+        var notifications = 0;
+        client.NotificationReceived += (_, _) => notifications++;
+        var request = client.SendRequestAsync("test/request");
+
+        await WaitForPendingRequestAsync(client);
+        client.Start();
+        var result = await request.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.True(result.GetProperty("ok").GetBoolean());
+        Assert.Equal(0, notifications);
+        Assert.Equal(0, client.PendingRequestCount);
+    }
+
+    [Fact]
+    public async Task MalformedErrorPayload_FailsOnlyItsRequestAndTheNextResponseStillCompletes()
+    {
+        const string input = """
+            {"id":1,"error":{"code":-1,"message":42}}
+            {"id":2,"result":{"ok":true}}
+
+            """;
+        await using var client = CreateClient(input, new MemoryStream());
+        var malformedErrorRequest = client.SendRequestAsync("test/first");
+        var healthyRequest = client.SendRequestAsync("test/second");
+
+        await WaitForPendingRequestsAsync(client, expectedCount: 2);
+        client.Start();
+
+        var exception = await Assert.ThrowsAsync<JsonRpcException>(() => malformedErrorRequest);
+        var result = await healthyRequest.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(-1, exception.Code);
+        Assert.Equal("Local app-server returned a JSON-RPC error.", exception.Message);
+        Assert.True(result.GetProperty("ok").GetBoolean());
+        Assert.Equal(0, client.PendingRequestCount);
+    }
+
+    [Fact]
+    public async Task IncompleteResponse_FailsOnlyItsRequestAndTheNextResponseStillCompletes()
+    {
+        const string input = """
+            {"id":1}
+            {"id":2,"result":{"ok":true}}
+
+            """;
+        await using var client = CreateClient(input, new MemoryStream());
+        var incompleteRequest = client.SendRequestAsync("test/first");
+        var healthyRequest = client.SendRequestAsync("test/second");
+
+        await WaitForPendingRequestsAsync(client, expectedCount: 2);
+        client.Start();
+
+        var exception = await Assert.ThrowsAsync<JsonRpcException>(() => incompleteRequest);
+        var result = await healthyRequest.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Contains("incomplete JSON-RPC response", exception.Message, StringComparison.Ordinal);
+        Assert.True(result.GetProperty("ok").GetBoolean());
         Assert.Equal(0, client.PendingRequestCount);
     }
 
@@ -155,6 +230,29 @@ public sealed class CodexJsonRpcClientTests
     }
 
     [Fact]
+    public async Task ThrowingNotificationSubscriber_DoesNotTerminateTheReadLoopOrFailPendingRequests()
+    {
+        const string input = """
+            {"method":"test/event","params":{"value":1}}
+            {"id":1,"result":{"ok":true}}
+
+            """;
+        await using var client = CreateClient(input, new MemoryStream());
+        var healthySubscriberCallCount = 0;
+        client.NotificationReceived += (_, _) => throw new InvalidOperationException("subscriber failed");
+        client.NotificationReceived += (_, _) => healthySubscriberCallCount++;
+        var request = client.SendRequestAsync("test/request");
+
+        await WaitForPendingRequestAsync(client);
+        client.Start();
+        var result = await request.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.True(result.GetProperty("ok").GetBoolean());
+        Assert.Equal(1, healthySubscriberCallCount);
+        Assert.Equal(0, client.PendingRequestCount);
+    }
+
+    [Fact]
     public async Task RequestCancellationAfterPendingRegistration_RemovesPendingAndPreservesToken()
     {
         await using var client = CreateClient(string.Empty, new MemoryStream());
@@ -179,13 +277,18 @@ public sealed class CodexJsonRpcClientTests
 
     private static async Task WaitForPendingRequestAsync(CodexJsonRpcClient client)
     {
+        await WaitForPendingRequestsAsync(client, expectedCount: 1);
+    }
+
+    private static async Task WaitForPendingRequestsAsync(CodexJsonRpcClient client, int expectedCount)
+    {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        while (client.PendingRequestCount == 0)
+        while (client.PendingRequestCount < expectedCount)
         {
             await Task.Delay(TimeSpan.FromMilliseconds(10), timeout.Token);
         }
 
-        Assert.Equal(1, client.PendingRequestCount);
+        Assert.Equal(expectedCount, client.PendingRequestCount);
     }
 
     private sealed class FailingWriteStream : MemoryStream

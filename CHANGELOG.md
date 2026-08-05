@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0
+
+- Added Block Planner with window-appropriate coding durations, current-pace fit guidance, and recovery watching for risky blocks.
+- Made Usage Momentum state-aware while its 24-hour baseline is learning, with a neutral gauge and an accessible completed-state preview.
+- Improved Coding Runway persistence, idle-time forecast movement, exact baseline timing, refresh stability, keyboard point review, and chart accessibility.
+- Distinguished missing Daily Usage data from a genuinely recorded zero and kept missing rows out of median comparisons.
+- Removed expired reset credits from the available count immediately and persisted that correction across restarts.
+- Hardened asynchronous application shutdown, concurrent stop handling, single-instance activation, persistence recovery, diagnostics privacy, and Windows UI service boundaries.
+
 ## 0.5.0
 
 - Added a graph-first Coding Runway section for 5-hour and 7-day limits, with actual usage, sustainable pace, estimated reach-limit timing, reset timing, and momentum gauges.

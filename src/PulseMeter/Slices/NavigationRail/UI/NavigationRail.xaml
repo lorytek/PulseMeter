@@ -111,7 +111,7 @@
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
+                <RowDefinition Height="*" MinHeight="0" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
@@ -125,7 +125,13 @@
                            FontSize="14" />
             </Button>
 
-            <StackPanel Grid.Row="1" Margin="0,28,0,0">
+            <ScrollViewer Grid.Row="1"
+                          Margin="0,28,0,0"
+                          MinHeight="0"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Hidden"
+                          Focusable="False">
+                <StackPanel>
                 <Button CommandParameter="{x:Static navModels:NavigationSection.Overview}"
                         Tag="{Binding SelectedSection, Converter={StaticResource NavigationSectionSelectedConverter}, ConverterParameter={x:Static navModels:NavigationSection.Overview}}"
                         ToolTip="Go to overview"
@@ -169,6 +175,17 @@
                     <StackPanel Style="{StaticResource NavigationItemContentStyle}">
                         <TextBlock Text="&#xE823;" FontFamily="Segoe MDL2 Assets" FontSize="17" />
                         <TextBlock Margin="8,0,0,0" Text="Coding runway" FontSize="13.5" Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </StackPanel>
+                </Button>
+
+                <Button CommandParameter="{x:Static navModels:NavigationSection.BlockPlanner}"
+                        Tag="{Binding SelectedSection, Converter={StaticResource NavigationSectionSelectedConverter}, ConverterParameter={x:Static navModels:NavigationSection.BlockPlanner}}"
+                        ToolTip="Go to block planner" AutomationProperties.Name="Go to block planner"
+                        Visibility="{Binding IsBlockPlannerVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        Click="SectionButton_Click" Style="{StaticResource NavigationSectionButtonStyle}">
+                    <StackPanel Style="{StaticResource NavigationItemContentStyle}">
+                        <TextBlock Text="&#xE8F9;" FontFamily="Segoe MDL2 Assets" FontSize="17" />
+                        <TextBlock Margin="8,0,0,0" Text="Block planner" FontSize="13.5" Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     </StackPanel>
                 </Button>
 
@@ -226,7 +243,8 @@
                         <TextBlock Margin="8,0,0,0" Text="Daily usage" FontSize="13.5" Visibility="{Binding IsNavigationPanelExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     </StackPanel>
                 </Button>
-            </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
 
             <StackPanel Grid.Row="2">
                 <Button x:Name="CustomizeDashboardButton"
@@ -271,6 +289,7 @@
                         <CheckBox x:Name="RateLimitsVisibilityCheckBox" Margin="0,12,0,0" Content="Rate limits" IsChecked="{Binding IsRateLimitsVisible, Mode=TwoWay}" AutomationProperties.Name="Show rate limits" Style="{StaticResource DashboardVisibilityCheckBoxStyle}" />
                         <CheckBox Margin="0,8,0,0" Content="Weekly pace" IsChecked="{Binding IsRateLimitsDailyVisible, Mode=TwoWay}" AutomationProperties.Name="Show weekly pace" Style="{StaticResource DashboardVisibilityCheckBoxStyle}" />
                         <CheckBox Margin="0,8,0,0" Content="Coding runway" IsChecked="{Binding IsRunwayForecastVisible, Mode=TwoWay}" AutomationProperties.Name="Show coding runway" Style="{StaticResource DashboardVisibilityCheckBoxStyle}" />
+                        <CheckBox Margin="0,8,0,0" Content="Block planner" IsChecked="{Binding IsBlockPlannerVisible, Mode=TwoWay}" AutomationProperties.Name="Show block planner" Style="{StaticResource DashboardVisibilityCheckBoxStyle}" />
                         <CheckBox Margin="0,8,0,0" Content="Reset credits" IsChecked="{Binding IsResetCreditsVisible, Mode=TwoWay}" AutomationProperties.Name="Show reset credits" Style="{StaticResource DashboardVisibilityCheckBoxStyle}" />
                         <CheckBox Margin="0,8,0,0" Content="Account usage" IsChecked="{Binding IsAccountUsageVisible, Mode=TwoWay}" AutomationProperties.Name="Show account usage" Style="{StaticResource DashboardVisibilityCheckBoxStyle}" />
                         <CheckBox Margin="0,8,0,0" Content="Project usage" IsChecked="{Binding IsProjectUsageVisible, Mode=TwoWay}" AutomationProperties.Name="Show project usage" Style="{StaticResource DashboardVisibilityCheckBoxStyle}" />

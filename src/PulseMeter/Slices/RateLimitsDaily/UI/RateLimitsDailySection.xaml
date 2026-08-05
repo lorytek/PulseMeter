@@ -35,6 +35,11 @@
                                     <ItemsControl Margin="0,18,0,0"
                                                   ItemsSource="{Binding DailyRateLimitRows}"
                                                   Visibility="{Binding HasDailyRateLimitRows, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <ItemsControl.ItemContainerStyle>
+                                            <Style TargetType="ContentPresenter">
+                                                <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleSummary}" />
+                                            </Style>
+                                        </ItemsControl.ItemContainerStyle>
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
                                                 <UniformGrid Columns="7" />

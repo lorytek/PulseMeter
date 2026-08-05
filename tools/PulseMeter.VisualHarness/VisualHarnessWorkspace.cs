@@ -44,6 +44,32 @@ public static class VisualHarnessWorkspace
             "PulseMeter visual harness requires a worktree containing PulseMeter.slnx and .git.");
     }
 
+    public static VisualHarnessPaths LocateFromAny(params string?[] startDirectories)
+    {
+        foreach (var startDirectory in startDirectories
+                     .Where(path => !string.IsNullOrWhiteSpace(path))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                return LocateFrom(startDirectory!);
+            }
+            catch (Exception exception) when (exception is InvalidOperationException
+                or ArgumentException
+                or NotSupportedException
+                or PathTooLongException
+                or IOException
+                or UnauthorizedAccessException)
+            {
+                // A published harness may live outside the repository. Try the next
+                // explicit/current/base-directory candidate before reporting failure.
+            }
+        }
+
+        throw new InvalidOperationException(
+            "PulseMeter visual harness requires a worktree containing PulseMeter.slnx and .git.");
+    }
+
     public static VisualHarnessPaths ValidateRoot(
         string candidateRoot,
         Func<string, FileAttributes>? attributesReader = null)

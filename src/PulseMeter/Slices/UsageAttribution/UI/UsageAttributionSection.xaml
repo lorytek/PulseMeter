@@ -109,6 +109,11 @@
                             Background="#E5E7EB" />
 
                     <ItemsControl ItemsSource="{Binding ProjectRows}">
+                        <ItemsControl.ItemContainerStyle>
+                            <Style TargetType="ContentPresenter">
+                                <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleSummary}" />
+                            </Style>
+                        </ItemsControl.ItemContainerStyle>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Grid MinHeight="42"

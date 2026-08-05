@@ -7,6 +7,16 @@ using System.Threading;
 
 namespace PulseMeter.Platform.Persistence;
 
+internal enum AtomicJsonLoadStatus
+{
+    Loaded,
+    Missing,
+    Invalid,
+    Unavailable
+}
+
+internal readonly record struct AtomicJsonLoadResult<T>(AtomicJsonLoadStatus Status, T? Value = default);
+
 internal static class AtomicJsonFileStore
 {
     private const int MutexWaitMilliseconds = 100;
@@ -16,7 +26,16 @@ internal static class AtomicJsonFileStore
     private static readonly ConcurrentDictionary<string, object> PathLocks = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Encoding Utf8WithoutBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
-    public static T? Load<T>(string filePath, JsonSerializerOptions options)
+    public static T? Load<T>(string filePath, JsonSerializerOptions options, Func<T, bool>? isValid = null)
+    {
+        var result = LoadWithStatus(filePath, options, isValid);
+        return result.Status == AtomicJsonLoadStatus.Loaded ? result.Value : default;
+    }
+
+    internal static AtomicJsonLoadResult<T> LoadWithStatus<T>(
+        string filePath,
+        JsonSerializerOptions options,
+        Func<T, bool>? isValid = null)
     {
         var normalizedPath = Path.GetFullPath(filePath);
         lock (GetPathLock(normalizedPath))
@@ -24,17 +43,32 @@ internal static class AtomicJsonFileStore
             using var mutex = TryCreateAcquiredMutex(normalizedPath);
             if (mutex is null)
             {
-                return default;
+                return new AtomicJsonLoadResult<T>(AtomicJsonLoadStatus.Unavailable);
             }
 
             try
             {
                 ScavengeStaleTemporaryFiles(normalizedPath);
-                return TryLoad<T>(normalizedPath, options, out var primary)
-                    ? primary
-                    : TryLoad<T>(GetBackupPath(normalizedPath), options, out var backup)
-                        ? backup
-                        : default;
+                var primary = TryLoad<T>(normalizedPath, options, isValid);
+                if (primary.Status == AtomicJsonLoadStatus.Loaded)
+                {
+                    return primary;
+                }
+
+                var backup = TryLoad<T>(GetBackupPath(normalizedPath), options, isValid);
+                if (backup.Status == AtomicJsonLoadStatus.Loaded)
+                {
+                    return backup;
+                }
+
+                var status = primary.Status == AtomicJsonLoadStatus.Unavailable
+                    || backup.Status == AtomicJsonLoadStatus.Unavailable
+                        ? AtomicJsonLoadStatus.Unavailable
+                        : primary.Status == AtomicJsonLoadStatus.Invalid
+                            || backup.Status == AtomicJsonLoadStatus.Invalid
+                                ? AtomicJsonLoadStatus.Invalid
+                                : AtomicJsonLoadStatus.Missing;
+                return new AtomicJsonLoadResult<T>(status);
             }
             finally
             {
@@ -155,25 +189,31 @@ internal static class AtomicJsonFileStore
         }
     }
 
-    private static bool TryLoad<T>(string filePath, JsonSerializerOptions options, out T? value)
+    private static AtomicJsonLoadResult<T> TryLoad<T>(
+        string filePath,
+        JsonSerializerOptions options,
+        Func<T, bool>? isValid)
     {
         for (var attempt = 0; attempt < ReadAttempts; attempt++)
         {
             try
             {
-                if (!File.Exists(filePath))
-                {
-                    value = default;
-                    return false;
-                }
-
-                value = JsonSerializer.Deserialize<T>(File.ReadAllText(filePath), options);
-                return value is not null;
+                var value = JsonSerializer.Deserialize<T>(File.ReadAllText(filePath), options);
+                return value is not null && (isValid?.Invoke(value) ?? true)
+                    ? new AtomicJsonLoadResult<T>(AtomicJsonLoadStatus.Loaded, value)
+                    : new AtomicJsonLoadResult<T>(AtomicJsonLoadStatus.Invalid);
+            }
+            catch (FileNotFoundException)
+            {
+                return new AtomicJsonLoadResult<T>(AtomicJsonLoadStatus.Missing);
+            }
+            catch (DirectoryNotFoundException)
+            {
+                return new AtomicJsonLoadResult<T>(AtomicJsonLoadStatus.Missing);
             }
             catch (JsonException)
             {
-                value = default;
-                return false;
+                return new AtomicJsonLoadResult<T>(AtomicJsonLoadStatus.Invalid);
             }
             catch (IOException) when (attempt < ReadAttempts - 1)
             {
@@ -185,18 +225,15 @@ internal static class AtomicJsonFileStore
             }
             catch (IOException)
             {
-                value = default;
-                return false;
+                return new AtomicJsonLoadResult<T>(AtomicJsonLoadStatus.Unavailable);
             }
             catch (UnauthorizedAccessException)
             {
-                value = default;
-                return false;
+                return new AtomicJsonLoadResult<T>(AtomicJsonLoadStatus.Unavailable);
             }
         }
 
-        value = default;
-        return false;
+        return new AtomicJsonLoadResult<T>(AtomicJsonLoadStatus.Unavailable);
     }
 
     private static void Commit(string filePath, string json)

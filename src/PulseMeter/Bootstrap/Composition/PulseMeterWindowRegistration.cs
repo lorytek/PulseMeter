@@ -44,6 +44,8 @@ internal static class PulseMeterWindowRegistration
             var navigationRail = sp.GetRequiredService<NavigationRailViewModel>();
             navigationRail.ApplyVisibility(appSettings?.DashboardVisibility);
             navigationRail.ApplyPanelState(appSettings?.IsNavigationPanelExpanded ?? true);
+            var usageTrend = sp.GetRequiredService<UsageTrendSectionViewModel>();
+            usageTrend.RestoreRecoveryWatches(appSettings?.RecoveryWatches);
 
             return new PulseMeterWindowViewModel(
                 sp.GetRequiredService<IUsageService>(),
@@ -55,7 +57,7 @@ internal static class PulseMeterWindowRegistration
                 expandedHeader: sp.GetRequiredService<ExpandedHeaderViewModel>(),
                 navigationRail: navigationRail,
                 rateLimits: sp.GetRequiredService<RateLimitsSectionViewModel>(),
-                usageTrend: sp.GetRequiredService<UsageTrendSectionViewModel>(),
+                usageTrend: usageTrend,
                 rateLimitsDaily: sp.GetRequiredService<RateLimitsDailySectionViewModel>(),
                 runwayForecast: sp.GetRequiredService<RunwayForecastSectionViewModel>(),
                 needsAttention: sp.GetRequiredService<NeedsAttentionSectionViewModel>(),
@@ -66,7 +68,9 @@ internal static class PulseMeterWindowRegistration
                 dailyUsage: sp.GetRequiredService<DailyUsageSectionViewModel>(),
                 usageSignalsTracker: sp.GetRequiredService<IUsageSignalsTracker>(),
                 budgetAlertTracker: sp.GetRequiredService<IBudgetAlertTracker>(),
-                selectedLimitKey: appSettings?.SelectedRateLimitKey);
+                selectedLimitKey: appSettings?.SelectedRateLimitKey,
+                autoShowWhenCodexFocused: appSettings?.AutoShowWhenCodexFocused ?? true,
+                autoHideWhenFocusLeaves: appSettings?.AutoHideWhenFocusLeaves ?? false);
         });
 
         services.AddSingleton(sp => new PulseMeterWindow

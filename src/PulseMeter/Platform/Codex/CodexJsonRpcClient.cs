@@ -3,6 +3,8 @@ using System.IO;
 using System.Text.Json.Serialization;
 using System.Text.Json;
 
+using PulseMeter.Platform.Diagnostics;
+
 namespace PulseMeter.Platform.Codex;
 
 public interface IJsonRpcClient : IAsyncDisposable
@@ -170,7 +172,17 @@ public sealed class CodexJsonRpcClient : IJsonRpcClient
                     continue;
                 }
 
-                DispatchLine(line);
+                try
+                {
+                    DispatchLine(line);
+                }
+                catch (Exception exception) when (exception is JsonException or InvalidOperationException)
+                {
+                    // The protocol is newline-delimited, so one malformed message does not
+                    // corrupt the following messages. Keep the transport alive and let any
+                    // request associated with the bad line expire through its own timeout.
+                    PrivacySafeDiagnostics.WriteFailure("ignored malformed JSON-RPC message", exception);
+                }
             }
         }
         catch (OperationCanceledException) when (_readLoopCts.IsCancellationRequested)
@@ -186,6 +198,10 @@ public sealed class CodexJsonRpcClient : IJsonRpcClient
     {
         using var document = JsonDocument.Parse(line);
         var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
 
         if (root.TryGetProperty("id", out var idProperty) && idProperty.TryGetInt32(out var id))
         {
@@ -201,18 +217,43 @@ public sealed class CodexJsonRpcClient : IJsonRpcClient
                 }
                 else
                 {
-                    pending.TrySetResult(default);
+                    pending.TrySetException(new JsonRpcException(
+                        null,
+                        "Local app-server returned an incomplete JSON-RPC response."));
                 }
             }
 
             return;
         }
 
-        if (root.TryGetProperty("method", out var methodProperty))
+        if (root.TryGetProperty("method", out var methodProperty)
+            && methodProperty.ValueKind == JsonValueKind.String)
         {
-            var method = methodProperty.GetString() ?? string.Empty;
+            var method = methodProperty.GetString();
+            if (string.IsNullOrWhiteSpace(method))
+            {
+                return;
+            }
+
             var parameters = root.TryGetProperty("params", out var paramProperty) ? paramProperty.Clone() : default;
-            NotificationReceived?.Invoke(this, new JsonRpcNotificationEventArgs(method, parameters));
+            var handlers = NotificationReceived;
+            if (handlers is null)
+            {
+                return;
+            }
+
+            var args = new JsonRpcNotificationEventArgs(method, parameters);
+            foreach (EventHandler<JsonRpcNotificationEventArgs> handler in handlers.GetInvocationList())
+            {
+                try
+                {
+                    handler(this, args);
+                }
+                catch (Exception exception)
+                {
+                    PrivacySafeDiagnostics.WriteFailure("JSON-RPC notification handler failed", exception);
+                }
+            }
         }
     }
 
@@ -228,7 +269,8 @@ public sealed class CodexJsonRpcClient : IJsonRpcClient
                 code = parsedCode;
             }
 
-            if (error.TryGetProperty("message", out var messageProperty))
+            if (error.TryGetProperty("message", out var messageProperty)
+                && messageProperty.ValueKind == JsonValueKind.String)
             {
                 message = messageProperty.GetString();
             }

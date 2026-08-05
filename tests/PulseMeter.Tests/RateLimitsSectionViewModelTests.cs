@@ -1,5 +1,6 @@
 namespace PulseMeter.Tests;
 
+[Collection(UsageTrendWpfCollection.Name)]
 public sealed class RateLimitsSectionViewModelTests
 {
     [Fact]
@@ -70,7 +71,7 @@ public sealed class RateLimitsSectionViewModelTests
                     TimeSpan.FromMinutes(10),
                     "Runway: about 10m at current pace",
                     "Projected to run out before reset",
-                    "At the current pace, 5h Window may run out in about 10m before the 5h reset.",
+                    "At the current pace, 5h Window may reach the limit in about 10m. The 5h reset comes later.",
                     "#F97316")
             ]
         });
@@ -114,6 +115,84 @@ public sealed class RateLimitsSectionViewModelTests
         Assert.Equal(1, viewModel.SelectedQuotaColumnCount);
         Assert.Equal("Warning", viewModel.SelectedQuotaRows[0].StatusText);
         Assert.Equal("Use is above pace", viewModel.SelectedQuotaRows[0].PaceText);
+    }
+
+    [Fact]
+    public void BoundTrackSelector_DoesNotPublishNullSelectionDuringBucketRefresh()
+    {
+        Exception? threadFailure = null;
+        var thread = new Thread(() =>
+        {
+            System.Windows.Window? window = null;
+            try
+            {
+                var now = new DateTimeOffset(2026, 7, 6, 20, 0, 0, TimeSpan.Zero);
+                var viewModel = new RateLimitsSectionViewModel(new RateLimitsPresenter());
+                viewModel.ApplyBuckets(
+                    [
+                        Bucket("codex", "General", 10_080, 30),
+                        Bucket("other", "Other", 10_080, 40)
+                    ],
+                    now);
+                viewModel.SelectedLimitOption = viewModel.LimitOptions.Single(option => option.Key == "other");
+
+                var section = new PulseMeter.Slices.RateLimits.UI.RateLimitsSection
+                {
+                    DataContext = viewModel
+                };
+                window = new System.Windows.Window
+                {
+                    Content = section,
+                    Width = 900,
+                    Height = 600,
+                    Left = -20_000,
+                    Top = -20_000,
+                    ShowActivated = false,
+                    ShowInTaskbar = false,
+                    WindowStyle = System.Windows.WindowStyle.None
+                };
+                window.Show();
+                section.UpdateLayout();
+
+                var selections = new List<RateLimitOption?>();
+                viewModel.PropertyChanged += (_, args) =>
+                {
+                    if (args.PropertyName == nameof(RateLimitsSectionViewModel.SelectedLimitOption))
+                    {
+                        selections.Add(viewModel.SelectedLimitOption);
+                    }
+                };
+
+                viewModel.ApplyBuckets(
+                    [
+                        Bucket("codex", "General", 10_080, 25),
+                        Bucket("other", "Other", 10_080, 35)
+                    ],
+                    now.AddMinutes(1));
+
+                Assert.NotEmpty(selections);
+                Assert.DoesNotContain(null, selections);
+                Assert.Equal("other", viewModel.SelectedLimitOption?.Key);
+                Assert.Equal("65%", Assert.Single(viewModel.SelectedQuotaRows).RingPercentText);
+            }
+            catch (Exception exception)
+            {
+                threadFailure = exception;
+            }
+            finally
+            {
+                window?.Close();
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.InvokeShutdown();
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+
+        Assert.True(thread.Join(TestTimeouts.UiThread), "The bound rate-limit selector refresh test did not finish.");
+        if (threadFailure is not null)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(threadFailure).Throw();
+        }
     }
 
     private static RateLimitBucket Bucket(string limitId, string groupLabel, int windowMinutes, double usedPercent)

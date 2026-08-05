@@ -11,12 +11,16 @@ public interface IUsageTrendPresenter
         DateTimeOffset now,
         bool showProjection,
         bool showRange,
-        UsageTrendForecastReference? referenceForecast = null);
+        UsageTrendForecastReference? referenceForecast = null,
+        int? selectedBlockDurationMinutes = null,
+        IReadOnlyList<LimitRunwayForecast>? liveForecasts = null);
 }
 
 public sealed class UsageTrendPresenter : IUsageTrendPresenter
 {
     private const int ProjectionPointCount = 13;
+    private const int DailyBaselineHours = 24;
+    private const int DailyBaselinePriorHours = DailyBaselineHours - 1;
     private const double UnfavorableVarianceThresholdPoints = 1;
 
     public UsageTrendChartModel? BuildChart(
@@ -25,7 +29,9 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
         DateTimeOffset now,
         bool showProjection,
         bool showRange,
-        UsageTrendForecastReference? referenceForecast = null)
+        UsageTrendForecastReference? referenceForecast = null,
+        int? selectedBlockDurationMinutes = null,
+        IReadOnlyList<LimitRunwayForecast>? liveForecasts = null)
     {
         ArgumentNullException.ThrowIfNull(trend);
 
@@ -95,6 +101,7 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
         }
         var summary = BuildRunwaySummary(
             actual,
+            measurementGaps,
             last,
             trend.WindowDurationMins,
             forecast,
@@ -105,6 +112,15 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
             forecastWindowStart,
             forecastWindowEnd,
             forecastLimitAt);
+        var blockAdvisor = BuildBlockAdvisor(
+            trend.WindowDurationMins,
+            forecast,
+            now,
+            trend.ResetsAtUtc,
+            selectedBlockDurationMinutes);
+        IReadOnlyList<LimitRunwayForecast> forecastsForConstraint = liveForecasts
+            ?? (forecast is null ? Array.Empty<LimitRunwayForecast>() : [forecast]);
+        var nextConstraint = BuildNextConstraint(forecastsForConstraint, now);
 
         var projectedAtReset = projected.LastOrDefault()?.UsedPercent;
         var projectionSummary = projectedAtReset is double projectedPercent
@@ -166,9 +182,283 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
             ReferenceProjectedPoints = referenceProjected,
             UnfavorableVarianceSegments = unfavorableVariance,
             MeasurementGaps = measurementGaps,
-            ReferenceForecastCapturedAt = referenceProjected.Length > 1 ? referenceForecast?.CapturedAt : null
+            ReferenceForecastCapturedAt = referenceProjected.Length > 1 ? referenceForecast?.CapturedAt : null,
+            BlockAdvisor = blockAdvisor,
+            NextConstraint = nextConstraint
         };
     }
+
+    private static UsageTrendNextConstraint BuildNextConstraint(
+        IReadOnlyList<LimitRunwayForecast> forecasts,
+        DateTimeOffset now)
+    {
+        var activeCandidates = forecasts
+            .Where(candidate => candidate.WindowDurationMins is 300 or 10_080
+                && candidate.ResetsAtUtc > now)
+            .ToArray();
+        if (activeCandidates.Length == 0)
+        {
+            return BuildStillLearningConstraint();
+        }
+
+        if (activeCandidates.Any(candidate => candidate.IsMock)
+            && activeCandidates.Any(candidate => !candidate.IsMock))
+        {
+            return BuildStillLearningConstraint();
+        }
+        var exhausted = activeCandidates
+            .Where(candidate => candidate.State == LimitRunwayForecastState.Exhausted || candidate.UsedPercent >= 100)
+            .OrderBy(candidate => candidate.WindowDurationMins)
+            .ThenBy(candidate => candidate.BucketId, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        if (exhausted is not null)
+        {
+            return BuildConstraint(
+                exhausted,
+                $"Blocked now · resets {FormatConstraintTime(exhausted.ResetsAtUtc)}");
+        }
+
+        var activeByDuration = new Dictionary<int, LimitRunwayForecast>();
+        foreach (var duration in new[] { 300, 10_080 })
+        {
+            var matching = activeCandidates
+                .Where(candidate => candidate.WindowDurationMins == duration)
+                .OrderByDescending(candidate => candidate.ResetsAtUtc)
+                .ThenBy(candidate => candidate.BucketId, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (matching.Length > 1)
+            {
+                return BuildStillLearningConstraint();
+            }
+
+            if (matching.Length == 1)
+            {
+                activeByDuration[duration] = matching[0];
+            }
+        }
+
+        var active = activeByDuration.Values.ToArray();
+        if (active.Any(candidate => (!candidate.IsMock && candidate.Confidence == LimitRunwayForecastConfidence.Low)
+            || candidate.State is LimitRunwayForecastState.Learning or LimitRunwayForecastState.Stable))
+        {
+            return BuildStillLearningConstraint();
+        }
+
+        var atRisk = active
+            .Select(candidate => (Forecast: candidate, Range: ResolveConstraintRange(candidate, now)))
+            .Where(candidate => candidate.Forecast.State == LimitRunwayForecastState.AtRisk)
+            .ToArray();
+        if (atRisk.Any(candidate => candidate.Range is null))
+        {
+            return BuildStillLearningConstraint();
+        }
+
+        if (atRisk.Length == 0)
+        {
+            var detail = active.Length == 1
+                ? $"The active {FormatConstraintLimit(active[0].WindowDurationMins)} is on track until reset."
+                : "Both active limits are on track until reset.";
+            return new UsageTrendNextConstraint(
+                "Next constraint · No blocker forecast",
+                detail,
+                $"Next constraint: no blocker forecast. {detail} Forecasts use current pace, not task cost or project attribution.");
+        }
+
+        if (atRisk.Length == 1)
+        {
+            var candidate = atRisk[0];
+            return BuildConstraint(candidate.Forecast, BuildLikelyFirstDetail(candidate.Forecast, candidate.Range!.Value));
+        }
+
+        var first = atRisk[0];
+        var second = atRisk[1];
+        if (RangesOverlap(first.Range!.Value, second.Range!.Value))
+        {
+            return new UsageTrendNextConstraint(
+                "Next constraint · Too close to call",
+                "The 5h and 7d forecast ranges overlap.",
+                "Next constraint: too close to call. The active 5h and 7d forecast ranges overlap. Forecasts use current pace, not task cost or project attribution.");
+        }
+
+        var winner = first.Range.Value.End < second.Range.Value.Start ? first : second;
+        return BuildConstraint(winner.Forecast, BuildLikelyFirstDetail(winner.Forecast, winner.Range!.Value));
+    }
+
+    private static UsageTrendNextConstraint BuildStillLearningConstraint() => new(
+        "Next constraint · Still learning",
+        "Need at least one reliable active 5h or 7d forecast.",
+        "Next constraint: still learning. At least one reliable active 5h or 7d forecast is needed. Forecasts use current pace, not task cost or project attribution.");
+
+    private static UsageTrendNextConstraint BuildConstraint(LimitRunwayForecast forecast, string detail) => new(
+        $"Next constraint · {FormatConstraintLimit(forecast.WindowDurationMins)}",
+        detail,
+        $"Next constraint: {FormatConstraintLimit(forecast.WindowDurationMins)}. {detail} Forecasts use current pace, not task cost or project attribution.");
+
+    private static (DateTimeOffset Start, DateTimeOffset End)? ResolveConstraintRange(
+        LimitRunwayForecast forecast,
+        DateTimeOffset now)
+    {
+        var first = forecast.EarliestExhaustsAtUtc ?? forecast.ExhaustsAtUtc;
+        var second = forecast.LatestExhaustsAtUtc ?? forecast.ExhaustsAtUtc;
+        if (first is not DateTimeOffset earliest
+            || second is not DateTimeOffset latest
+            || earliest <= now
+            || latest <= now
+            || earliest > forecast.ResetsAtUtc
+            || latest > forecast.ResetsAtUtc)
+        {
+            return null;
+        }
+
+        return earliest <= latest ? (earliest, latest) : (latest, earliest);
+    }
+
+    private static bool RangesOverlap(
+        (DateTimeOffset Start, DateTimeOffset End) first,
+        (DateTimeOffset Start, DateTimeOffset End) second) =>
+        first.Start <= second.End && second.Start <= first.End;
+
+    private static string BuildLikelyFirstDetail(
+        LimitRunwayForecast forecast,
+        (DateTimeOffset Start, DateTimeOffset End) range)
+    {
+        var around = forecast.ExhaustsAtUtc is DateTimeOffset central
+            && central >= range.Start
+            && central <= range.End
+            ? central
+            : range.Start.AddTicks((range.End - range.Start).Ticks / 2);
+        return $"Likely first around {FormatConstraintTime(around)} · {forecast.Confidence} confidence";
+    }
+
+    private static string FormatConstraintLimit(int? durationMinutes) => durationMinutes switch
+    {
+        300 => "5h limit",
+        10_080 => "7d limit",
+        _ => "limit"
+    };
+
+    private static string FormatConstraintTime(DateTimeOffset value) => FormatLocalDateTime(value);
+
+    private static UsageTrendBlockAdvisor BuildBlockAdvisor(
+        int? windowDurationMins,
+        LimitRunwayForecast? forecast,
+        DateTimeOffset now,
+        DateTimeOffset resetAt,
+        int? selectedDurationMinutes)
+    {
+        var durations = windowDurationMins >= 10_080
+            ? new[] { 60, 120, 240, 480 }
+            : new[] { 15, 30, 60, 120 };
+        var selectedMinutes = durations.Contains(selectedDurationMinutes ?? -1)
+            ? selectedDurationMinutes!.Value
+            : durations[0];
+        var selectedEndsAt = now.AddMinutes(selectedMinutes);
+        var durationText = FormatBlockDurationLabel(selectedMinutes);
+        var confidenceText = forecast is null
+            ? "No forecast confidence is available."
+            : BuildAdvisorConfidenceText(forecast);
+
+        string state;
+        string detail;
+        UsageTrendBlockAdvisorStatus status;
+        if (forecast?.State == LimitRunwayForecastState.Exhausted || forecast?.UsedPercent >= 100)
+        {
+            state = "Wait for reset";
+            status = UsageTrendBlockAdvisorStatus.WaitForReset;
+            detail = $"Capacity is exhausted; it resets {FormatLocalDateTime(resetAt)}. Tests the current pace, not task cost.";
+        }
+        else if (selectedEndsAt >= resetAt)
+        {
+            state = "May be interrupted";
+            status = UsageTrendBlockAdvisorStatus.MayBeInterrupted;
+            detail = $"This block reaches the reset at {FormatLocalDateTime(resetAt)}, so capacity changes during it. Tests the current pace, not task cost.";
+        }
+        else if (forecast is null
+            || forecast.State is LimitRunwayForecastState.Learning or LimitRunwayForecastState.Stable
+            || (forecast.Confidence == LimitRunwayForecastConfidence.Low && !forecast.IsMock))
+        {
+            state = "Still learning";
+            status = UsageTrendBlockAdvisorStatus.StillLearning;
+            detail = forecast is { Confidence: LimitRunwayForecastConfidence.Low, IsMock: false }
+                ? $"Not enough evidence to plan this {durationText} block yet. Tests the current pace, not task cost."
+                : $"Need more samples before estimating whether {durationText} fits. Tests the current pace, not task cost.";
+        }
+        else if (forecast.State == LimitRunwayForecastState.OnTrack)
+        {
+            state = "Likely fits";
+            status = UsageTrendBlockAdvisorStatus.LikelyFits;
+            detail = $"Current pace is on track to stay below the limit until reset {FormatLocalDateTime(resetAt)}. {confidenceText} Tests the current pace, not task cost.";
+        }
+        else
+        {
+            var earliest = forecast.EarliestExhaustsAtUtc ?? forecast.ExhaustsAtUtc;
+            var latest = forecast.LatestExhaustsAtUtc ?? forecast.ExhaustsAtUtc;
+            if (earliest is DateTimeOffset first && latest is DateTimeOffset second)
+            {
+                var earliestAt = first <= second ? first : second;
+                var latestAt = first <= second ? second : first;
+                if (selectedEndsAt > latestAt)
+                {
+                    state = "Unlikely to fit";
+                    status = UsageTrendBlockAdvisorStatus.UnlikelyToFit;
+                    detail = $"At the current pace, capacity is expected to run short by {FormatLocalDateTime(latestAt)}. {confidenceText} Tests the current pace, not task cost.";
+                }
+                else if (forecast.Confidence == LimitRunwayForecastConfidence.Low || selectedEndsAt >= earliestAt)
+                {
+                    state = "May be interrupted";
+                    status = UsageTrendBlockAdvisorStatus.MayBeInterrupted;
+                    detail = $"Capacity may run short between {FormatDateTimeRange(earliestAt, latestAt)}. {confidenceText} Tests the current pace, not task cost.";
+                }
+                else
+                {
+                    state = "Likely fits";
+                    status = UsageTrendBlockAdvisorStatus.LikelyFits;
+                    detail = $"This block ends before the earliest expected limit time ({FormatLocalDateTime(earliestAt)}). {confidenceText} Tests the current pace, not task cost.";
+                }
+            }
+            else
+            {
+                state = "Still learning";
+                status = UsageTrendBlockAdvisorStatus.StillLearning;
+                detail = $"No reliable limit time is available for {durationText}. Tests the current pace, not task cost.";
+            }
+        }
+
+        var options = durations
+            .Select(minutes =>
+            {
+                var label = FormatBlockDurationLabel(minutes);
+                return new UsageTrendBlockOption(
+                    minutes,
+                    label,
+                    minutes == selectedMinutes,
+                    $"Plan a {label} coding block",
+                    $"Checks whether a {label} block fits the selected limit at the current pace, not task cost.");
+            })
+            .ToArray();
+        return new UsageTrendBlockAdvisor(
+            state,
+            detail,
+            $"Plan your next block: {durationText}. {state}. {detail}",
+            options,
+            status);
+    }
+
+    private static string BuildAdvisorConfidenceText(LimitRunwayForecast forecast) =>
+        forecast.Confidence switch
+        {
+            LimitRunwayForecastConfidence.Low => "Low-confidence forecast, so it is not a safe prediction.",
+            LimitRunwayForecastConfidence.Medium => "Medium-confidence forecast.",
+            _ => "High-confidence forecast."
+        };
+
+    private static string FormatBlockDurationLabel(int minutes) => minutes switch
+    {
+        60 => "1h",
+        480 => "1 day (8h)",
+        _ => FormatDurationCompact(TimeSpan.FromMinutes(minutes))
+    };
 
     private static UsageTrendPoint[] BuildElapsedReferenceProjection(
         UsageTrendForecastReference? reference,
@@ -362,12 +652,21 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
             .Where(point => point.Timestamp >= last.Timestamp && point.Timestamp <= end)
             .OrderBy(point => point.Timestamp)
             .Select(point => new UsageTrendPoint(point.Timestamp, Math.Clamp(point.ExpectedUsedPercent, 0, 100)))
-            .ToArray()
+            .ToList()
             ?? [];
 
-        if (points.Length == 0 || points[0].Timestamp <= last.Timestamp)
+        if (forecast?.ExhaustsAtUtc is DateTimeOffset exhaustsAt
+            && exhaustsAt > last.Timestamp
+            && exhaustsAt <= end)
         {
-            return points;
+            points.RemoveAll(point => point.Timestamp == exhaustsAt);
+            points.Add(new UsageTrendPoint(exhaustsAt, 100));
+            points.Sort(static (left, right) => left.Timestamp.CompareTo(right.Timestamp));
+        }
+
+        if (points.Count == 0 || points[0].Timestamp <= last.Timestamp)
+        {
+            return points.ToArray();
         }
 
         return [last, .. points];
@@ -464,6 +763,7 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
 
     private static UsageTrendRunwaySummary BuildRunwaySummary(
         IReadOnlyList<UsageTrendPoint> actual,
+        IReadOnlyList<UsageTrendGap> measurementGaps,
         UsageTrendPoint last,
         int? windowDurationMins,
         LimitRunwayForecast? forecast,
@@ -517,7 +817,12 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
 
         var currentPaceText = FormatPace(pacePerHour);
         var sustainablePaceText = FormatPace(sustainablePacePerHour);
-        var momentum = BuildUsageMomentum(actual, windowDurationMins);
+        var momentum = BuildUsageMomentum(
+            actual,
+            windowDurationMins,
+            forecast?.ObservationDuration,
+            forecast?.SampleCount,
+            measurementGaps);
         var paceRatio = pacePerHour is double currentPace
             && currentPace > 0
             && sustainablePacePerHour is double sustainablePace
@@ -580,7 +885,7 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
             headline,
             forecastLead,
             forecastWhen,
-            BuildConfidenceText(forecast),
+            BuildConfidenceText(forecast, momentum),
             $"{Math.Clamp(last.UsedPercent, 0, 100):0}%",
             momentum,
             currentPaceText,
@@ -593,54 +898,108 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
 
     internal static UsageMomentumSummary BuildUsageMomentum(
         IReadOnlyList<UsageTrendPoint> actual,
-        int? windowDurationMins)
+        int? windowDurationMins,
+        TimeSpan? observationDuration = null,
+        int? sampleCount = null,
+        IReadOnlyList<UsageTrendGap>? measurementGaps = null)
     {
-        if (actual.Count < 2)
+        var gaps = measurementGaps ?? Array.Empty<UsageTrendGap>();
+        var isDailyBaseline = windowDurationMins >= 24 * 60;
+        var evidenceDuration = isDailyBaseline && measurementGaps is not null
+            ? CalculateMeasuredDuration(actual, gaps)
+            : ResolveMomentumEvidenceDuration(actual, observationDuration);
+        var evidenceSamples = isDailyBaseline && measurementGaps is not null
+            ? actual.Count
+            : sampleCount is > 0 ? sampleCount.Value : actual.Count;
+        var baselineTarget = ResolveMomentumBaselineTarget(windowDurationMins);
+        if (actual.Count < 2 || evidenceDuration < baselineTarget)
         {
-            return LearningMomentum(windowDurationMins);
+            return LearningMomentum(windowDurationMins, evidenceDuration, evidenceSamples);
         }
 
-        return windowDurationMins >= 24 * 60
-            ? BuildDailyMedianMomentum(actual)
-            : BuildWindowMedianMomentum(actual, windowDurationMins);
+        return isDailyBaseline
+            ? BuildDailyMedianMomentum(actual, gaps, evidenceDuration, evidenceSamples)
+            : BuildWindowMedianMomentum(actual, gaps, windowDurationMins, evidenceDuration, evidenceSamples);
     }
 
     private static UsageMomentumSummary BuildWindowMedianMomentum(
         IReadOnlyList<UsageTrendPoint> actual,
-        int? windowDurationMins)
+        IReadOnlyList<UsageTrendGap> measurementGaps,
+        int? windowDurationMins,
+        TimeSpan evidenceDuration,
+        int evidenceSamples)
     {
         var latest = actual[^1].Timestamp;
-        var currentRate = UsageRateBetween(actual, latest.AddHours(-1), latest);
+        var currentRate = UsageRateBetween(actual, measurementGaps, latest.AddHours(-1), latest);
         var hours = Math.Max(2, (int)Math.Round((windowDurationMins ?? 300) / 60d));
         var historicalRates = Enumerable.Range(1, Math.Max(1, hours - 1))
-            .Select(offset => UsageRateBetween(actual, latest.AddHours(-(offset + 1)), latest.AddHours(-offset)))
+            .Select(offset => UsageRateBetween(
+                actual,
+                measurementGaps,
+                latest.AddHours(-(offset + 1)),
+                latest.AddHours(-offset)))
             .Where(rate => rate is double value && double.IsFinite(value))
             .Select(rate => rate!.Value)
             .ToArray();
 
-        return currentRate is double current && historicalRates.Length >= 2
+        return currentRate is double current && historicalRates.Length >= hours - 1
             ? CreateMomentum(current, Median(historicalRates), "vs 5h window median")
-            : LearningMomentum(windowDurationMins);
+            : LearningMomentum(windowDurationMins, evidenceDuration, evidenceSamples);
     }
 
-    private static UsageMomentumSummary BuildDailyMedianMomentum(IReadOnlyList<UsageTrendPoint> actual)
+    private static UsageMomentumSummary BuildDailyMedianMomentum(
+        IReadOnlyList<UsageTrendPoint> actual,
+        IReadOnlyList<UsageTrendGap> measurementGaps,
+        TimeSpan evidenceDuration,
+        int evidenceSamples)
     {
         var latest = actual[^1].Timestamp;
-        var currentDayStart = StartOfLocalDay(latest);
-        var currentRate = UsageRateBetween(actual, currentDayStart, latest);
-        var completedDayRates = Enumerable.Range(1, 6)
-            .Select(offset =>
-            {
-                var end = currentDayStart.AddDays(-(offset - 1));
-                return UsageRateBetween(actual, end.AddDays(-1), end);
-            })
+        var currentRate = UsageRateBetween(actual, measurementGaps, latest.AddHours(-1), latest);
+        var availablePriorHours = Math.Max(
+            0,
+            Math.Min(7 * 24 - 1, (int)Math.Floor((latest - actual[0].Timestamp).TotalHours) - 1));
+        var priorDayHourlyRates = Enumerable.Range(1, availablePriorHours)
+            .Select(offset => UsageRateBetween(
+                actual,
+                measurementGaps,
+                latest.AddHours(-(offset + 1)),
+                latest.AddHours(-offset)))
             .Where(rate => rate is double value && double.IsFinite(value))
             .Select(rate => rate!.Value)
+            .Take(DailyBaselinePriorHours)
             .ToArray();
 
-        return currentRate is double current && completedDayRates.Length >= 2
-            ? CreateMomentum(current, Median(completedDayRates), "vs median day")
-            : LearningMomentum(10_080);
+        if (currentRate is double current && priorDayHourlyRates.Length == DailyBaselinePriorHours)
+        {
+            return CreateMomentum(current, Median(priorDayHourlyRates), "vs median day");
+        }
+
+        if (currentRate is null && priorDayHourlyRates.Length == DailyBaselinePriorHours)
+        {
+            return WaitingForCurrentMomentum(evidenceSamples);
+        }
+
+        var comparableEvidence = evidenceDuration >= TimeSpan.FromHours(24)
+            ? TimeSpan.FromHours(priorDayHourlyRates.Length)
+            : evidenceDuration;
+        return LearningMomentum(10_080, comparableEvidence, evidenceSamples);
+    }
+
+    private static UsageMomentumSummary WaitingForCurrentMomentum(int evidenceSamples)
+    {
+        var samplesText = evidenceSamples == 1
+            ? "1 sample"
+            : $"{Math.Max(0, evidenceSamples)} samples";
+        return new UsageMomentumSummary(
+            "Baseline ready",
+            "Need a measured current hour",
+            $"24h usable now · {samplesText}",
+            0)
+        {
+            IsLearning = true,
+            BaselineProgress = 1,
+            AccessibleSummary = $"Baseline ready. A measured current hour is needed before momentum can be calculated. 24 hours currently usable from {samplesText}."
+        };
     }
 
     private static UsageMomentumSummary CreateMomentum(double currentRate, double medianRate, string baselineText)
@@ -650,30 +1009,130 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
         var scale = Math.Max(0.25, Math.Abs(medianRate));
         var gaugeValue = Math.Clamp(difference / scale, -1, 1);
 
+        string valueText;
+        string stateText;
         if (Math.Abs(difference) <= steadyThreshold)
         {
-            return new UsageMomentumSummary("→ 0%/h", "pace steady", baselineText, 0);
+            valueText = "→ 0%/h";
+            stateText = "pace steady";
+            gaugeValue = 0;
+        }
+        else if (difference > 0)
+        {
+            valueText = $"↗ +{difference:0.#}%/h";
+            stateText = "usage accelerating";
+        }
+        else
+        {
+            valueText = $"↘ -{Math.Abs(difference):0.#}%/h";
+            stateText = "usage slowing";
         }
 
-        return difference > 0
-            ? new UsageMomentumSummary($"↗ +{difference:0.#}%/h", "usage accelerating", baselineText, gaugeValue)
-            : new UsageMomentumSummary($"↘ -{Math.Abs(difference):0.#}%/h", "usage slowing", baselineText, gaugeValue);
+        return new UsageMomentumSummary(valueText, stateText, baselineText, gaugeValue)
+        {
+            IsLearning = false,
+            BaselineProgress = 1,
+            AccessibleSummary = $"Usage momentum: {valueText}; {stateText}; {baselineText}."
+        };
     }
 
-    private static UsageMomentumSummary LearningMomentum(int? windowDurationMins) =>
-        new(
-            "—",
-            "learning baseline",
-            windowDurationMins >= 24 * 60 ? "vs median day" : "vs 5h window median",
-            0);
+    private static UsageMomentumSummary LearningMomentum(
+        int? windowDurationMins,
+        TimeSpan evidenceDuration,
+        int evidenceSamples)
+    {
+        var target = ResolveMomentumBaselineTarget(windowDurationMins);
+        var collected = evidenceDuration < TimeSpan.Zero
+            ? TimeSpan.Zero
+            : evidenceDuration > target
+                ? target
+                : evidenceDuration;
+        var collectedText = FormatBaselineDuration(collected);
+        var remaining = target - collected;
+        var requirementText = remaining > TimeSpan.Zero
+            ? $"{FormatBaselineDuration(remaining)} more data needed"
+            : "More comparable data needed";
+        var samplesText = evidenceSamples == 1
+            ? "1 sample"
+            : $"{Math.Max(0, evidenceSamples)} samples";
+        var evidenceText = $"{collectedText} usable now · {samplesText}";
+        var baselineProgress = target > TimeSpan.Zero
+            ? Math.Clamp(collected.TotalMinutes / target.TotalMinutes, 0, 1)
+            : 0;
+        var readinessText = $"{baselineProgress * 100:0}% ready";
+
+        return new UsageMomentumSummary(
+            readinessText,
+            requirementText,
+            evidenceText,
+            0)
+        {
+            IsLearning = true,
+            BaselineProgress = baselineProgress,
+            AccessibleSummary = $"Baseline progress: {readinessText}. {requirementText}. {collectedText} currently usable from {samplesText}."
+        };
+    }
+
+    private static TimeSpan ResolveMomentumBaselineTarget(int? windowDurationMins) =>
+        windowDurationMins >= 24 * 60
+            ? TimeSpan.FromHours(24)
+            : TimeSpan.FromMinutes(Math.Max(60, windowDurationMins ?? 300));
+
+    private static TimeSpan ResolveMomentumEvidenceDuration(
+        IReadOnlyList<UsageTrendPoint> actual,
+        TimeSpan? observationDuration)
+    {
+        if (observationDuration is TimeSpan explicitDuration && explicitDuration > TimeSpan.Zero)
+        {
+            return explicitDuration;
+        }
+
+        return actual.Count < 2
+            ? TimeSpan.Zero
+            : actual[^1].Timestamp - actual[0].Timestamp;
+    }
+
+    private static TimeSpan CalculateMeasuredDuration(
+        IReadOnlyList<UsageTrendPoint> actual,
+        IReadOnlyList<UsageTrendGap> measurementGaps)
+    {
+        var measuredTicks = 0L;
+        for (var index = 1; index < actual.Count; index++)
+        {
+            var start = actual[index - 1].Timestamp;
+            var end = actual[index].Timestamp;
+            if (end <= start || OverlapsMeasurementGap(measurementGaps, start, end))
+            {
+                continue;
+            }
+
+            measuredTicks += (end - start).Ticks;
+        }
+
+        return TimeSpan.FromTicks(measuredTicks);
+    }
+
+    private static string FormatBaselineDuration(TimeSpan duration)
+    {
+        if (duration <= TimeSpan.Zero)
+        {
+            return "0h";
+        }
+
+        return duration.TotalMinutes < 60
+            ? $"{Math.Max(1, Math.Round(duration.TotalMinutes)):0}m"
+            : $"{duration.TotalHours:0.#}h";
+    }
 
     private static double? UsageRateBetween(
         IReadOnlyList<UsageTrendPoint> actual,
+        IReadOnlyList<UsageTrendGap> measurementGaps,
         DateTimeOffset start,
         DateTimeOffset end)
     {
         var hours = (end - start).TotalHours;
         if (hours <= 0
+            || OverlapsMeasurementGap(measurementGaps, start, end)
             || InterpolatePointAt(actual, start) is not UsageTrendPoint startPoint
             || InterpolatePointAt(actual, end) is not UsageTrendPoint endPoint)
         {
@@ -683,11 +1142,11 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
         return Math.Max(0, endPoint.UsedPercent - startPoint.UsedPercent) / hours;
     }
 
-    private static DateTimeOffset StartOfLocalDay(DateTimeOffset timestamp)
-    {
-        var local = timestamp.ToLocalTime();
-        return new DateTimeOffset(local.Date, local.Offset);
-    }
+    private static bool OverlapsMeasurementGap(
+        IReadOnlyList<UsageTrendGap> measurementGaps,
+        DateTimeOffset start,
+        DateTimeOffset end) =>
+        measurementGaps.Any(gap => gap.StartedAt < end && gap.EndedAt > start);
 
     private static double Median(IReadOnlyList<double> values)
     {
@@ -724,7 +1183,9 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
         return result <= resetAt ? result : null;
     }
 
-    private static string BuildConfidenceText(LimitRunwayForecast? forecast)
+    private static string BuildConfidenceText(
+        LimitRunwayForecast? forecast,
+        UsageMomentumSummary momentum)
     {
         if (forecast is null)
         {
@@ -738,8 +1199,10 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
         {
             if (forecast.WindowDurationMins is >= 10_080)
             {
-                return duration < TimeSpan.FromHours(24)
-                    ? $"Building 24h baseline • {FormatEvidenceDuration(duration)} of 24h collected · {evidence}"
+                return momentum.IsLearning
+                    ? momentum.BaselineProgress >= 1
+                        ? $"Baseline ready • {momentum.StateText} · {momentum.BaselineText}"
+                        : $"Building 24h baseline • {momentum.BaselineText}"
                     : $"{forecast.Confidence} evidence • {evidence} over latest 24h";
             }
 

@@ -10,6 +10,12 @@ public interface IUsageSignalsTracker
 {
     UsageSignalsSnapshot Observe(UsageSnapshot snapshot, DateTimeOffset nowUtc);
 
+    UsageSignalsSnapshot Observe(
+        UsageSnapshot snapshot,
+        DateTimeOffset nowUtc,
+        TimeSpan expectedObservationInterval) =>
+        Observe(snapshot, nowUtc);
+
     void DismissIdleDrain();
 
     void Flush()
@@ -28,6 +34,7 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
     private static readonly TimeSpan ShortFlatSampleCheckpointInterval = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan ShortRunwayHalfLife = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan WeeklyRunwayHalfLife = TimeSpan.FromHours(6);
+    private static readonly TimeSpan RestoreRetryCooldown = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan MinimumIdleDrainObservation = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan MinimumIdleTime = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan ShortWindowRunwayWarning = TimeSpan.FromMinutes(90);
@@ -56,8 +63,8 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
     private string? _dismissedIdleDrainBucketId;
     private DateTimeOffset? _dismissedIdleDrainResetsAtUtc;
     private bool _restoreComplete;
-    private bool _restoreFailedClosed;
     private int _restoreAttempts;
+    private DateTimeOffset? _nextRestoreAttemptUtc;
     private bool _runwayStateDirty;
 
     public UsageSignalsTracker(IUserIdleTimeProvider idleTimeProvider, IRunwayObservationStateStore? runwayObservationStateStore = null)
@@ -66,7 +73,19 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
         _runwayObservationStateStore = runwayObservationStateStore;
     }
 
-    public UsageSignalsSnapshot Observe(UsageSnapshot snapshot, DateTimeOffset nowUtc)
+    public UsageSignalsSnapshot Observe(UsageSnapshot snapshot, DateTimeOffset nowUtc) =>
+        ObserveCore(snapshot, nowUtc, expectedObservationInterval: null);
+
+    public UsageSignalsSnapshot Observe(
+        UsageSnapshot snapshot,
+        DateTimeOffset nowUtc,
+        TimeSpan expectedObservationInterval) =>
+        ObserveCore(snapshot, nowUtc, expectedObservationInterval);
+
+    private UsageSignalsSnapshot ObserveCore(
+        UsageSnapshot snapshot,
+        DateTimeOffset nowUtc,
+        TimeSpan? expectedObservationInterval)
     {
         ClearExpiredIdleIncident(nowUtc, snapshot);
 
@@ -101,7 +120,18 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
                     continue;
                 }
 
-                if (AddRunwaySample(observation, current))
+                if (current.ObservedAtUtc < observation.RunwaySamples[^1].ObservedAtUtc)
+                {
+                    // A system-clock rollback makes the existing timestamps future-dated.
+                    // Rebase this window instead of presenting a forecast that cannot accept
+                    // another sample until wall time catches up.
+                    _observations[current.BucketId] = new BucketObservation(current);
+                    _runwayStateDirty = true;
+                    runwayForecasts.Add(BuildInitialForecast(current, isMock: false));
+                    continue;
+                }
+
+                if (AddRunwaySample(observation, current, expectedObservationInterval))
                 {
                     _runwayStateDirty = true;
                 }
@@ -172,7 +202,8 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
 
     private void HydrateRestoredObservations(DateTimeOffset nowUtc)
     {
-        if (_restoreComplete || _restoreFailedClosed)
+        if (_restoreComplete
+            || (_nextRestoreAttemptUtc is DateTimeOffset retryAtUtc && nowUtc < retryAtUtc))
         {
             return;
         }
@@ -185,17 +216,19 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
         }
         catch (Exception)
         {
-            RecordUnavailableRestoreAttempt();
+            RecordUnavailableRestoreAttempt(nowUtc);
             return;
         }
 
         if (loadResult.Status == RunwayObservationLoadStatus.Unavailable)
         {
-            RecordUnavailableRestoreAttempt();
+            RecordUnavailableRestoreAttempt(nowUtc);
             return;
         }
 
         _restoreComplete = true;
+        _restoreAttempts = 0;
+        _nextRestoreAttemptUtc = null;
         var state = loadResult.State;
         if (loadResult.Status != RunwayObservationLoadStatus.Loaded
             || state is null
@@ -208,6 +241,7 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
 
         foreach (var group in state.Samples.Cast<RunwayObservationSample>()
                      .GroupBy(sample => sample.BucketId, StringComparer.OrdinalIgnoreCase)
+                     .OrderByDescending(group => group.Max(sample => sample.ObservedAtUtc))
                      .Take(MaximumPersistedRunwayBuckets))
         {
             var samples = group.ToList();
@@ -220,12 +254,13 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
         }
     }
 
-    private void RecordUnavailableRestoreAttempt()
+    private void RecordUnavailableRestoreAttempt(DateTimeOffset nowUtc)
     {
         _restoreAttempts++;
         if (_restoreAttempts >= 3)
         {
-            _restoreFailedClosed = true;
+            _restoreAttempts = 0;
+            _nextRestoreAttemptUtc = nowUtc + RestoreRetryCooldown;
         }
     }
 
@@ -417,13 +452,13 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
     {
         if (_runwayObservationStateStore is null
             || !_restoreComplete
-            || _restoreFailedClosed
             || !_runwayStateDirty)
         {
             return;
         }
 
         var samples = _observations.Values
+            .OrderByDescending(observation => observation.RunwaySamples[^1].ObservedAtUtc)
             .Take(MaximumPersistedRunwayBuckets)
             .SelectMany(observation => observation.RunwaySamples)
             .Select(sample => new RunwayObservationSample(
@@ -1018,7 +1053,7 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
             timeToExhaustion,
             $"Runway: about {runway} at current pace",
             "Projected to run out before reset",
-            $"At the current pace, {current.WindowLabel} may run out in about {runway} before the {resetName} reset.",
+            $"At the current pace, {current.WindowLabel} may reach the limit in about {runway}. The {resetName} reset comes later.",
             "#F97316");
     }
 
@@ -1215,18 +1250,29 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
         {
             var previous = samples[index - 1];
             var sample = samples[index];
-            if (sample.StartsAfterMeasurementGap)
-            {
-                continue;
-            }
-
-            var exposureMinutes = (sample.ObservedAtUtc - previous.ObservedAtUtc).TotalMinutes;
+            var interval = sample.ObservedAtUtc - previous.ObservedAtUtc;
+            var exposureMinutes = interval.TotalMinutes;
             if (exposureMinutes <= 0)
             {
                 continue;
             }
 
-            var midpoint = previous.ObservedAtUtc + TimeSpan.FromTicks((sample.ObservedAtUtc - previous.ObservedAtUtc).Ticks / 2);
+            if (sample.StartsAfterMeasurementGap)
+            {
+                // A cumulative change across an offline interval has no trustworthy pace.
+                // A flat reading does establish recent zero-use time, but bound it to one
+                // half-life so a long suspend cannot dominate the forecast.
+                if (sample.UsedPercent != previous.UsedPercent)
+                {
+                    continue;
+                }
+
+                exposureMinutes = Math.Min(exposureMinutes, halfLife.TotalMinutes);
+            }
+
+            var midpoint = sample.StartsAfterMeasurementGap
+                ? sample.ObservedAtUtc - TimeSpan.FromMinutes(exposureMinutes / 2)
+                : previous.ObservedAtUtc + TimeSpan.FromTicks(interval.Ticks / 2);
             var ageMinutes = Math.Max(0, (current.ObservedAtUtc - midpoint).TotalMinutes);
             var weight = Math.Exp(-Math.Log(2) * ageMinutes / halfLife.TotalMinutes);
             var previousCount = Math.Round(previous.UsedPercent, MidpointRounding.AwayFromZero);
@@ -1347,7 +1393,10 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
         };
     }
 
-    private static bool AddRunwaySample(BucketObservation observation, BucketSample current)
+    private static bool AddRunwaySample(
+        BucketObservation observation,
+        BucketSample current,
+        TimeSpan? expectedObservationInterval = null)
     {
         var samples = observation.RunwaySamples;
         var latest = samples[^1];
@@ -1374,8 +1423,7 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
             return false;
         }
 
-        if (observation.Restored
-            && current.ObservedAtUtc - latest.ObservedAtUtc > MeasurementGapThreshold)
+        if (current.ObservedAtUtc - latest.ObservedAtUtc > ResolveMeasurementGapThreshold(expectedObservationInterval))
         {
             current = current with { StartsAfterMeasurementGap = true };
         }
@@ -1435,6 +1483,19 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
 
     private static TimeSpan ResolveFlatSampleCheckpointInterval(BucketSample sample) =>
         IsWeekly(sample) ? WeeklyFlatSampleCheckpointInterval : ShortFlatSampleCheckpointInterval;
+
+    private static TimeSpan ResolveMeasurementGapThreshold(TimeSpan? expectedObservationInterval)
+    {
+        if (expectedObservationInterval is not TimeSpan expected || expected <= TimeSpan.Zero)
+        {
+            return MeasurementGapThreshold;
+        }
+
+        var toleratedDelay = expected + TimeSpan.FromTicks(expected.Ticks / 2);
+        return toleratedDelay > MeasurementGapThreshold
+            ? toleratedDelay
+            : MeasurementGapThreshold;
+    }
 
     private static void CompactRunwaySamples(List<BucketSample> samples)
     {

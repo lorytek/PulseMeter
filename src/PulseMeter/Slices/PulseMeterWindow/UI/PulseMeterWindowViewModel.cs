@@ -21,6 +21,8 @@ using PulseMeter.Slices.UsageCollection;
 using PulseMeter.Slices.UsageSignals;
 using PulseMeter.Slices.UsageTrend;
 
+using PulseMeter.Platform.Diagnostics;
+
 namespace PulseMeter.Slices.PulseMeterWindow.UI;
 
 public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
@@ -79,7 +81,9 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         UsageAttributionSectionViewModel? usageAttribution = null,
         IUsageSignalsTracker? usageSignalsTracker = null,
         IBudgetAlertTracker? budgetAlertTracker = null,
-        string? selectedLimitKey = null)
+        string? selectedLimitKey = null,
+        bool autoShowWhenCodexFocused = true,
+        bool autoHideWhenFocusLeaves = false)
     {
         _usageService = usageService;
         _usageSignalsTracker = usageSignalsTracker ?? new UsageSignalsTracker(new ZeroUserIdleTimeProvider());
@@ -87,6 +91,8 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         _selectedLimitKey = string.IsNullOrWhiteSpace(selectedLimitKey) ? null : selectedLimitKey.Trim();
         _autoSyncSeconds = SecondsFrom(autoSyncInterval ?? TimeSpan.FromSeconds(90));
         _isAlwaysOnTop = isAlwaysOnTop;
+        _autoShowWhenCodexFocused = autoShowWhenCodexFocused;
+        _autoHideWhenFocusLeaves = autoHideWhenFocusLeaves;
         DataBar = dataBar ?? new DataBarViewModel();
         ExpandedHeader = expandedHeader ?? new ExpandedHeaderViewModel();
         NavigationRail = navigationRail ?? new NavigationRailViewModel();
@@ -110,7 +116,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
             ApplyInitialWindowState(windowState);
         }
 
-        SyncNowCommand = new AsyncRelayCommand(RefreshAsync, () => !IsRefreshing);
+        SyncNowCommand = new AsyncRelayCommand(() => RefreshAsync(), () => !IsRefreshing);
         RefreshTopChromeViewModels();
         RefreshResetCredits(DateTimeOffset.UtcNow, updateFromSnapshot: false);
     }
@@ -285,6 +291,12 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     {
         get => NavigationRail.IsRunwayForecastVisible;
         set => NavigationRail.IsRunwayForecastVisible = value;
+    }
+
+    public bool IsBlockPlannerVisible
+    {
+        get => NavigationRail.IsBlockPlannerVisible;
+        set => NavigationRail.IsBlockPlannerVisible = value;
     }
 
     public bool IsDailyUsageVisible
@@ -654,7 +666,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         var nowUtc = DateTimeOffset.UtcNow;
         UpdateAccountUsageFreshnessWarnings(snapshot);
         _snapshot = snapshot;
-        var usageSignals = _usageSignalsTracker.Observe(snapshot, nowUtc);
+        var usageSignals = _usageSignalsTracker.Observe(snapshot, nowUtc, AutoSyncInterval);
         var budgetSignals = _budgetAlertTracker.Observe(snapshot, AutomaticBudgetSignalSettings, nowUtc);
         _usageSignals = MergeSignals(usageSignals, budgetSignals.AttentionSignals);
 
@@ -716,6 +728,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
 
     public void FlushUsageHistory()
     {
+        NeedsAttention.PrepareForShutdown();
         _usageSignalsTracker.Flush();
     }
 
@@ -852,7 +865,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         IsHiddenByUser = false;
     }
 
-    public async Task RefreshAsync()
+    public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
         if (IsRefreshing)
         {
@@ -864,7 +877,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
 
         try
         {
-            var snapshot = await _usageService.GetSnapshotAsync();
+            var snapshot = await _usageService.GetSnapshotAsync(cancellationToken);
             _hasManualSyncFailure = false;
             if (!ReferenceEquals(_lastAppliedSnapshot, snapshot))
             {
@@ -872,9 +885,13 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
             }
             SetSyncFeedback(BuildRefreshFeedback(snapshot));
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            PrivacySafeDiagnostics.WriteFailure("manual sync failed", ex);
             _hasManualSyncFailure = true;
             SetSyncFeedback("Sync failed. Try again.");
         }
@@ -981,6 +998,11 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         if (e.PropertyName == nameof(NavigationRailViewModel.IsUsageAttributionVisible))
         {
             OnPropertyChanged(nameof(ShouldShowUsageAttribution));
+        }
+
+        if (e.PropertyName == nameof(NavigationRailViewModel.IsBlockPlannerVisible))
+        {
+            OnPropertyChanged(nameof(IsBlockPlannerVisible));
         }
 
     }

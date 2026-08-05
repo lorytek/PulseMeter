@@ -112,6 +112,30 @@ public sealed class PulseMeterWindowViewModelHelperTests
     }
 
     [Fact]
+    public void DailyUsageDisplayBuilder_DistinguishesMissingDaysFromRecordedZeroUsage()
+    {
+        var today = new DateOnly(2026, 7, 5);
+        var buckets = new[]
+        {
+            Bucket(today.AddDays(-1), 0),
+            Bucket(today.AddDays(-2), 100)
+        };
+
+        var result = DailyUsageDisplayBuilder.BuildRows(buckets, today);
+
+        Assert.False(result.Rows[0].HasRecordedUsage);
+        Assert.Equal("Not recorded", result.Rows[0].TokenText);
+        Assert.Equal("Today. Usage not recorded.", result.Rows[0].AccessibleSummary);
+        Assert.False(result.Rows[0].HasMedianComparison);
+        Assert.Equal("#D1D5DB", result.Rows[0].DayDotBrush);
+
+        Assert.True(result.Rows[1].HasRecordedUsage);
+        Assert.Equal("0", result.Rows[1].TokenText);
+        Assert.Equal("-100% vs median", result.Rows[1].MedianComparisonText);
+        Assert.Equal("#1F73FF", result.Rows[1].DayDotBrush);
+    }
+
+    [Fact]
     public void ProjectUsageDisplayBuilder_BuildRows_FormatsRowsForDisplay()
     {
         var rows = ProjectUsageDisplayBuilder.BuildRows(

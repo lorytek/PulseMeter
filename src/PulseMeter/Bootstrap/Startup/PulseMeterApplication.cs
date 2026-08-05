@@ -4,7 +4,7 @@ using PulseMeter.Slices.PulseMeterWindow;
 
 namespace PulseMeter.Bootstrap.Startup;
 
-public sealed class PulseMeterApplication : IDisposable, IAsyncDisposable
+public sealed class PulseMeterApplication : IAsyncDisposable
 {
     private readonly Action _shutdown;
     private readonly Func<Action, ServiceProvider> _serviceProviderFactory;
@@ -15,6 +15,7 @@ public sealed class PulseMeterApplication : IDisposable, IAsyncDisposable
     private IPulseMeterWindowLifecycleCoordinator? _lifecycleCoordinator;
     private Task? _startTask;
     private Task? _stopTask;
+    private bool _coordinatorStopRequested;
 
     public PulseMeterApplication(Action shutdown)
         : this(shutdown, PulseMeterCompositionRoot.BuildServiceProvider)
@@ -53,11 +54,6 @@ public sealed class PulseMeterApplication : IDisposable, IAsyncDisposable
         }
     }
 
-    public void Stop()
-    {
-        StopAsync().GetAwaiter().GetResult();
-    }
-
     public Task StopAsync()
     {
         lock (_stateLock)
@@ -87,14 +83,35 @@ public sealed class PulseMeterApplication : IDisposable, IAsyncDisposable
         }
     }
 
-    public void Dispose()
-    {
-        Stop();
-    }
-
     public ValueTask DisposeAsync()
     {
         return new ValueTask(StopAsync());
+    }
+
+    internal bool TryShowMainWindow()
+    {
+        IPulseMeterWindowLifecycleCoordinator? lifecycleCoordinator;
+        lock (_stateLock)
+        {
+            if (_state != LifecycleState.Started)
+            {
+                return false;
+            }
+
+            lifecycleCoordinator = _lifecycleCoordinator;
+        }
+
+        lifecycleCoordinator?.ShowAndActivate();
+        return lifecycleCoordinator is not null;
+    }
+
+    /// <summary>
+    /// Performs the coordinator's critical synchronous teardown before the WPF dispatcher exits.
+    /// The subsequent <see cref="StopAsync"/> call remains responsible for disposing the service provider.
+    /// </summary>
+    internal void PrepareForProcessExit()
+    {
+        StopCoordinatorOnce();
     }
 
     private async Task StartCoreAsync(CancellationToken cancellationToken)
@@ -144,7 +161,7 @@ public sealed class PulseMeterApplication : IDisposable, IAsyncDisposable
         {
             try
             {
-                _lifecycleCoordinator?.Stop();
+                StopCoordinatorOnce();
             }
             finally
             {
@@ -163,6 +180,28 @@ public sealed class PulseMeterApplication : IDisposable, IAsyncDisposable
                 _state = LifecycleState.Stopped;
             }
         }
+    }
+
+    private void StopCoordinatorOnce()
+    {
+        IPulseMeterWindowLifecycleCoordinator? lifecycleCoordinator;
+        lock (_stateLock)
+        {
+            if (_coordinatorStopRequested)
+            {
+                return;
+            }
+
+            lifecycleCoordinator = _lifecycleCoordinator;
+            if (lifecycleCoordinator is null)
+            {
+                return;
+            }
+
+            _coordinatorStopRequested = true;
+        }
+
+        lifecycleCoordinator?.Stop();
     }
 
     private enum LifecycleState

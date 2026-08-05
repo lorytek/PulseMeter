@@ -111,6 +111,11 @@
                         </Style.Triggers>
                     </Style>
                 </ItemsControl.Style>
+                <ItemsControl.ItemContainerStyle>
+                    <Style TargetType="ContentPresenter">
+                        <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleSummary}" />
+                    </Style>
+                </ItemsControl.ItemContainerStyle>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <Grid MinHeight="48">

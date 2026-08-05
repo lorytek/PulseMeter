@@ -15,4 +15,9 @@ public sealed record ProjectUsageDisplayRow(
     string ActivityText,
     string SpikeDaysText,
     string LeadingChatsText,
-    string LargestMomentText);
+    string LargestMomentText)
+{
+    public string AccessibleSummary =>
+        $"{DisplayName}. {ShareText} of 30-day usage. {Last7DaysText} in the last 7 days. " +
+        $"{TrendText} versus the prior 7 days. {EstimatedTokensText} in the last 30 days.";
+}

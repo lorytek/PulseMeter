@@ -21,7 +21,7 @@ public sealed class RateLimitsDailyPresenter : IRateLimitsDailyPresenter
     public string BuildSummaryText(bool hasRows)
     {
         return hasRows
-            ? "Daily allowance to stay within your weekly limit."
+            ? "Allowance remaining for each day in this weekly limit."
             : "Weekly usage unavailable for this track.";
     }
 

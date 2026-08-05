@@ -6,6 +6,8 @@ using PulseMeter.Platform.Windows;
 using PulseMeter.Shared.Commands;
 using PulseMeter.Slices.UsageSignals;
 
+using PulseMeter.Platform.Diagnostics;
+
 namespace PulseMeter.Slices.NeedsAttention.UI;
 
 public sealed class NeedsAttentionSectionViewModel : INotifyPropertyChanged
@@ -163,6 +165,18 @@ public sealed class NeedsAttentionSectionViewModel : INotifyPropertyChanged
         Refresh();
     }
 
+    public void PrepareForShutdown()
+    {
+        _copyFeedbackTimer?.Stop();
+        _dismissUndoTimer?.Stop();
+
+        if (_pendingDismissedSignal is not null)
+        {
+            _usageSignalsTracker?.DismissIdleDrain();
+            ClearPendingDismissal();
+        }
+    }
+
     private void Refresh()
     {
         NeedsAttentionItems.Clear();
@@ -315,7 +329,7 @@ public sealed class NeedsAttentionSectionViewModel : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            PrivacySafeDiagnostics.WriteFailure("clipboard copy failed", ex);
             ShowCopyFeedback("Couldn't copy. Try again.", "#DC2626");
         }
     }

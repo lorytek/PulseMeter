@@ -90,7 +90,8 @@
                                FontFamily="Segoe MDL2 Assets"
                                FontSize="15" />
                 </ToggleButton>
-                <Button Content="&#xE70E;"
+                <Button x:Name="ExpandCollapseButton"
+                        Content="&#xE70E;"
                         Click="ExpandCollapseButton_Click"
                         FontFamily="Segoe MDL2 Assets"
                         FontSize="13"

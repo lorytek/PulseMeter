@@ -41,6 +41,11 @@
                               HorizontalAlignment="Left"
                               AlternationCount="10"
                               ItemsSource="{Binding CompactQuotaRows}">
+                    <ItemsControl.ItemContainerStyle>
+                        <Style TargetType="ContentPresenter">
+                            <Setter Property="AutomationProperties.Name" Value="{Binding CompactAccessibleSummary}" />
+                        </Style>
+                    </ItemsControl.ItemContainerStyle>
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                             <StackPanel Orientation="Horizontal" />
@@ -169,7 +174,8 @@
                         Height="32"
                         Margin="0,0,12,0"
                         Background="#E5E7EB" />
-                <Button Style="{DynamicResource CompactIconButtonStyle}"
+                <Button x:Name="ExpandCollapseButton"
+                        Style="{DynamicResource CompactIconButtonStyle}"
                         ToolTip="{Binding ExpandCollapseTooltip}"
                         AutomationProperties.Name="{Binding ExpandCollapseTooltip}"
                         Click="ExpandCollapseButton_Click">

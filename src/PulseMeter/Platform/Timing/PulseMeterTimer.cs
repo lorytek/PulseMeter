@@ -1,5 +1,7 @@
 ﻿using System.Windows.Threading;
 
+using PulseMeter.Platform.Diagnostics;
+
 namespace PulseMeter.Platform.Timing;
 
 public interface IPulseMeterTimer
@@ -36,7 +38,7 @@ internal sealed class DispatcherPulseMeterTimer : IPulseMeterTimer
         {
             Interval = interval
         };
-        _timer.Tick += (_, e) => Tick?.Invoke(this, e);
+        _timer.Tick += OnTimerTick;
     }
 
     public event EventHandler? Tick;
@@ -55,5 +57,28 @@ internal sealed class DispatcherPulseMeterTimer : IPulseMeterTimer
     public void Stop()
     {
         _timer.Stop();
+    }
+
+    private void OnTimerTick(object? sender, EventArgs eventArgs)
+    {
+        var handlers = Tick;
+        if (handlers is null)
+        {
+            return;
+        }
+
+        foreach (EventHandler handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                handler(this, eventArgs);
+            }
+            catch (Exception exception)
+            {
+                // Keep the dispatcher and other periodic jobs alive when one timer
+                // subscriber has a transient fault.
+                PrivacySafeDiagnostics.WriteFailure("timer subscriber failed", exception);
+            }
+        }
     }
 }

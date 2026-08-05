@@ -2,6 +2,7 @@ using PulseMeter.Platform.Timing;
 using PulseMeter.Platform.Windows;
 using PulseMeter.Slices.NeedsAttention.Models;
 using PulseMeter.Slices.NeedsAttention.UI;
+using PulseMeter.Slices.PulseMeterWindow.UI;
 
 namespace PulseMeter.Tests;
 
@@ -185,6 +186,29 @@ public sealed class NeedsAttentionSectionViewModelTests
         Assert.Empty(viewModel.NeedsAttentionItems);
     }
 
+    [Fact]
+    public void FlushUsageHistory_CommitsPendingDismissalBeforeTheAppExits()
+    {
+        var timerFactory = new StubTimerFactory();
+        var tracker = new RecordingUsageSignalsTracker();
+        var needsAttention = new NeedsAttentionSectionViewModel(
+            new NeedsAttentionPresenter(),
+            tracker,
+            timerFactory: timerFactory);
+        var windowViewModel = new PulseMeterWindowViewModel(
+            new StubUsageService(),
+            needsAttention: needsAttention,
+            usageSignalsTracker: tracker);
+        needsAttention.ApplySignals(new UsageSignalsSnapshot { AttentionSignals = [IdleSignal()] });
+        needsAttention.DismissSignalCommand.Execute(Assert.Single(needsAttention.NeedsAttentionItems));
+
+        windowViewModel.FlushUsageHistory();
+
+        Assert.Equal(1, tracker.DismissCount);
+        Assert.False(needsAttention.HasPendingDismissal);
+        Assert.False(timerFactory.DismissTimer.Started);
+    }
+
     private static NeedsAttentionSectionViewModel CreateViewModel(
         IClipboardService clipboard,
         IPulseMeterTimerFactory timerFactory)
@@ -223,6 +247,22 @@ public sealed class NeedsAttentionSectionViewModelTests
         public string? Text { get; private set; }
 
         public void SetText(string text) => Text = text;
+    }
+
+    private sealed class StubUsageService : IUsageService
+    {
+        public event EventHandler<UsageSnapshot>? SnapshotUpdated;
+
+        public bool UseMockMode { get; set; }
+
+        public Task StartAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task<UsageSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
+        {
+            var snapshot = new UsageSnapshot();
+            SnapshotUpdated?.Invoke(this, snapshot);
+            return Task.FromResult(snapshot);
+        }
     }
 
     private sealed class ThrowingClipboardService : IClipboardService

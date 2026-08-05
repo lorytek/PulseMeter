@@ -12,7 +12,8 @@
         xmlns:rateLimitsDaily="clr-namespace:PulseMeter.Slices.RateLimitsDaily.UI"
         xmlns:resetCredits="clr-namespace:PulseMeter.Slices.ResetCredits.UI"
         xmlns:usageAttribution="clr-namespace:PulseMeter.Slices.UsageAttribution.UI"
-        xmlns:usageTrend="clr-namespace:PulseMeter.Slices.UsageTrend.UI"
+             xmlns:usageTrend="clr-namespace:PulseMeter.Slices.UsageTrend.UI"
+             xmlns:blockPlanner="clr-namespace:PulseMeter.Slices.BlockPlanner.UI"
         Title="PulseMeter"
         Width="{Binding WindowWidth}"
         Height="{Binding WindowHeight}"
@@ -63,7 +64,8 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <dataBar:DataBar Grid.Row="0"
+            <dataBar:DataBar x:Name="CompactDataBar"
+                             Grid.Row="0"
                              DataContext="{Binding DataBar}"
                              ToggleExpandedRequested="ExpandCollapseButton_Click"
                              HideRequested="HideButton_Click" />
@@ -91,7 +93,8 @@
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
 
-                        <expandedHeader:ExpandedHeader Grid.Row="0"
+                        <expandedHeader:ExpandedHeader x:Name="ExpandedHeaderControl"
+                                                       Grid.Row="0"
                                                        DataContext="{Binding ExpandedHeader}"
                                                        ToggleExpandedRequested="ExpandCollapseButton_Click"
                                                        HideRequested="HideButton_Click" />
@@ -151,7 +154,8 @@
                                       VerticalScrollBarVisibility="Hidden"
                                       HorizontalScrollBarVisibility="Disabled"
                                       ScrollChanged="ExpandedContentScrollViewer_ScrollChanged">
-                        <StackPanel Margin="24,14,30,28">
+                        <StackPanel x:Name="ExpandedContentStackPanel"
+                                    Margin="24,14,30,28">
                             <needsAttention:NeedsAttentionSection DataContext="{Binding NeedsAttention}"
                                                                    x:Name="NeedsAttentionSection"
                                                                    ReviewRequested="NeedsAttentionSection_ReviewRequested" />
@@ -167,6 +171,10 @@
                                                            Visibility="{Binding DataContext.IsRunwayForecastVisible, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                            SectionRequested="UsageTrendSection_SectionRequested" />
 
+                            <blockPlanner:BlockPlannerSection DataContext="{Binding UsageTrend}"
+                                                              x:Name="BlockPlannerSection"
+                                                              Visibility="{Binding DataContext.IsBlockPlannerVisible, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
                             <resetCredits:ResetCreditsSection DataContext="{Binding ResetCreditsSection}"
                                                               x:Name="ResetCreditsSection" />
 
@@ -180,7 +188,12 @@
                                                                         x:Name="BurnAnalysisSection" />
 
                             <dailyUsage:DailyUsageSection DataContext="{Binding DailyUsage}"
-                                                          x:Name="DailyUsageSection" />
+                                                          x:Name="DailyUsageSection"
+                                                          ExpansionToggling="DailyUsageSection_ExpansionToggling" />
+
+                            <Border x:Name="NavigationBottomSpacer"
+                                    Height="0"
+                                    IsHitTestVisible="False" />
                         </StackPanel>
                     </ScrollViewer>
                     </Grid>

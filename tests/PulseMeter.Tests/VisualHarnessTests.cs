@@ -57,6 +57,17 @@ public sealed class VisualHarnessTests : IDisposable
     }
 
     [Fact]
+    public void LocateFromAny_FallsBackWhenPublishedHarnessLivesOutsideWorktree()
+    {
+        var workspace = CreateWorkspace();
+        var publishedHarness = Directory.CreateDirectory(Path.Combine(_testRoot, "published", "bin")).FullName;
+
+        var paths = VisualHarnessWorkspace.LocateFromAny(publishedHarness, workspace);
+
+        Assert.Equal(Path.GetFullPath(workspace), paths.WorkspaceRoot);
+    }
+
+    [Fact]
     public void InvalidOrOutsideRoot_IsRejectedBeforeStateCreation()
     {
         var outside = Directory.CreateDirectory(Path.Combine(_testRoot, "outside")).FullName;
@@ -230,6 +241,10 @@ public sealed class VisualHarnessTests : IDisposable
         Assert.DoesNotContain("CodexExecutableResolver", composition, StringComparison.Ordinal);
         Assert.Contains("window.IsVisibleChanged += Window_IsVisibleChanged", app, StringComparison.Ordinal);
         Assert.Contains("Interlocked.Exchange(ref _shutdownRequested, 1)", app, StringComparison.Ordinal);
+        Assert.Contains("VisualHarnessWorkspace.LocateFromAny(", app, StringComparison.Ordinal);
+        Assert.Contains("catch (Exception exception)", app, StringComparison.Ordinal);
+        Assert.Contains("visual harness shutdown failed", app, StringComparison.Ordinal);
+        Assert.Contains("Shutdown(-1)", app, StringComparison.Ordinal);
     }
 
     private string CreateWorkspace()

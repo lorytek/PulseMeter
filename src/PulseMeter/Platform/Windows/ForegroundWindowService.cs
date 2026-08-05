@@ -1,4 +1,6 @@
 ﻿using System.Diagnostics;
+using System.ComponentModel;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -43,23 +45,42 @@ public sealed class ForegroundWindowService : IForegroundWindowService
     {
         GetWindowThreadProcessId(handle, out var processId);
 
-        try
+        if (IsCodexProcess(processId, GetProcessName))
         {
-            using var process = Process.GetProcessById((int)processId);
-            if (process.ProcessName.Contains("codex", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-        catch (ArgumentException)
-        {
-        }
-        catch (InvalidOperationException)
-        {
+            return true;
         }
 
         var title = GetWindowTitle(handle);
         return title.Contains("codex", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static bool IsCodexProcess(uint processId, Func<int, string> processNameResolver)
+    {
+        try
+        {
+            var processName = processNameResolver((int)processId);
+            var executableName = Path.GetFileNameWithoutExtension(processName.Trim());
+            return executableName.Contains("codex", StringComparison.OrdinalIgnoreCase)
+                || executableName.Equals("chatgpt", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+        catch (Win32Exception)
+        {
+            return false;
+        }
+    }
+
+    private static string GetProcessName(int processId)
+    {
+        using var process = Process.GetProcessById(processId);
+        return process.ProcessName;
     }
 
     private static string GetWindowTitle(IntPtr handle)

@@ -6,6 +6,8 @@ namespace PulseMeter.Slices.ResetCredits.Business;
 public sealed class ResetCreditTracker
 {
     private static readonly TimeSpan DefaultCreditLifetime = TimeSpan.FromDays(30);
+    internal const int MaximumPersistedCredits = 100;
+    internal const int MaximumPersistedCreditNumber = 10_000;
     private readonly List<TrackedResetCredit> _credits = new();
     private bool _hasObservedAvailableCount;
     private int _nextCreditNumber = 1;
@@ -18,19 +20,21 @@ public sealed class ResetCreditTracker
         }
 
         _hasObservedAvailableCount = state.HasObservedAvailableCount;
-        _nextCreditNumber = Math.Max(1, state.NextCreditNumber);
+        _nextCreditNumber = Math.Clamp(state.NextCreditNumber, 1, MaximumPersistedCreditNumber);
 
-        foreach (var credit in state.Credits)
+        foreach (var credit in (state.Credits ?? Array.Empty<ResetCreditState>()).Take(MaximumPersistedCredits))
         {
-            if (credit.Number <= 0)
+            if (credit is null || credit.Number is <= 0 or > MaximumPersistedCreditNumber)
             {
                 continue;
             }
 
             _credits.Add(new TrackedResetCredit(credit.Number, credit.ExpiresAtUtc, credit.HasExactExpiry));
-            _nextCreditNumber = Math.Max(_nextCreditNumber, credit.Number + 1);
+            _nextCreditNumber = Math.Max(_nextCreditNumber, Math.Min(MaximumPersistedCreditNumber, credit.Number + 1));
         }
     }
+
+    public int? KnownAvailableCount => _hasObservedAvailableCount ? _credits.Count : null;
 
     public IReadOnlyList<ResetCreditListItem> Update(
         int? availableCount,
@@ -48,19 +52,17 @@ public sealed class ResetCreditTracker
     {
         if (availableCount is null)
         {
-            _credits.Clear();
-            _hasObservedAvailableCount = false;
-            _nextCreditNumber = 1;
-            return Array.Empty<ResetCreditListItem>();
+            return Refresh(nowUtc);
         }
 
-        var targetCount = Math.Max(0, availableCount.Value);
+        var targetCount = Math.Clamp(availableCount.Value, 0, MaximumPersistedCredits);
         if (exactCredits.Count > 0)
         {
             _credits.Clear();
             var sortedCredits = exactCredits
                 .OrderBy(credit => credit.ExpiresAtUtc ?? DateTimeOffset.MaxValue)
                 .ThenBy(credit => credit.GrantedAtUtc ?? DateTimeOffset.MaxValue)
+                .Take(targetCount)
                 .ToList();
 
             for (var index = 0; index < sortedCredits.Count; index++)
@@ -68,7 +70,15 @@ public sealed class ResetCreditTracker
                 _credits.Add(new TrackedResetCredit(index + 1, sortedCredits[index].ExpiresAtUtc, true));
             }
 
-            _nextCreditNumber = _credits.Count + 1;
+            while (_credits.Count < targetCount)
+            {
+                _credits.Add(new TrackedResetCredit(
+                    _credits.Count + 1,
+                    appServerExpiryUtc,
+                    false));
+            }
+
+            _nextCreditNumber = Math.Min(MaximumPersistedCreditNumber, targetCount + 1);
             _hasObservedAvailableCount = true;
             return Refresh(nowUtc);
         }
@@ -111,6 +121,8 @@ public sealed class ResetCreditTracker
 
     public IReadOnlyList<ResetCreditListItem> Refresh(DateTimeOffset nowUtc)
     {
+        _credits.RemoveAll(credit => credit.ExpiresAtUtc is DateTimeOffset expiry && expiry <= nowUtc);
+
         return _credits
             .Select(credit => new ResetCreditListItem(
                 credit.Number,
@@ -136,7 +148,7 @@ public sealed class ResetCreditTracker
         if (includeDate)
         {
             var localExpiry = expiry.ToLocalTime();
-            return $"expires {localExpiry.ToString("MMM d HH:mm", CultureInfo.InvariantCulture)} ({FormatRemaining(remaining)})";
+            return $"expires {localExpiry.ToString("MMM d, h:mm tt", CultureInfo.InvariantCulture)} ({FormatRemaining(remaining)})";
         }
 
         return FormatRemaining(remaining, includeExpiresPrefix: true);

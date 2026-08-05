@@ -9,7 +9,7 @@ public interface IResetCreditStateStore
 {
     ResetCreditTrackerState? Load();
 
-    void Save(ResetCreditTrackerState state);
+    bool Save(ResetCreditTrackerState state);
 }
 
 public sealed class ResetCreditStateStore : IResetCreditStateStore
@@ -31,11 +31,18 @@ public sealed class ResetCreditStateStore : IResetCreditStateStore
 
     public ResetCreditTrackerState? Load()
     {
-        return AtomicJsonFileStore.Load<ResetCreditTrackerState>(_filePath, JsonOptions);
+        return AtomicJsonFileStore.Load<ResetCreditTrackerState>(_filePath, JsonOptions, IsValidState);
     }
 
-    public void Save(ResetCreditTrackerState state)
+    public bool Save(ResetCreditTrackerState state)
     {
-        AtomicJsonFileStore.Save(_filePath, state, JsonOptions);
+        return AtomicJsonFileStore.Save(_filePath, state, JsonOptions);
+    }
+
+    private static bool IsValidState(ResetCreditTrackerState state)
+    {
+        return state.NextCreditNumber is >= 1 and <= ResetCreditTracker.MaximumPersistedCreditNumber
+            && state.Credits is { Count: <= ResetCreditTracker.MaximumPersistedCredits }
+            && state.Credits.All(credit => credit is { Number: > 0 } and { Number: <= ResetCreditTracker.MaximumPersistedCreditNumber });
     }
 }

@@ -12,17 +12,31 @@ namespace PulseMeter.Slices.UsageCollection.Business;
 public sealed class SharedRolloutAnalyticsSource
 {
     private readonly string _codexHome;
-    private readonly object _generationLock = new();
+    private readonly Action<string>? _rolloutParseCompleted;
+    private readonly Action<string>? _rateLimitParseCompleted;
+    private readonly object _sessionGenerationLock = new();
+    private readonly object _rateLimitGenerationLock = new();
+    private readonly object _databaseSnapshotLock = new();
     private readonly Dictionary<string, RolloutCacheEntry> _rolloutCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, RateLimitRolloutCacheEntry> _rateLimitRolloutCache = new(StringComparer.OrdinalIgnoreCase);
     private DatabaseSnapshot? _databaseSnapshot;
     private int _rolloutParseCount;
 
     public SharedRolloutAnalyticsSource(string? codexHome = null)
+        : this(codexHome, rateLimitParseCompleted: null, rolloutParseCompleted: null)
+    {
+    }
+
+    internal SharedRolloutAnalyticsSource(
+        string? codexHome,
+        Action<string>? rateLimitParseCompleted,
+        Action<string>? rolloutParseCompleted = null)
     {
         _codexHome = codexHome ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".codex");
+        _rateLimitParseCompleted = rateLimitParseCompleted;
+        _rolloutParseCompleted = rolloutParseCompleted;
     }
 
     internal int RolloutParseCount => Volatile.Read(ref _rolloutParseCount);
@@ -31,7 +45,7 @@ public sealed class SharedRolloutAnalyticsSource
     {
         get
         {
-            lock (_generationLock)
+            lock (_sessionGenerationLock)
             {
                 return _rolloutCache.Count;
             }
@@ -42,7 +56,7 @@ public sealed class SharedRolloutAnalyticsSource
         DateOnly cutoffDate,
         CancellationToken cancellationToken = default)
     {
-        lock (_generationLock)
+        lock (_sessionGenerationLock)
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(GetSessionSummaries(cutoffDate, cancellationToken));
@@ -53,7 +67,7 @@ public sealed class SharedRolloutAnalyticsSource
         DateTimeOffset cutoffUtc,
         CancellationToken cancellationToken = default)
     {
-        lock (_generationLock)
+        lock (_rateLimitGenerationLock)
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(GetRateLimitHistory(cutoffUtc.ToUniversalTime(), cancellationToken));
@@ -66,16 +80,13 @@ public sealed class SharedRolloutAnalyticsSource
     {
         var cutoffDate = DateOnly.FromDateTime(cutoffUtc.ToLocalTime().DateTime);
         var databasePath = Path.Combine(_codexHome, "state_5.sqlite");
-        if (!TryGetFileSignature(databasePath, cutoffDate, out var databaseSignature))
+        if (!TryGetDatabaseSignature(databasePath, cutoffDate, out var databaseSignature))
         {
             _rateLimitRolloutCache.Clear();
             return Array.Empty<RateLimitHistoryPoint>();
         }
 
-        var threads = _databaseSnapshot is { Signature: var cachedSignature, Threads: var cachedThreads }
-            && cachedSignature == databaseSignature
-            ? cachedThreads
-            : ReadAndCacheThreads(databasePath, databaseSignature, cutoffDate);
+        var threads = ReadAndCacheThreads(databasePath, databaseSignature, cutoffDate);
 
         var observedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var history = new List<RateLimitHistoryPoint>();
@@ -112,17 +123,17 @@ public sealed class SharedRolloutAnalyticsSource
         CancellationToken cancellationToken)
     {
         var databasePath = Path.Combine(_codexHome, "state_5.sqlite");
-        if (!TryGetFileSignature(databasePath, cutoffDate, out var databaseSignature))
+        if (!TryGetDatabaseSignature(databasePath, cutoffDate, out var databaseSignature))
         {
-            _databaseSnapshot = null;
+            lock (_databaseSnapshotLock)
+            {
+                _databaseSnapshot = null;
+            }
             _rolloutCache.Clear();
             return Array.Empty<SharedRolloutSessionSummary>();
         }
 
-        var threads = _databaseSnapshot is { Signature: var cachedSignature, Threads: var cachedThreads }
-            && cachedSignature == databaseSignature
-            ? cachedThreads
-            : ReadAndCacheThreads(databasePath, databaseSignature, cutoffDate);
+        var threads = ReadAndCacheThreads(databasePath, databaseSignature, cutoffDate);
 
         var observedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var summaries = new List<SharedRolloutSessionSummary>(threads.Count);
@@ -155,20 +166,44 @@ public sealed class SharedRolloutAnalyticsSource
 
     private IReadOnlyList<ThreadRow> ReadAndCacheThreads(
         string databasePath,
-        FileSignature databaseSignature,
+        DatabaseSignature databaseSignature,
         DateOnly cutoffDate)
     {
-        var threads = ReadThreads(databasePath, cutoffDate);
-        _databaseSnapshot = new DatabaseSnapshot(databaseSignature, threads);
-        return threads;
+        lock (_databaseSnapshotLock)
+        {
+            if (_databaseSnapshot is { Signature: var cachedSignature, Threads: var cachedThreads }
+                && cachedSignature == databaseSignature)
+            {
+                return cachedThreads;
+            }
+
+            if (TryReadThreads(databasePath, cutoffDate, out var threads))
+            {
+                _databaseSnapshot = new DatabaseSnapshot(databaseSignature, threads);
+                return threads;
+            }
+
+            // A database can be temporarily unavailable while Codex writes it. Keep the last
+            // successful snapshot, but do not mark the failed read as a successful empty result.
+            // Its signature will remain stale, so the next generation retries the database read.
+            return _databaseSnapshot?.Threads ?? Array.Empty<ThreadRow>();
+        }
     }
 
-    private static IReadOnlyList<ThreadRow> ReadThreads(string databasePath, DateOnly cutoffDate)
+    private static bool TryReadThreads(
+        string databasePath,
+        DateOnly cutoffDate,
+        out IReadOnlyList<ThreadRow> threads)
     {
         try
         {
             var rows = new List<ThreadRow>();
-            var builder = new SqliteConnectionStringBuilder { DataSource = databasePath, Mode = SqliteOpenMode.ReadOnly };
+            var builder = new SqliteConnectionStringBuilder
+            {
+                DataSource = databasePath,
+                Mode = SqliteOpenMode.ReadOnly,
+                DefaultTimeout = 1
+            };
             using var connection = new SqliteConnection(builder.ToString());
             connection.Open();
             var columns = ReadThreadColumns(connection);
@@ -192,15 +227,18 @@ public sealed class SharedRolloutAnalyticsSource
                     reader.IsDBNull(4) ? string.Empty : reader.GetString(4)));
             }
 
-            return rows.ToArray();
+            threads = rows.ToArray();
+            return true;
         }
         catch (SqliteException)
         {
-            return Array.Empty<ThreadRow>();
+            threads = Array.Empty<ThreadRow>();
+            return false;
         }
         catch (InvalidOperationException)
         {
-            return Array.Empty<ThreadRow>();
+            threads = Array.Empty<ThreadRow>();
+            return false;
         }
     }
 
@@ -237,14 +275,20 @@ public sealed class SharedRolloutAnalyticsSource
             return true;
         }
 
-        // A live rollout can change while being read. Retry once, otherwise omit it rather than
-        // publishing a mixed parse; a later generation will pick it up.
+        // Rollouts are append-only. If one changes while it is being read, the successfully
+        // parsed prefix is still valid history. Retry once so a stable generation can be cached,
+        // then return the latest prefix without caching it instead of making an active thread's
+        // entire history disappear until the next refresh.
+        IReadOnlyList<SharedRolloutTokenSummary>? latestParsed = null;
         for (var attempt = 0; attempt < 2; attempt++)
         {
             if (!TryParseRollout(normalizedPath, cutoffDate, cancellationToken, out var parsed))
             {
-                return false;
+                break;
             }
+
+            latestParsed = parsed;
+            _rolloutParseCompleted?.Invoke(normalizedPath);
 
             if (TryGetFileSignature(normalizedPath, cutoffDate, out var currentSignature)
                 && currentSignature == signature)
@@ -255,6 +299,18 @@ public sealed class SharedRolloutAnalyticsSource
             }
 
             signature = currentSignature;
+        }
+
+        if (latestParsed is not null)
+        {
+            summaries = latestParsed;
+            return true;
+        }
+
+        if (cached is not null)
+        {
+            summaries = cached.Summaries;
+            return true;
         }
 
         return false;
@@ -334,12 +390,19 @@ public sealed class SharedRolloutAnalyticsSource
             return true;
         }
 
+        // Rate-limit events are append-only too. A concurrent append must not remove all of the
+        // previously readable samples from the runway chart. Keep the newest complete prefix and
+        // leave it uncached so the next refresh can collect the appended tail.
+        IReadOnlyList<RateLimitHistoryPoint>? latestParsed = null;
         for (var attempt = 0; attempt < 2; attempt++)
         {
             if (!TryParseRateLimitHistory(normalizedPath, cutoffDate, cancellationToken, out var parsed))
             {
-                return false;
+                break;
             }
+
+            latestParsed = parsed;
+            _rateLimitParseCompleted?.Invoke(normalizedPath);
 
             if (TryGetFileSignature(normalizedPath, cutoffDate, out var currentSignature)
                 && currentSignature == signature)
@@ -350,6 +413,18 @@ public sealed class SharedRolloutAnalyticsSource
             }
 
             signature = currentSignature;
+        }
+
+        if (latestParsed is not null)
+        {
+            observations = latestParsed;
+            return true;
+        }
+
+        if (cached is not null)
+        {
+            observations = cached.Observations;
+            return true;
         }
 
         return false;
@@ -522,6 +597,30 @@ public sealed class SharedRolloutAnalyticsSource
         catch (UnauthorizedAccessException) { signature = default; return false; }
     }
 
+    private static bool TryGetDatabaseSignature(string databasePath, DateOnly cutoffDate, out DatabaseSignature signature)
+    {
+        try
+        {
+            var database = new FileInfo(databasePath);
+            if (!database.Exists)
+            {
+                signature = default;
+                return false;
+            }
+
+            var wal = new FileInfo(databasePath + "-wal");
+            signature = new DatabaseSignature(
+                new DatabaseFileSignature(true, database.Length, database.LastWriteTimeUtc),
+                wal.Exists
+                    ? new DatabaseFileSignature(true, wal.Length, wal.LastWriteTimeUtc)
+                    : default,
+                cutoffDate);
+            return true;
+        }
+        catch (IOException) { signature = default; return false; }
+        catch (UnauthorizedAccessException) { signature = default; return false; }
+    }
+
     private void PruneUnobservedRollouts(IReadOnlySet<string> observedPaths)
     {
         foreach (var path in _rolloutCache.Keys.Where(path => !observedPaths.Contains(path)).ToArray())
@@ -581,7 +680,12 @@ public sealed class SharedRolloutAnalyticsSource
 
     private sealed record ThreadRow(string Id, string RolloutPath, string Cwd, DateTimeOffset? UpdatedAtUtc, string Title);
     private readonly record struct FileSignature(long Length, DateTime LastWriteTimeUtc, DateOnly CutoffDate);
-    private sealed record DatabaseSnapshot(FileSignature Signature, IReadOnlyList<ThreadRow> Threads);
+    private readonly record struct DatabaseFileSignature(bool Exists, long Length, DateTime LastWriteTimeUtc);
+    private readonly record struct DatabaseSignature(
+        DatabaseFileSignature Main,
+        DatabaseFileSignature Wal,
+        DateOnly CutoffDate);
+    private sealed record DatabaseSnapshot(DatabaseSignature Signature, IReadOnlyList<ThreadRow> Threads);
     private sealed record RolloutCacheEntry(FileSignature Signature, IReadOnlyList<SharedRolloutTokenSummary> Summaries);
     private sealed record RateLimitRolloutCacheEntry(
         FileSignature Signature,

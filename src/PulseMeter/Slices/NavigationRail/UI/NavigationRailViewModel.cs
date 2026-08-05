@@ -10,12 +10,13 @@ public sealed class NavigationRailViewModel : INotifyPropertyChanged
 {
     private const double ExpandedWidth = 205;
     private const double CollapsedWidth = 64;
-    private const int CustomizableSectionCount = 8;
+    private const int CustomizableSectionCount = 9;
 
     private bool _isNavigationPanelExpanded = true;
     private bool _isRateLimitsVisible = true;
     private bool _isRateLimitsDailyVisible = true;
     private bool _isRunwayForecastVisible = true;
+    private bool _isBlockPlannerVisible = true;
     private bool _isResetCreditsVisible = true;
     private bool _isAccountUsageVisible = true;
     private bool _isProjectUsageVisible = true;
@@ -81,6 +82,12 @@ public sealed class NavigationRailViewModel : INotifyPropertyChanged
         set => SetVisibility(ref _isRunwayForecastVisible, value, NavigationSection.RunwayForecast);
     }
 
+    public bool IsBlockPlannerVisible
+    {
+        get => _isBlockPlannerVisible;
+        set => SetVisibility(ref _isBlockPlannerVisible, value, NavigationSection.BlockPlanner);
+    }
+
     public bool IsDailyUsageVisible
     {
         get => _isDailyUsageVisible;
@@ -111,6 +118,7 @@ public sealed class NavigationRailViewModel : INotifyPropertyChanged
         (IsRateLimitsVisible ? 1 : 0) +
         (IsRateLimitsDailyVisible ? 1 : 0) +
         (IsRunwayForecastVisible ? 1 : 0) +
+        (IsBlockPlannerVisible ? 1 : 0) +
         (IsResetCreditsVisible ? 1 : 0) +
         (IsAccountUsageVisible ? 1 : 0) +
         (IsProjectUsageVisible ? 1 : 0) +
@@ -161,6 +169,9 @@ public sealed class NavigationRailViewModel : INotifyPropertyChanged
             case NavigationSection.RunwayForecast:
                 IsRunwayForecastVisible = true;
                 break;
+            case NavigationSection.BlockPlanner:
+                IsBlockPlannerVisible = true;
+                break;
             case NavigationSection.ResetCredits:
                 IsResetCreditsVisible = true;
                 break;
@@ -187,6 +198,7 @@ public sealed class NavigationRailViewModel : INotifyPropertyChanged
         IsRateLimitsVisible = settings.RateLimits;
         IsRateLimitsDailyVisible = settings.WeeklyPace;
         IsRunwayForecastVisible = settings.RunwayForecast;
+        IsBlockPlannerVisible = settings.BlockPlanner;
         IsResetCreditsVisible = settings.ResetCredits;
         IsAccountUsageVisible = settings.AccountUsage;
         IsProjectUsageVisible = settings.ProjectUsage;
@@ -204,7 +216,8 @@ public sealed class NavigationRailViewModel : INotifyPropertyChanged
             IsAccountUsageVisible,
             IsProjectUsageVisible,
             IsUsageAttributionVisible,
-            IsDailyUsageVisible);
+            IsDailyUsageVisible,
+            IsBlockPlannerVisible);
     }
 
     private bool SetVisibility(ref bool field, bool value, NavigationSection section, [CallerMemberName] string? propertyName = null)
@@ -234,6 +247,7 @@ public sealed class NavigationRailViewModel : INotifyPropertyChanged
             NavigationSection.RateLimits => IsRateLimitsVisible,
             NavigationSection.WeeklyPace => IsRateLimitsDailyVisible,
             NavigationSection.RunwayForecast => IsRunwayForecastVisible,
+            NavigationSection.BlockPlanner => IsBlockPlannerVisible,
             NavigationSection.ResetCredits => IsResetCreditsVisible,
             NavigationSection.AccountUsage => IsAccountUsageVisible,
             NavigationSection.ProjectUsage => IsProjectUsageVisible,
