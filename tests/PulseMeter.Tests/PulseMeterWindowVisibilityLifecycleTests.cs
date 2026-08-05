@@ -240,7 +240,7 @@ public sealed class PulseMeterWindowVisibilityLifecycleTests
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
 
-        Assert.True(thread.Join(TimeSpan.FromSeconds(10)), "The STA window lifecycle test did not finish.");
+        Assert.True(thread.Join(TestTimeouts.UiThread), "The STA window lifecycle test did not finish.");
         if (failure is not null)
         {
             ExceptionDispatchInfo.Capture(failure).Throw();

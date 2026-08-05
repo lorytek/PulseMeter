@@ -97,7 +97,7 @@ public sealed class UsageTrendSectionTests
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
 
-        Assert.True(thread.Join(TimeSpan.FromSeconds(5)), "The UI Automation peer test did not finish.");
+        Assert.True(thread.Join(TestTimeouts.UiThread), "The UI Automation peer test did not finish.");
         if (threadFailure is not null)
         {
             ExceptionDispatchInfo.Capture(threadFailure).Throw();
@@ -217,7 +217,7 @@ public sealed class UsageTrendSectionTests
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
 
-        Assert.True(thread.Join(TimeSpan.FromSeconds(8)), "The chart keyboard-navigation test did not finish.");
+        Assert.True(thread.Join(TestTimeouts.UiThread), "The chart keyboard-navigation test did not finish.");
         if (threadFailure is not null)
         {
             ExceptionDispatchInfo.Capture(threadFailure).Throw();
@@ -302,7 +302,7 @@ public sealed class UsageTrendSectionTests
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
 
-        Assert.True(thread.Join(TimeSpan.FromSeconds(5)), "The learning momentum preview keyboard interaction test did not finish.");
+        Assert.True(thread.Join(TestTimeouts.UiThread), "The learning momentum preview keyboard interaction test did not finish.");
         if (threadFailure is not null)
         {
             ExceptionDispatchInfo.Capture(threadFailure).Throw();
@@ -734,7 +734,7 @@ public sealed class UsageTrendSectionTests
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
 
-        Assert.True(thread.Join(TimeSpan.FromSeconds(5)), "The momentum gauge render test did not finish.");
+        Assert.True(thread.Join(TestTimeouts.UiThread), "The momentum gauge render test did not finish.");
         if (threadFailure is not null)
         {
             ExceptionDispatchInfo.Capture(threadFailure).Throw();
@@ -1709,7 +1709,7 @@ public sealed class UsageTrendSectionTests
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
 
-        Assert.True(thread.Join(TimeSpan.FromSeconds(5)), "The recovery confirmation automation test did not finish.");
+        Assert.True(thread.Join(TestTimeouts.UiThread), "The recovery confirmation automation test did not finish.");
         if (threadFailure is not null)
         {
             ExceptionDispatchInfo.Capture(threadFailure).Throw();
@@ -1790,7 +1790,7 @@ public sealed class UsageTrendSectionTests
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
 
-        Assert.True(thread.Join(TimeSpan.FromSeconds(8)), "The live-region event test did not finish.");
+        Assert.True(thread.Join(TestTimeouts.UiThread), "The live-region event test did not finish.");
         if (threadFailure is not null)
         {
             ExceptionDispatchInfo.Capture(threadFailure).Throw();
@@ -1860,7 +1860,7 @@ public sealed class UsageTrendSectionTests
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
 
-        Assert.True(thread.Join(TimeSpan.FromSeconds(8)), "The Block planner keyboard-focus test did not finish.");
+        Assert.True(thread.Join(TestTimeouts.UiThread), "The Block planner keyboard-focus test did not finish.");
         if (threadFailure is not null)
         {
             ExceptionDispatchInfo.Capture(threadFailure).Throw();
@@ -1930,7 +1930,7 @@ public sealed class UsageTrendSectionTests
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
 
-        Assert.True(thread.Join(TimeSpan.FromSeconds(8)), "The Usage Trend keyboard-focus test did not finish.");
+        Assert.True(thread.Join(TestTimeouts.UiThread), "The Usage Trend keyboard-focus test did not finish.");
         if (threadFailure is not null)
         {
             ExceptionDispatchInfo.Capture(threadFailure).Throw();
@@ -1976,7 +1976,7 @@ public sealed class UsageTrendSectionTests
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
 
-        Assert.True(thread.Join(TimeSpan.FromSeconds(5)), "The Block planner empty-state test did not finish.");
+        Assert.True(thread.Join(TestTimeouts.UiThread), "The Block planner empty-state test did not finish.");
         if (threadFailure is not null)
         {
             ExceptionDispatchInfo.Capture(threadFailure).Throw();
@@ -2042,7 +2042,7 @@ public sealed class UsageTrendSectionTests
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
 
-        Assert.True(thread.Join(TimeSpan.FromSeconds(5)), "The next-block selector interaction test did not finish.");
+        Assert.True(thread.Join(TestTimeouts.UiThread), "The next-block selector interaction test did not finish.");
         if (threadFailure is not null)
         {
             ExceptionDispatchInfo.Capture(threadFailure).Throw();
@@ -2573,7 +2573,7 @@ public sealed class UsageTrendSectionTests
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
 
-        Assert.True(thread.Join(TimeSpan.FromSeconds(8)), "The bound selector refresh test did not finish.");
+        Assert.True(thread.Join(TestTimeouts.UiThread), "The bound selector refresh test did not finish.");
         if (threadFailure is not null)
         {
             ExceptionDispatchInfo.Capture(threadFailure).Throw();

@@ -75,7 +75,7 @@ public sealed class MouseWheelScrollRelayTests
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
 
-        Assert.True(thread.Join(TimeSpan.FromSeconds(5)), "The mouse-wheel relay test did not finish.");
+        Assert.True(thread.Join(TestTimeouts.UiThread), "The mouse-wheel relay test did not finish.");
         if (threadFailure is not null)
         {
             ExceptionDispatchInfo.Capture(threadFailure).Throw();

@@ -188,7 +188,7 @@ public sealed class RateLimitsSectionViewModelTests
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
 
-        Assert.True(thread.Join(TimeSpan.FromSeconds(8)), "The bound rate-limit selector refresh test did not finish.");
+        Assert.True(thread.Join(TestTimeouts.UiThread), "The bound rate-limit selector refresh test did not finish.");
         if (threadFailure is not null)
         {
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(threadFailure).Throw();
