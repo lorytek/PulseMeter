@@ -28,6 +28,22 @@ Only run release zips you downloaded from a PulseMeter release page you trust. T
 - Corrected missing Daily Usage records so they show as not recorded instead of a measured zero, and removed expired reset credits from the available count.
 - Hardened startup, shutdown, single-instance activation, local persistence, privacy-safe diagnostics, and UI service boundaries.
 
+## Version History
+
+| Version | Highlights |
+| --- | --- |
+| [0.6.0](CHANGELOG.md#060) | Block Planner, recovery watching, state-aware Usage Momentum, and more resilient Coding Runway history and forecasting. |
+| [0.5.0](https://github.com/lorytek/PulseMeter/releases/tag/v0.5.0) | Graph-first Coding Runway for 5-hour and 7-day limits, statistical pace modelling, and persistent usage samples. |
+| [0.4.0](https://github.com/lorytek/PulseMeter/releases/tag/v0.4.0) | Project Health comparisons, clearer rate-limit guidance, and a redesigned analytical dashboard. |
+| [0.3.1](https://github.com/lorytek/PulseMeter/releases/tag/v0.3.1) | Fixed stale live usage after a reset credit cleared the short rolling limit. |
+| [0.3.0](https://github.com/lorytek/PulseMeter/releases/tag/v0.3.0) | More reliable live readings, reusable app-server connections, and improved navigation and window placement. |
+| [0.2.1](https://github.com/lorytek/PulseMeter/releases/tag/v0.2.1) | Clearer compact-tray limits, reset times, and action controls. |
+| [0.2.0](https://github.com/lorytek/PulseMeter/releases/tag/v0.2.0) | Burn Analysis, Needs Attention signals, Limit Runway, and Idle Drain diagnostics. |
+| [0.1.1](https://github.com/lorytek/PulseMeter/releases/tag/v0.1.1) | Apache 2.0 licensing and the public contribution and security foundations. |
+| [0.1.0](https://github.com/lorytek/PulseMeter/releases/tag/v0.1.0) | Initial public build with the floating HUD, tray controls, live usage sync, and local usage summaries. |
+
+See the [full changelog](CHANGELOG.md) for detailed changes or browse [all GitHub releases](https://github.com/lorytek/PulseMeter/releases).
+
 ## Who This Is For
 
 - Windows users who want Codex rate-limit and reset-credit visibility without opening extra dashboards.
