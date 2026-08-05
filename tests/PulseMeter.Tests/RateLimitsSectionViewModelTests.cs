@@ -1,5 +1,6 @@
 namespace PulseMeter.Tests;
 
+[Collection(UsageTrendWpfCollection.Name)]
 public sealed class RateLimitsSectionViewModelTests
 {
     [Fact]

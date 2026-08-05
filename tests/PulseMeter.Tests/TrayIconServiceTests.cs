@@ -8,6 +8,7 @@ using PulseMeter.Slices.UsageCollection.Business;
 
 namespace PulseMeter.Tests;
 
+[Collection(UsageTrendWpfCollection.Name)]
 public sealed class TrayIconServiceTests
 {
     [Fact]

@@ -3,6 +3,7 @@ using System.Runtime.ExceptionServices;
 
 namespace PulseMeter.Tests;
 
+[Collection(UsageTrendWpfCollection.Name)]
 public sealed class MouseWheelScrollRelayTests
 {
     [Fact]

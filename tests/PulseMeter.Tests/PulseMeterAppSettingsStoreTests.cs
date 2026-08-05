@@ -68,44 +68,28 @@ public sealed class PulseMeterAppSettingsStoreTests
         var path = Path.Combine(Path.GetTempPath(), "PulseMeter.Tests", Guid.NewGuid().ToString("N"), "settings.json");
         var store = new PulseMeterAppSettingsStore(path);
         using var acquired = new ManualResetEventSlim();
-        using var release = new ManualResetEventSlim();
         var mutexHolder = Task.Factory.StartNew(
             () =>
             {
                 using var mutex = new Mutex(initiallyOwned: false, AtomicJsonFileStore.GetMutexName(path));
                 Assert.True(mutex.WaitOne());
                 acquired.Set();
-                release.Wait();
+                Thread.Sleep(TimeSpan.FromMilliseconds(250));
                 mutex.ReleaseMutex();
             },
             CancellationToken.None,
             TaskCreationOptions.LongRunning,
             TaskScheduler.Default);
 
-        try
-        {
-            Assert.True(acquired.Wait(TimeSpan.FromSeconds(5)));
-            var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            var saveTask = Task.Run(() =>
-            {
-                started.TrySetResult();
-                store.Save(new PulseMeterAppSettings(AutoSyncSeconds: 30));
-            });
+        Assert.True(acquired.Wait(TimeSpan.FromSeconds(5)));
+        var elapsed = System.Diagnostics.Stopwatch.StartNew();
 
-            await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            await Task.Delay(TimeSpan.FromMilliseconds(150));
-            Assert.False(saveTask.IsCompleted);
+        Assert.True(store.Save(new PulseMeterAppSettings(AutoSyncSeconds: 30)));
 
-            release.Set();
-            await mutexHolder.WaitAsync(TimeSpan.FromSeconds(5));
-            await saveTask.WaitAsync(TimeSpan.FromSeconds(5));
-            Assert.NotNull(store.Load());
-        }
-        finally
-        {
-            release.Set();
-            await mutexHolder.WaitAsync(TimeSpan.FromSeconds(5));
-        }
+        elapsed.Stop();
+        Assert.True(elapsed.Elapsed >= TimeSpan.FromMilliseconds(100));
+        await mutexHolder.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.NotNull(store.Load());
     }
 
     [Fact]

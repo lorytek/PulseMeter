@@ -4,6 +4,7 @@ using PulseMeter.Slices.UsageCollection;
 
 namespace PulseMeter.Tests;
 
+[Collection(UsageTrendWpfCollection.Name)]
 public sealed class ProjectUsageSectionViewModelTests
 {
     [Fact]
