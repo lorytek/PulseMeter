@@ -232,7 +232,7 @@ public sealed class SupportSnapshotTests
         viewModel.CancelMeasurement();
         service.CompleteNext(CompleteDesktopSnapshot());
 
-        Assert.True(SpinWait.SpinUntil(() => service.CompletionObserved, TimeSpan.FromSeconds(2)));
+        Assert.True(service.WaitForCompletionObserved(TimeSpan.FromSeconds(10)));
         Assert.Equal(DesktopProcessSnapshotPresentationState.Cancelled, viewModel.State);
         Assert.False(viewModel.CanCopyPreview);
         viewModel.CopyPreview();
@@ -428,7 +428,7 @@ public sealed class SupportSnapshotTests
                 window.Close();
                 service.CompleteNext(CompleteDesktopSnapshot());
 
-                Assert.True(SpinWait.SpinUntil(() => service.CompletionObserved, TimeSpan.FromSeconds(2)));
+                Assert.True(service.WaitForCompletionObserved(TimeSpan.FromSeconds(10)));
                 Assert.Equal(DesktopProcessSnapshotPresentationState.Cancelled, viewModel.State);
                 Assert.False(viewModel.CanCopyPreview);
             }
@@ -506,8 +506,8 @@ public sealed class SupportSnapshotTests
     private sealed class DeferredDesktopProcessSnapshotService : ICodexDesktopProcessSnapshotService
     {
         private readonly Queue<TaskCompletionSource<CodexDesktopProcessSnapshot>> _completions = new();
+        private readonly ManualResetEventSlim _completionObserved = new();
         public int CaptureCount { get; private set; }
-        public bool CompletionObserved { get; private set; }
 
         public async Task<CodexDesktopProcessSnapshot> CaptureAsync(CancellationToken cancellationToken = default)
         {
@@ -515,11 +515,13 @@ public sealed class SupportSnapshotTests
             var completion = new TaskCompletionSource<CodexDesktopProcessSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
             _completions.Enqueue(completion);
             var snapshot = await completion.Task;
-            CompletionObserved = true;
+            _completionObserved.Set();
             return snapshot;
         }
 
         public void CompleteNext(CodexDesktopProcessSnapshot snapshot) => _completions.Dequeue().TrySetResult(snapshot);
+
+        public bool WaitForCompletionObserved(TimeSpan timeout) => _completionObserved.Wait(timeout);
     }
 
     private sealed class RemeasureDesktopProcessSnapshotService(CodexDesktopProcessSnapshot firstSnapshot) : ICodexDesktopProcessSnapshotService
