@@ -18,9 +18,14 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <TextBlock Text="Coding runway"
+                <TextBlock x:Name="UsageTrendHeading"
+                           Text="Coding runway"
                            Foreground="#0F172A"
                            FontFamily="Segoe UI"
+                           Focusable="True"
+                           KeyboardNavigation.IsTabStop="False"
+                           AutomationProperties.HeadingLevel="Level1"
+                           FocusVisualStyle="{DynamicResource HeadingFocusVisualStyle}"
                            FontSize="16"
                            FontWeight="SemiBold"
                            VerticalAlignment="Center" />
@@ -363,6 +368,112 @@
                                    FontSize="10.5"
                                    TextAlignment="Center"
                                    TextWrapping="Wrap" />
+                        <Button x:Name="MomentumActivityInfo"
+                                Margin="0,4,0,0"
+                                Padding="5,2"
+                                Background="Transparent"
+                                BorderBrush="#DCE3EC"
+                                BorderThickness="1"
+                                Command="{Binding OpenMomentumDetailsCommand}"
+                                Cursor="Hand"
+                                AutomationProperties.Name="Activity-qualified momentum details"
+                                AutomationProperties.HelpText="Shows which observed hours are included in usage momentum and lets you reset this quota window's learned baseline.">
+                            <TextBlock Text="{Binding MomentumActivityStatusText}"
+                                       Foreground="#64748B"
+                                       FontSize="9.5" />
+                        </Button>
+                        <Popup x:Name="MomentumActivityPopup"
+                               PlacementTarget="{Binding ElementName=MomentumActivityInfo}"
+                               Placement="Bottom"
+                               AllowsTransparency="True"
+                               StaysOpen="False"
+                               IsOpen="{Binding IsMomentumDetailsOpen, Mode=TwoWay}"
+                               PreviewKeyDown="MomentumActivityPopup_PreviewKeyDown">
+                            <Border Width="292"
+                                    Margin="0,4,0,0"
+                                    Padding="14,12"
+                                    Background="#FFFFFF"
+                                    BorderBrush="#CBD5E1"
+                                    BorderThickness="1"
+                                    CornerRadius="10"
+                                    AutomationProperties.Name="Activity-qualified momentum details">
+                                <Grid>
+                                    <StackPanel Visibility="{Binding IsMomentumDetailsContentVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <TextBlock Text="Activity-qualified momentum"
+                                                   Foreground="#0F172A"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold" />
+                                        <TextBlock Margin="0,5,0,0"
+                                                   Text="{Binding MomentumActivityEvidenceText}"
+                                                   Foreground="#334155"
+                                                   FontSize="11" />
+                                        <TextBlock Margin="0,3,0,0"
+                                                   Text="{Binding MomentumActivityCoverageText}"
+                                                   Foreground="#64748B"
+                                                   FontSize="10.5" />
+                                        <TextBlock Margin="0,7,0,0"
+                                                   Text="{Binding MomentumMeaningText}"
+                                                   Foreground="#64748B"
+                                                   FontSize="10.5"
+                                                   LineHeight="14"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,6,0,0"
+                                                   Text="{Binding MomentumScopeText}"
+                                                   Foreground="#64748B"
+                                                   FontSize="10.5"
+                                                   FontWeight="SemiBold"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,6,0,0"
+                                                   Text="{Binding MomentumResetFeedback}"
+                                                   Foreground="#2563EB"
+                                                   FontSize="10.5"
+                                                   TextWrapping="Wrap"
+                                                   Visibility="{Binding HasMomentumResetFeedback, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                                   AutomationProperties.LiveSetting="Polite" />
+                                        <Button Margin="0,10,0,0"
+                                                Padding="8,5"
+                                                HorizontalAlignment="Left"
+                                                Background="#F8FAFC"
+                                                BorderBrush="#CBD5E1"
+                                                Command="{Binding RequestMomentumResetCommand}"
+                                                Content="Reset learned baseline…"
+                                                AutomationProperties.Name="Reset learned momentum baseline" />
+                                    </StackPanel>
+                                    <StackPanel Visibility="{Binding IsMomentumResetConfirmationOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <TextBlock Text="Reset learned baseline?"
+                                                   Foreground="#0F172A"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold" />
+                                        <TextBlock Margin="0,6,0,0"
+                                                   Text="{Binding MomentumResetConfirmationText}"
+                                                   Foreground="#475569"
+                                                   FontSize="10.5"
+                                                   LineHeight="14"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,5,0,0"
+                                                   Text="This clears PulseMeter’s learned momentum facts only. It does not change Codex history or account usage."
+                                                   Foreground="#64748B"
+                                                   FontSize="10.5"
+                                                   LineHeight="14"
+                                                   TextWrapping="Wrap" />
+                                        <StackPanel Margin="0,10,0,0" Orientation="Horizontal">
+                                            <Button Padding="9,5"
+                                                    Background="#2563EB"
+                                                    Foreground="White"
+                                                    BorderBrush="#2563EB"
+                                                    Command="{Binding ConfirmMomentumResetCommand}"
+                                                    Content="Reset" />
+                                            <Button Margin="7,0,0,0"
+                                                    Padding="9,5"
+                                                    Background="#FFFFFF"
+                                                    BorderBrush="#CBD5E1"
+                                                    Command="{Binding CancelMomentumResetCommand}"
+                                                    Content="Cancel" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </Popup>
                     </StackPanel>
 
                     <Border Grid.Column="1" Background="#E2E8F0" />

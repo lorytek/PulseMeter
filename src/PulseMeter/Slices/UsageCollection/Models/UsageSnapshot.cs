@@ -1,5 +1,28 @@
 namespace PulseMeter.Slices.UsageCollection.Models;
 
+/// <summary>
+/// Indicates whether the local activity-hour evidence was read completely.
+/// </summary>
+public enum ActivityEvidenceCoverage
+{
+    Unavailable,
+    Partial,
+    Available
+}
+
+/// <summary>
+/// Privacy-safe local activity evidence. It retains only distinct UTC hour starts;
+/// no rollout content, paths, identifiers, or token amounts are included.
+/// </summary>
+public sealed class ActivityEvidenceSnapshot
+{
+    public static readonly ActivityEvidenceSnapshot Unavailable = new();
+
+    public ActivityEvidenceCoverage Coverage { get; init; } = ActivityEvidenceCoverage.Unavailable;
+
+    public IReadOnlyList<DateTimeOffset> UtcHours { get; init; } = Array.Empty<DateTimeOffset>();
+}
+
 public sealed class UsageSnapshot
 {
     public IReadOnlyList<RateLimitBucket> Buckets { get; init; } = Array.Empty<RateLimitBucket>();
@@ -21,6 +44,8 @@ public sealed class UsageSnapshot
     public IReadOnlyList<ProjectUsageRow> ProjectUsageRows { get; init; } = Array.Empty<ProjectUsageRow>();
 
     public UsageAttributionSnapshot UsageAttribution { get; init; } = UsageAttributionSnapshot.Empty;
+
+    public ActivityEvidenceSnapshot ActivityEvidence { get; init; } = ActivityEvidenceSnapshot.Unavailable;
 
     public int? ResetCreditsAvailable { get; init; }
 

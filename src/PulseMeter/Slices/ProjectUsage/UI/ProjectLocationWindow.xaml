@@ -1,0 +1,59 @@
+<Window x:Class="PulseMeter.Slices.ProjectUsage.UI.ProjectLocationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Project location"
+        Width="640" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="#FFFFFF" FontFamily="Segoe UI">
+    <Window.Resources><BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" /></Window.Resources>
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <TextBlock Text="Project location" FontSize="18" FontWeight="SemiBold" />
+        <TextBlock Grid.Row="1" Margin="0,10,0,0" Text="{Binding ProjectDisplayName}" Foreground="#4B5563" />
+        <StackPanel Grid.Row="2" Margin="0,10,0,0">
+            <TextBlock Text="Observed path" FontWeight="SemiBold" />
+            <TextBox Margin="0,5,0,0" Text="{Binding ObservedPath, Mode=OneWay}" IsReadOnly="True" IsUndoEnabled="False"
+                     TextWrapping="Wrap" AcceptsReturn="True" MaxHeight="112" VerticalScrollBarVisibility="Auto"
+                     Background="#F9FAFB" BorderBrush="#D1D5DB" Padding="8"
+                     AutomationProperties.Name="Observed project path" />
+            <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#4B5563"
+                       Text="PulseMeter attributed activity to this path. It may not be the repository root or the worktree you intend." />
+        </StackPanel>
+        <StackPanel Grid.Row="3" Margin="0,14,0,0">
+            <TextBlock Text="Folder for actions" FontWeight="SemiBold" />
+            <Grid Margin="0,5,0,0">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <TextBox Text="{Binding CandidatePath, Mode=OneWay}" IsReadOnly="True" IsUndoEnabled="False" TextWrapping="Wrap"
+                         AcceptsReturn="True" MaxHeight="112" VerticalScrollBarVisibility="Auto"
+                         Background="#F9FAFB" BorderBrush="#D1D5DB" Padding="8"
+                         AutomationProperties.Name="Project folder for actions" />
+                <Button Grid.Column="1" Margin="8,0,0,0" Padding="14,6" Content="Browse…" Click="Browse_Click"
+                        AutomationProperties.Name="Choose a project folder for this window" />
+            </Grid>
+            <TextBlock Margin="0,5,0,0" Text="{Binding ChoiceStatusText}" Foreground="#4B5563"
+                       Visibility="{Binding HasWindowOnlyChoice, Converter={StaticResource BooleanToVisibilityConverter}}" />
+        </StackPanel>
+        <TextBlock Grid.Row="4" Margin="0,14,0,0" Text="{Binding Feedback}" Foreground="#4B5563"
+                   TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+        <TextBlock Grid.Row="5" Margin="0,12,0,0" TextWrapping="Wrap" Foreground="#4B5563"
+                   Text="Starts Windows PowerShell with this folder as its initial working directory. PulseMeter supplies no commands; your normal PowerShell profile may run." />
+        <Grid Grid.Row="6" Margin="0,16,0,0">
+            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <Button Grid.Row="0" Grid.Column="1" Padding="14,6" Content="Open folder" Command="{Binding OpenFolderCommand}"
+                    AutomationProperties.Name="Open project folder" />
+            <Button Grid.Row="0" Grid.Column="2" Margin="8,0,0,0" Padding="14,6" Content="Open Windows PowerShell here"
+                    Command="{Binding OpenWindowsPowerShellCommand}" AutomationProperties.Name="Open Windows PowerShell in project folder" />
+            <Button Grid.Row="1" Grid.Column="2" Margin="8,8,0,0" Padding="14,6" Content="Close" Click="Close_Click" IsCancel="True"
+                    AutomationProperties.Name="Close project location" />
+        </Grid>
+    </Grid>
+</Window>

@@ -11,10 +11,15 @@
                                     Style="{DynamicResource LightCardStyle}"
                                     Visibility="{Binding DataContext.IsRateLimitsDailyVisible, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <StackPanel>
-                                    <TextBlock Text="WEEKLY PACE"
+                                    <TextBlock x:Name="WeeklyPaceHeading"
+                                               Text="WEEKLY PACE"
                                                Foreground="#111827"
                                                FontSize="20"
-                                               FontWeight="Bold" />
+                                               FontWeight="Bold"
+                                               Focusable="True"
+                                               KeyboardNavigation.IsTabStop="False"
+                                               AutomationProperties.HeadingLevel="Level1"
+                                               FocusVisualStyle="{DynamicResource HeadingFocusVisualStyle}" />
                                     <TextBlock Margin="0,6,0,0"
                                                Text="{Binding RateLimitsDailySummaryText}"
                                                Foreground="#6B7280"

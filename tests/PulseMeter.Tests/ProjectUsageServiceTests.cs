@@ -284,6 +284,97 @@ public sealed class ProjectUsageServiceTests
     }
 
     [Fact]
+    public async Task SharedRolloutSource_ProjectsDistinctUtcActivityHoursFromTheExistingRolloutCache()
+    {
+        var codexHome = CreateCodexHome();
+        var now = new DateTimeOffset(2026, 7, 3, 12, 45, 0, TimeSpan.Zero);
+        var rollout = WriteRollout(
+            codexHome,
+            "activity.jsonl",
+            (now, 100),
+            (now.AddMinutes(-20), 200),
+            (now.AddHours(-1), 300));
+        CreateStateDatabase(codexHome, Thread("thread-activity", @"C:\Projects\ProjectA", rollout, now));
+        var source = new SharedRolloutAnalyticsSource(codexHome);
+        var cutoffDate = DateOnly.FromDateTime(now.ToLocalTime().DateTime).AddDays(-29);
+
+        await source.GetSessionSummariesAsync(cutoffDate);
+        var evidence = await source.GetActivityEvidenceAsync(cutoffDate);
+
+        Assert.Equal(ActivityEvidenceCoverage.Available, evidence.Coverage);
+        Assert.Equal(
+            [now.AddHours(-1).AddMinutes(-45), now.AddMinutes(-45)],
+            evidence.UtcHours);
+        Assert.Equal(1, source.RolloutParseCount);
+        Assert.Equal(
+            [nameof(ActivityEvidenceSnapshot.Coverage), nameof(ActivityEvidenceSnapshot.UtcHours)],
+            typeof(ActivityEvidenceSnapshot).GetProperties().Select(property => property.Name).Order());
+    }
+
+    [Fact]
+    public async Task SharedRolloutSource_MalformedActivityEventDegradesCoverageWithoutErasingKnownHours()
+    {
+        var codexHome = CreateCodexHome();
+        var now = new DateTimeOffset(2026, 7, 3, 12, 45, 0, TimeSpan.Zero);
+        var rollout = WriteRollout(codexHome, "activity-malformed.jsonl", now, 100);
+        File.AppendAllText(rollout, Environment.NewLine + "{\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\"}}");
+        CreateStateDatabase(codexHome, Thread("thread-activity", @"C:\Projects\ProjectA", rollout, now));
+        var source = new SharedRolloutAnalyticsSource(codexHome);
+
+        var evidence = await source.GetActivityEvidenceAsync(DateOnly.FromDateTime(now.ToLocalTime().DateTime).AddDays(-29));
+
+        Assert.Equal(ActivityEvidenceCoverage.Partial, evidence.Coverage);
+        Assert.Equal([now.AddMinutes(-45)], evidence.UtcHours);
+    }
+
+    [Fact]
+    public async Task SharedRolloutSource_TimestampedTokenEnvelopeWithoutUsageDoesNotQualifyActivity()
+    {
+        var codexHome = CreateCodexHome();
+        var now = new DateTimeOffset(2026, 7, 3, 12, 45, 0, TimeSpan.Zero);
+        var rollout = WriteRollout(codexHome, "activity-invalid-usage.jsonl", now, 100);
+        File.AppendAllText(
+            rollout,
+            Environment.NewLine + $"{{\"timestamp\":\"{now.AddHours(1):O}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"token_count\",\"info\":{{}}}}}}" );
+        CreateStateDatabase(codexHome, Thread("thread-activity", @"C:\Projects\ProjectA", rollout, now));
+        var source = new SharedRolloutAnalyticsSource(codexHome);
+
+        var evidence = await source.GetActivityEvidenceAsync(DateOnly.FromDateTime(now.ToLocalTime().DateTime).AddDays(-29));
+
+        Assert.Equal(ActivityEvidenceCoverage.Partial, evidence.Coverage);
+        Assert.Equal([now.AddMinutes(-45)], evidence.UtcHours);
+    }
+
+    [Fact]
+    public async Task SharedRolloutSource_NonActivityLineContainingTokenCountDoesNotDegradeCoverage()
+    {
+        var codexHome = CreateCodexHome();
+        var now = new DateTimeOffset(2026, 7, 3, 12, 45, 0, TimeSpan.Zero);
+        var rollout = WriteRollout(codexHome, "activity-unrelated.jsonl", now, 100);
+        File.AppendAllText(
+            rollout,
+            Environment.NewLine + "{\"type\":\"response_item\",\"payload\":{\"type\":\"token_count\"}}");
+        CreateStateDatabase(codexHome, Thread("thread-activity", @"C:\Projects\ProjectA", rollout, now));
+        var source = new SharedRolloutAnalyticsSource(codexHome);
+
+        var evidence = await source.GetActivityEvidenceAsync(DateOnly.FromDateTime(now.ToLocalTime().DateTime).AddDays(-29));
+
+        Assert.Equal(ActivityEvidenceCoverage.Available, evidence.Coverage);
+        Assert.Equal([now.AddMinutes(-45)], evidence.UtcHours);
+    }
+
+    [Fact]
+    public async Task SharedRolloutSource_MissingLocalStateReturnsUnavailableActivityEvidence()
+    {
+        var source = new SharedRolloutAnalyticsSource(CreateCodexHome());
+
+        var evidence = await source.GetActivityEvidenceAsync(new DateOnly(2026, 7, 3));
+
+        Assert.Equal(ActivityEvidenceCoverage.Unavailable, evidence.Coverage);
+        Assert.Empty(evidence.UtcHours);
+    }
+
+    [Fact]
     public async Task SharedRolloutSource_KeepsParsedTokenPrefixWhileActiveRolloutIsAppending()
     {
         var codexHome = CreateCodexHome();

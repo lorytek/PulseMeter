@@ -1,7 +1,10 @@
 using System.Collections;
+using System.Drawing;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
 using PulseMeter.Platform.Windows;
+using PulseMeter.Slices.PulseMeterWindow.Business;
+using PulseMeter.Slices.SupportSnapshot.UI;
 using PulseMeter.Slices.PulseMeterWindow.UI;
 using PulseMeter.Slices.UsageCollection;
 using PulseMeter.Slices.UsageCollection.Business;
@@ -11,6 +14,67 @@ namespace PulseMeter.Tests;
 [Collection(UsageTrendWpfCollection.Name)]
 public sealed class TrayIconServiceTests
 {
+    [Fact]
+    public void ConfidenceBeacon_DeduplicatesSameStateNotificationsAndKeepsShortTooltips()
+    {
+        Exception? threadFailure = null;
+        var thread = new Thread(() =>
+        {
+            TrayIconService? tray = null;
+            try
+            {
+                var window = new ImmediatePulseMeterWindow();
+                var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
+                var factoryCalls = 0;
+                tray = new TrayIconService(
+                    window,
+                    viewModel,
+                    () => { },
+                    new CountingQuickAccessController(),
+                    new CountingSupportSnapshotPresenter(),
+                    (_, _) =>
+                    {
+                        factoryCalls++;
+                        return (Icon)SystemIcons.Application.Clone();
+                    });
+
+                Assert.Equal(1, factoryCalls);
+                Assert.InRange(TrayText(tray).Length, 1, 63);
+
+                var live = new UsageSnapshot
+                {
+                    SyncStatus = SyncStatus.Live,
+                    LastUpdatedUtc = DateTimeOffset.UtcNow
+                };
+                viewModel.ApplySnapshot(live);
+                Assert.Equal(2, factoryCalls);
+                Assert.InRange(TrayText(tray).Length, 1, 63);
+
+                viewModel.ApplySnapshot(live);
+                viewModel.RefreshClock();
+                Assert.Equal(2, factoryCalls);
+                Assert.InRange(TrayText(tray).Length, 1, 63);
+            }
+            catch (Exception exception)
+            {
+                threadFailure = exception;
+            }
+            finally
+            {
+                tray?.Dispose();
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.InvokeShutdown();
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+
+        Assert.True(thread.Join(TestTimeouts.UiThread), "The tray beacon deduplication test did not finish.");
+        if (threadFailure is not null)
+        {
+            ExceptionDispatchInfo.Capture(threadFailure).Throw();
+        }
+    }
+
     [Fact]
     public void MenuCheckmarksFollowViewModelChangesAndMenuClicksUpdateTheViewModel()
     {
@@ -23,16 +87,48 @@ public sealed class TrayIconServiceTests
                 var window = new ImmediatePulseMeterWindow();
                 var usageService = new StubUsageService();
                 var viewModel = new PulseMeterWindowViewModel(usageService);
+                var quickAccess = new CountingQuickAccessController();
+                var supportSnapshot = new CountingSupportSnapshotPresenter();
+                var desktopProcessSnapshot = new CountingDesktopProcessSnapshotPresenter();
                 var shutdownCount = 0;
-                tray = new TrayIconService(window, viewModel, () => shutdownCount++);
+                tray = new TrayIconService(
+                    window,
+                    viewModel,
+                    () => shutdownCount++,
+                    quickAccess,
+                    supportSnapshot,
+                    (_, _) => throw new InvalidOperationException("test icon factory failure"),
+                    desktopProcessSnapshot);
+                Assert.Equal("PulseMeter — Starting", TrayText(tray));
+                viewModel.ApplySnapshot(new UsageSnapshot
+                {
+                    SyncStatus = SyncStatus.Live,
+                    LastUpdatedUtc = DateTimeOffset.UtcNow,
+                    Source = "C:\\private\\customer api-key=poison",
+                    StatusMessage = "customer secret"
+                });
+                Assert.Equal("PulseMeter — Live", TrayText(tray));
+                viewModel.ApplySnapshot(new UsageSnapshot
+                {
+                    SyncStatus = SyncStatus.Unavailable,
+                    Source = "poison",
+                    StatusMessage = "api-key=secret"
+                });
+                Assert.Equal("PulseMeter — Unavailable", TrayText(tray));
+                viewModel.ApplySnapshot(new UsageSnapshot { SyncStatus = SyncStatus.Mocked, Source = "poison" });
+                Assert.Equal("PulseMeter — Mock", TrayText(tray));
 
                 var show = FindMenuItem(tray, "Show PulseMeter");
                 var hide = FindMenuItem(tray, "Hide PulseMeter");
+                var quickAccessNow = FindMenuItem(tray, "Quick access PulseMeter");
                 var refresh = FindMenuItem(tray, "Refresh");
+                var supportSnapshotItem = FindMenuItem(tray, "Support snapshot…");
+                var desktopProcessSnapshotItem = FindMenuItem(tray, "Desktop process snapshot…");
                 var mockMode = FindMenuItem(tray, "Mock Mode");
                 var autoShow = FindMenuItem(tray, "Auto-show when monitored app focused");
                 var autoHide = FindMenuItem(tray, "Auto-hide when focus leaves");
                 var alwaysOnTop = FindMenuItem(tray, "Always on top");
+                var quickAccessHotkey = FindMenuItem(tray, "System-wide quick access shortcut (Ctrl+Alt+Shift+P)");
                 var exit = FindMenuItem(tray, "Exit");
 
                 var initialMockMode = viewModel.UseMockMode;
@@ -44,6 +140,7 @@ public sealed class TrayIconServiceTests
                 Assert.Equal(initialAutoShow, IsChecked(autoShow));
                 Assert.Equal(initialAutoHide, IsChecked(autoHide));
                 Assert.Equal(initialAlwaysOnTop, IsChecked(alwaysOnTop));
+                Assert.False(IsChecked(quickAccessHotkey));
 
                 viewModel.UseMockMode = !initialMockMode;
                 viewModel.AutoShowWhenCodexFocused = !initialAutoShow;
@@ -54,6 +151,22 @@ public sealed class TrayIconServiceTests
                 Assert.Equal(!initialAutoShow, IsChecked(autoShow));
                 Assert.Equal(!initialAutoHide, IsChecked(autoHide));
                 Assert.Equal(!initialAlwaysOnTop, IsChecked(alwaysOnTop));
+
+                PerformClick(quickAccessNow);
+                Assert.Equal(1, quickAccess.ToggleCount);
+
+                PerformClick(quickAccessHotkey);
+                Assert.True(viewModel.IsQuickAccessHotkeyRequested);
+                Assert.True(IsChecked(quickAccessHotkey));
+
+                var snapshotCallsBeforePreview = usageService.GetSnapshotCallCount;
+                PerformClick(supportSnapshotItem);
+                Assert.Equal(1, supportSnapshot.ShowCount);
+                Assert.Equal(snapshotCallsBeforePreview, usageService.GetSnapshotCallCount);
+
+                PerformClick(desktopProcessSnapshotItem);
+                Assert.Equal(1, desktopProcessSnapshot.ShowCount);
+                Assert.Equal(snapshotCallsBeforePreview, usageService.GetSnapshotCallCount);
 
                 PerformClick(mockMode);
                 PerformClick(autoShow);
@@ -193,6 +306,38 @@ public sealed class TrayIconServiceTests
         {
             GetSnapshotCallCount++;
             return Task.FromResult(new UsageSnapshot());
+        }
+    }
+
+    private static string TrayText(TrayIconService tray)
+    {
+        var notifyField = typeof(TrayIconService).GetField("_notifyIcon", BindingFlags.Instance | BindingFlags.NonPublic);
+        var notify = Assert.IsAssignableFrom<object>(notifyField?.GetValue(tray));
+        return Assert.IsType<string>(notify.GetType().GetProperty("Text")?.GetValue(notify));
+    }
+
+    private sealed class CountingQuickAccessController : IQuickAccessWindowController
+    {
+        public int ToggleCount { get; private set; }
+
+        public void ToggleQuickAccess() => ToggleCount++;
+    }
+
+    private sealed class CountingSupportSnapshotPresenter : ISupportSnapshotPresenter
+    {
+        public int ShowCount { get; private set; }
+
+        public void ShowPreview() => ShowCount++;
+    }
+
+    private sealed class CountingDesktopProcessSnapshotPresenter : ICodexDesktopProcessSnapshotPresenter
+    {
+        public int ShowCount { get; private set; }
+
+        public void ShowSnapshot(bool measureOnOpen = false)
+        {
+            Assert.False(measureOnOpen);
+            ShowCount++;
         }
     }
 }

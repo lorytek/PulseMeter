@@ -14,10 +14,15 @@
             <Grid MinHeight="36">
                 <StackPanel VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="BURN ANALYSIS"
+                        <TextBlock x:Name="BurnAnalysisHeading"
+                                   Text="BURN ANALYSIS"
                                    Foreground="#111827"
                                    FontSize="20"
-                                   FontWeight="Bold" />
+                                   FontWeight="Bold"
+                                   Focusable="True"
+                                   KeyboardNavigation.IsTabStop="False"
+                                   AutomationProperties.HeadingLevel="Level1"
+                                   FocusVisualStyle="{DynamicResource HeadingFocusVisualStyle}" />
                         <Border x:Name="BurnAnalysisEstimatedEvidenceLabel"
                                 Style="{DynamicResource LightEvidencePillStyle}">
                             <TextBlock Text="Estimated"

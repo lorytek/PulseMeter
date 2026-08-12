@@ -80,7 +80,20 @@ public sealed class PulseMeterWindowViewModelSyncTests
         {
             Source = "AppServer",
             SyncStatus = SyncStatus.Live,
-            LastUpdatedUtc = DateTimeOffset.UtcNow.AddMinutes(-5)
+            LastUpdatedUtc = DateTimeOffset.UtcNow.AddMinutes(-5),
+            Buckets =
+            [
+                new RateLimitBucket
+                {
+                    LimitId = "codex",
+                    GroupLabel = "General",
+                    Label = "5h Window",
+                    WindowLabel = "5h",
+                    WindowDurationMins = 300,
+                    UsedPercent = 96,
+                    ResetsAtUtc = DateTimeOffset.UtcNow.AddHours(2)
+                }
+            ]
         });
 
         viewModel.RefreshClock();
@@ -94,6 +107,9 @@ public sealed class PulseMeterWindowViewModelSyncTests
         Assert.Equal(viewModel.LastUpdatedText, viewModel.ExpandedHeader.LastUpdatedText);
         Assert.Equal(viewModel.LastUpdatedDetailText, viewModel.ExpandedHeader.LastUpdatedDetailText);
         Assert.Equal($"{viewModel.StatusBadgeText}. {viewModel.LastUpdatedDetailText}", viewModel.ExpandedHeader.StatusSummaryText);
+        var item = Assert.Single(viewModel.NeedsAttention.NeedsAttentionItems);
+        Assert.Equal("SYNC", item.BadgeText);
+        Assert.Equal("Live data is stale", item.Title);
     }
 
     [Theory]
@@ -771,12 +787,94 @@ public sealed class PulseMeterWindowViewModelSyncTests
         viewModel.ApplySnapshot(new UsageSnapshot
         {
             SyncStatus = SyncStatus.Stale,
-            StatusMessage = "Using cached usage."
+            StatusMessage = "Using cached usage.",
+            Buckets =
+            [
+                new RateLimitBucket
+                {
+                    Label = "General weekly",
+                    WindowDurationMins = 10_080,
+                    UsedPercent = 96,
+                    ResetsAtUtc = DateTimeOffset.UtcNow.AddHours(2)
+                }
+            ]
         });
 
         Assert.True(viewModel.NeedsAttention.HasNeedsAttention);
         var item = Assert.Single(viewModel.NeedsAttention.NeedsAttentionItems);
         Assert.Equal("Live data is stale", item.Title);
+    }
+
+    [Fact]
+    public void RefreshClock_UnchangedFreshness_DoesNotRebuildNeedsAttentionCollection()
+    {
+        var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
+        viewModel.ApplySnapshot(new UsageSnapshot
+        {
+            Source = "AppServer",
+            SyncStatus = SyncStatus.Live,
+            LastUpdatedUtc = DateTimeOffset.UtcNow,
+            Buckets =
+            [
+                new RateLimitBucket
+                {
+                    Label = "General weekly",
+                    WindowDurationMins = 10_080,
+                    UsedPercent = 96,
+                    ResetsAtUtc = DateTimeOffset.UtcNow.AddHours(2)
+                }
+            ]
+        });
+        var collectionChanges = 0;
+        viewModel.NeedsAttention.NeedsAttentionItems.CollectionChanged += (_, _) => collectionChanges++;
+
+        viewModel.RefreshClock();
+        viewModel.RefreshClock();
+
+        Assert.Equal(0, collectionChanges);
+        Assert.Contains(viewModel.NeedsAttention.NeedsAttentionItems, item => item.Title == "Weekly window is low");
+    }
+
+    [Fact]
+    public void ApplySnapshot_FreshLiveDataReenablesActionableAttentionSignalsAfterStaleData()
+    {
+        var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
+        var resetAt = DateTimeOffset.UtcNow.AddHours(2);
+
+        viewModel.ApplySnapshot(new UsageSnapshot
+        {
+            SyncStatus = SyncStatus.Stale,
+            StatusMessage = "Using cached usage.",
+            Buckets =
+            [
+                new RateLimitBucket
+                {
+                    Label = "General weekly",
+                    WindowDurationMins = 10_080,
+                    UsedPercent = 96,
+                    ResetsAtUtc = resetAt
+                }
+            ]
+        });
+        viewModel.ApplySnapshot(new UsageSnapshot
+        {
+            Source = "AppServer",
+            SyncStatus = SyncStatus.Live,
+            LastUpdatedUtc = DateTimeOffset.UtcNow,
+            Buckets =
+            [
+                new RateLimitBucket
+                {
+                    Label = "General weekly",
+                    WindowDurationMins = 10_080,
+                    UsedPercent = 96,
+                    ResetsAtUtc = resetAt
+                }
+            ]
+        });
+
+        Assert.Contains(viewModel.NeedsAttention.NeedsAttentionItems, item => item.Title == "Weekly window is low");
+        Assert.DoesNotContain(viewModel.NeedsAttention.NeedsAttentionItems, item => item.BadgeText == "SYNC");
     }
 
     [Fact]

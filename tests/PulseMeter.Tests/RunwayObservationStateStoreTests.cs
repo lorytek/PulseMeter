@@ -1,4 +1,5 @@
 using PulseMeter.Slices.UsageSignals.Business;
+using PulseMeter.Slices.UsageSignals.Models;
 
 namespace PulseMeter.Tests;
 
@@ -11,7 +12,9 @@ public sealed class RunwayObservationStateStoreTests
         var store = new RunwayObservationStateStore(path);
         var state = new RunwayObservationState(
             RunwayObservationStateStore.CurrentSchemaVersion,
-            [new RunwayObservationSample("codex|300", "codex", "General", "5h Window", "5h", 300, 42, DateTimeOffset.UtcNow.AddHours(1), DateTimeOffset.UtcNow, StartsAfterMeasurementGap: true)]);
+            [new RunwayObservationSample("codex|300", "codex", "General", "5h Window", "5h", 300, 42, DateTimeOffset.UtcNow.AddHours(1), DateTimeOffset.UtcNow, StartsAfterMeasurementGap: true)],
+            [new BaselineHourlyUsageRateSample("codex|10080", DateTimeOffset.UtcNow.AddHours(-2), 1.5, HourlyActivityEvidence.Both)],
+            [new BaselineResetCutoffSample("codex|10080", DateTimeOffset.UtcNow.AddHours(-3))]);
 
         store.Save(state);
         File.WriteAllText(path, "{ invalid json");
@@ -24,6 +27,36 @@ public sealed class RunwayObservationStateStoreTests
         var sample = Assert.IsType<RunwayObservationSample>(Assert.Single(loadedState.Samples!));
         Assert.Equal(42, sample.UsedPercent);
         Assert.True(sample.StartsAfterMeasurementGap);
+        var baselineRates = Assert.IsAssignableFrom<IReadOnlyList<BaselineHourlyUsageRateSample?>>(loadedState.BaselineHourlyRates);
+        var baseline = Assert.IsType<BaselineHourlyUsageRateSample>(Assert.Single(baselineRates));
+        Assert.Equal(1.5, baseline.PercentPerHour);
+        Assert.Equal(HourlyActivityEvidence.Both, baseline.ActivityEvidence);
+        Assert.Single(loadedState.BaselineResetCutoffs!);
+    }
+
+    [Fact]
+    public void Load_AcceptsSchemaV2RowsWithoutActivityClassification()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "PulseMeter.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "runway-observations.json");
+        File.WriteAllText(path,
+            """
+            {
+              "schemaVersion": 2,
+              "samples": [],
+              "baselineHourlyRates": [
+                { "bucketId": "codex|10080", "hourStartedAtUtc": "2026-07-21T08:00:00+00:00", "percentPerHour": 0 },
+                { "bucketId": "codex|10080", "hourStartedAtUtc": "2026-07-21T09:00:00+00:00", "percentPerHour": 1.5 }
+              ]
+            }
+            """);
+
+        var loaded = new RunwayObservationStateStore(path).Load();
+
+        Assert.Equal(RunwayObservationLoadStatus.Loaded, loaded.Status);
+        Assert.Equal(2, loaded.State!.SchemaVersion);
+        Assert.All(loaded.State.BaselineHourlyRates!, row => Assert.Equal(HourlyActivityEvidence.None, row!.ActivityEvidence));
     }
 
     [Fact]
@@ -58,6 +91,8 @@ public sealed class RunwayObservationStateStoreTests
 
         var sample = Assert.IsType<RunwayObservationSample>(Assert.Single(loaded.State!.Samples!));
         Assert.False(sample.StartsAfterMeasurementGap);
+        Assert.Equal(1, loaded.State.SchemaVersion);
+        Assert.Null(loaded.State.BaselineHourlyRates);
     }
 
     [Fact]

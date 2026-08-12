@@ -7,6 +7,7 @@
         xmlns:expandedHeader="clr-namespace:PulseMeter.Slices.ExpandedHeader.UI"
         xmlns:navigationRail="clr-namespace:PulseMeter.Slices.NavigationRail.UI"
         xmlns:needsAttention="clr-namespace:PulseMeter.Slices.NeedsAttention.UI"
+        xmlns:returnNote="clr-namespace:PulseMeter.Slices.ReturnNote.UI"
         xmlns:projectUsage="clr-namespace:PulseMeter.Slices.ProjectUsage.UI"
         xmlns:rateLimits="clr-namespace:PulseMeter.Slices.RateLimits.UI"
         xmlns:rateLimitsDaily="clr-namespace:PulseMeter.Slices.RateLimitsDaily.UI"
@@ -151,7 +152,7 @@
 
                         <ScrollViewer x:Name="ExpandedContentScrollViewer"
                                       Grid.Row="2"
-                                      VerticalScrollBarVisibility="Hidden"
+                                      VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Disabled"
                                       ScrollChanged="ExpandedContentScrollViewer_ScrollChanged">
                         <StackPanel x:Name="ExpandedContentStackPanel"
@@ -159,6 +160,9 @@
                             <needsAttention:NeedsAttentionSection DataContext="{Binding NeedsAttention}"
                                                                    x:Name="NeedsAttentionSection"
                                                                    ReviewRequested="NeedsAttentionSection_ReviewRequested" />
+
+                            <returnNote:ReturnNoteSection DataContext="{Binding ReturnNote}"
+                                                        x:Name="ReturnNoteSection" />
 
                             <rateLimits:RateLimitsSection DataContext="{Binding RateLimits}"
                                                            x:Name="RateLimitsSection" />

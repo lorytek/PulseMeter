@@ -1,0 +1,143 @@
+<UserControl x:Class="PulseMeter.Slices.ReturnNote.UI.ReturnNoteSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </UserControl.Resources>
+
+    <Border Margin="0,12,0,0"
+            Padding="16"
+            Style="{DynamicResource LightCardStyle}"
+            AutomationProperties.Name="Return note">
+        <StackPanel>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock VerticalAlignment="Center"
+                           Text="RETURN NOTE"
+                           FontSize="20"
+                           FontWeight="Bold"
+                           Foreground="#111827" />
+                <Button Grid.Column="1"
+                        Margin="16,0,0,0"
+                        VerticalAlignment="Center"
+                        Command="{Binding AddNoteCommand}"
+                        Style="{DynamicResource LightButtonStyle}"
+                        AutomationProperties.Name="Add note"
+                        Visibility="{Binding IsEmpty, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <AccessText Text="_Add note" />
+                </Button>
+            </Grid>
+
+            <TextBlock Margin="0,4,0,0"
+                       Text="Leave one next step before you switch away. Kept only while PulseMeter runs."
+                       Foreground="#4B5563"
+                       TextWrapping="Wrap"
+                       Visibility="{Binding IsEmpty, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+            <StackPanel Margin="0,10,0,0"
+                        Visibility="{Binding IsEditing, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Label Content="_Project or task"
+                       Target="{Binding ElementName=ForTextBox}" />
+                <TextBox x:Name="ForTextBox"
+                         Text="{Binding ForText, UpdateSourceTrigger=PropertyChanged}"
+                         MaxLength="160"
+                         AutomationProperties.Name="Project or task" />
+                <Label Margin="0,8,0,0"
+                       Content="_Next step"
+                       Target="{Binding ElementName=NextStepTextBox}" />
+                <TextBox x:Name="NextStepTextBox"
+                         Text="{Binding NextStep, UpdateSourceTrigger=PropertyChanged}"
+                         MaxLength="480"
+                         AutomationProperties.Name="Next step" />
+                <TextBlock Margin="0,8,0,0"
+                           Text="Memory-only. Do not enter secrets or customer data."
+                           Foreground="#6B7280"
+                           FontSize="12"
+                           TextWrapping="Wrap" />
+                <StackPanel Margin="0,12,0,0"
+                            Orientation="Horizontal">
+                    <Button Command="{Binding SaveCommand}"
+                            Style="{DynamicResource LightButtonStyle}"
+                            AutomationProperties.Name="Save return note">
+                        <AccessText Text="_Save" />
+                    </Button>
+                    <Button Margin="8,0,0,0"
+                            Command="{Binding CancelCommand}"
+                            Style="{DynamicResource LightButtonStyle}"
+                            AutomationProperties.Name="Cancel editing return note">
+                        <AccessText Text="_Cancel" />
+                    </Button>
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Margin="0,10,0,0"
+                        Visibility="{Binding IsViewing, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <TextBlock Text="Project or task"
+                           FontWeight="SemiBold" />
+                <TextBlock Text="{Binding SavedFor}"
+                           TextWrapping="Wrap" />
+                <TextBlock Margin="0,8,0,0"
+                           Text="Next step"
+                           FontWeight="SemiBold" />
+                <TextBlock Text="{Binding SavedNextStep}"
+                           TextWrapping="Wrap" />
+                <TextBlock Margin="0,8,0,0"
+                           Text="Memory-only. Copy uses the Windows clipboard, which may retain or sync text."
+                           Foreground="#6B7280"
+                           FontSize="12"
+                           TextWrapping="Wrap" />
+                <StackPanel Margin="0,12,0,0"
+                            Orientation="Horizontal">
+                    <Button Command="{Binding EditCommand}"
+                            Style="{DynamicResource LightButtonStyle}"
+                            AutomationProperties.Name="Edit return note">
+                        <AccessText Text="_Edit" />
+                    </Button>
+                    <Button Margin="8,0,0,0"
+                            Command="{Binding CopyNextStepCommand}"
+                            Style="{DynamicResource LightButtonStyle}"
+                            AutomationProperties.Name="Copy next step"
+                            AutomationProperties.HelpText="Copies only the saved next step. Windows clipboard history or sync may retain it.">
+                        <AccessText Text="Copy _next step" />
+                    </Button>
+                    <Button Margin="8,0,0,0"
+                            Command="{Binding ClearCommand}"
+                            Style="{DynamicResource LightButtonStyle}"
+                            AutomationProperties.Name="Clear return note">
+                        <AccessText Text="C_lear" />
+                    </Button>
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Margin="0,10,0,0"
+                        Visibility="{Binding IsConfirmingClear, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <TextBlock Text="Clear this note? It will disappear from this PulseMeter run."
+                           TextWrapping="Wrap"
+                           Foreground="#92400E" />
+                <StackPanel Margin="0,6,0,0"
+                            Orientation="Horizontal">
+                    <Button Command="{Binding ConfirmClearCommand}"
+                            Style="{DynamicResource LightButtonStyle}"
+                            AutomationProperties.Name="Confirm clear return note">
+                        <AccessText Text="Confirm _clear" />
+                    </Button>
+                    <Button Margin="8,0,0,0"
+                            Command="{Binding CancelClearCommand}"
+                            Style="{DynamicResource LightButtonStyle}"
+                            AutomationProperties.Name="Cancel clearing return note">
+                        <AccessText Text="_Cancel" />
+                    </Button>
+                </StackPanel>
+            </StackPanel>
+
+            <TextBlock Margin="0,8,0,0"
+                       Text="{Binding StatusText}"
+                       Foreground="#374151"
+                       AutomationProperties.LiveSetting="Polite"
+                       Visibility="{Binding HasStatus, Converter={StaticResource BooleanToVisibilityConverter}}" />
+        </StackPanel>
+    </Border>
+</UserControl>

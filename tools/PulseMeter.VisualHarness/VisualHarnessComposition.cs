@@ -4,9 +4,13 @@ using PulseMeter.Platform.Persistence;
 using PulseMeter.Platform.Threading;
 using PulseMeter.Platform.Timing;
 using PulseMeter.Platform.Windows;
+using PulseMeter.Slices.ProjectUsage.Business;
 using PulseMeter.Slices.PulseMeterWindow;
 using PulseMeter.Slices.PulseMeterWindow.Business;
 using PulseMeter.Slices.ResetCredits.Business;
+using PulseMeter.Slices.SupportSnapshot.Business;
+using PulseMeter.Slices.SupportSnapshot.UI;
+using PulseMeter.Slices.SupportSnapshot.Models;
 using PulseMeter.Slices.UsageCollection.Business;
 using PulseMeter.Slices.UsageSignals.Business;
 
@@ -17,7 +21,9 @@ public static class VisualHarnessComposition
     public static ServiceProvider BuildServiceProvider(
         VisualHarnessPaths paths,
         Action shutdown,
-        VisualHarnessScenario scenario = VisualHarnessScenario.Healthy)
+        VisualHarnessScenario scenario = VisualHarnessScenario.Healthy,
+        DesktopProcessSnapshotVisualScenario desktopProcessSnapshotScenario = DesktopProcessSnapshotVisualScenario.None,
+        ProjectLocationVisualScenario projectLocationScenario = ProjectLocationVisualScenario.None)
     {
         VisualHarnessWorkspace.CreateStateRoot(paths);
 
@@ -48,6 +54,14 @@ public static class VisualHarnessComposition
         services.AddSingleton<VisualHarnessClipboardService>();
         services.AddSingleton<IClipboardService>(
             sp => sp.GetRequiredService<VisualHarnessClipboardService>());
+        services.AddSingleton<ICodexDesktopProcessSnapshotService>(
+            _ => new VisualHarnessDesktopProcessSnapshotService(desktopProcessSnapshotScenario));
+        services.AddSingleton<VisualHarnessProjectLocationActionService>(
+            _ => new VisualHarnessProjectLocationActionService(projectLocationScenario));
+        services.AddSingleton<IProjectLocationActionService>(
+            sp => sp.GetRequiredService<VisualHarnessProjectLocationActionService>());
+        services.AddSingleton<VisualHarnessProjectFolderPicker>();
+        services.AddSingleton<IProjectFolderPicker>(sp => sp.GetRequiredService<VisualHarnessProjectFolderPicker>());
         services.AddSingleton<VisualHarnessTrayIconService>();
         services.AddSingleton<ITrayIconService>(
             sp => sp.GetRequiredService<VisualHarnessTrayIconService>());
@@ -56,6 +70,9 @@ public static class VisualHarnessComposition
         services.AddSingleton<IUiDispatcher, WpfUiDispatcher>();
         services.AddSingleton<IPulseMeterWindowLifecycleCoordinator, PulseMeterWindowLifecycleCoordinator>();
         services.AddPulseMeterWindowCore(shutdown);
+        services.AddSingleton<SupportSnapshotFormatter>();
+        services.AddSingleton<ISupportSnapshotPresenter, SupportSnapshotPresenter>();
+        services.AddSingleton<ICodexDesktopProcessSnapshotPresenter, DesktopProcessSnapshotPresenter>();
 
         return services.BuildServiceProvider();
     }

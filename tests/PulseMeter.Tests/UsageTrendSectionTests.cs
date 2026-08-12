@@ -499,7 +499,7 @@ public sealed class UsageTrendSectionTests
     }
 
     [Fact]
-    public void Presenter_WeeklyEvidenceShowsProgressTowardTwentyFourHourBaseline()
+    public void Presenter_WeeklyEvidenceShowsProgressTowardTwentyFourHourHistory()
     {
         var now = new DateTimeOffset(2026, 7, 21, 8, 30, 0, TimeSpan.Zero);
         var reset = now.AddDays(4);
@@ -533,15 +533,13 @@ public sealed class UsageTrendSectionTests
 
         var model = Assert.IsType<UsageTrendChartModel>(chart);
         Assert.Equal(
-            "Building 24h baseline • 2.6h usable now · 2 samples",
+            "Learning weekly baseline • 0/8 hours across 0/2 days",
             model.Summary.ConfidenceText);
         Assert.True(model.Summary.Momentum.IsLearning);
-        Assert.Equal("11% ready", model.Summary.Momentum.ValueText);
-        Assert.Equal("21.4h more data needed", model.Summary.Momentum.StateText);
-        Assert.Equal("2.6h usable now · 2 samples", model.Summary.Momentum.BaselineText);
-        Assert.Equal(2.6 / 24, model.Summary.Momentum.BaselineProgress, precision: 3);
-        Assert.Contains("21.4h more data needed", model.Summary.Momentum.AccessibleSummary);
-        Assert.Contains("2.6h currently usable from 2 samples", model.Summary.Momentum.AccessibleSummary);
+        Assert.Equal("0% ready", model.Summary.Momentum.ValueText);
+        Assert.Equal("Need 8 measured hours on 2 days", model.Summary.Momentum.StateText);
+        Assert.Equal("0 comparable prior hours across 0 days · 2 samples", model.Summary.Momentum.BaselineText);
+        Assert.Equal(0, model.Summary.Momentum.BaselineProgress);
     }
 
     [Fact]
@@ -566,22 +564,22 @@ public sealed class UsageTrendSectionTests
             []);
 
         Assert.True(earlierForecastEvidence.IsLearning);
-        Assert.Equal("10h usable now · 11 samples", earlierForecastEvidence.BaselineText);
+        Assert.Equal("9 comparable prior hours across 1 day · 11 samples", earlierForecastEvidence.BaselineText);
         Assert.Equal(earlierForecastEvidence.ValueText, laterShrinkingForecastEvidence.ValueText);
         Assert.Equal(earlierForecastEvidence.BaselineText, laterShrinkingForecastEvidence.BaselineText);
-        Assert.Equal(10d / 24, laterShrinkingForecastEvidence.BaselineProgress, precision: 3);
+        Assert.Equal(0.5, laterShrinkingForecastEvidence.BaselineProgress, precision: 3);
     }
 
     [Fact]
-    public void Presenter_WeeklyMomentumAccumulatesBeyondARecentGapWithoutCountingTheGap()
+    public void Presenter_WeeklyMomentumMaturesFromElapsedHistoryAndUsesComparableHoursAcrossGaps()
     {
         var now = new DateTimeOffset(2026, 7, 21, 12, 0, 0, TimeSpan.Zero);
-        var gap = new UsageTrendGap(now.AddHours(-20), now.AddHours(-18));
-        var nearlyReadyPoints = Enumerable.Range(0, 26)
-            .Select(index => new UsageTrendPoint(now.AddHours(index - 25), index))
+        var gap = new UsageTrendGap(now.AddHours(-20), now.AddHours(-8));
+        var nearlyReadyPoints = Enumerable.Range(0, 24)
+            .Select(index => new UsageTrendPoint(now.AddHours(index - 23), index))
             .ToArray();
-        var readyPoints = Enumerable.Range(0, 27)
-            .Select(index => new UsageTrendPoint(now.AddHours(index - 26), index))
+        var readyPoints = Enumerable.Range(0, 26)
+            .Select(index => new UsageTrendPoint(now.AddHours(index - 25), index))
             .ToArray();
 
         var nearlyReady = UsageTrendPresenter.BuildUsageMomentum(
@@ -593,11 +591,10 @@ public sealed class UsageTrendSectionTests
             10_080,
             measurementGaps: [gap]);
 
-        Assert.True(nearlyReady.IsLearning);
-        Assert.Equal("96% ready", nearlyReady.ValueText);
-        Assert.Equal("23h usable now · 26 samples", nearlyReady.BaselineText);
+        Assert.False(nearlyReady.IsLearning);
+        Assert.Equal(UsageMomentumConfidence.EarlyEstimate, nearlyReady.Confidence);
         Assert.False(ready.IsLearning);
-        Assert.Equal("vs median day", ready.BaselineText);
+        Assert.StartsWith("recent median", ready.BaselineText);
     }
 
     [Fact]
@@ -614,9 +611,146 @@ public sealed class UsageTrendSectionTests
             measurementGaps: []);
 
         Assert.False(momentum.IsLearning);
-        Assert.Equal("vs median day", momentum.BaselineText);
+        Assert.StartsWith("recent median", momentum.BaselineText);
         Assert.Equal("→ 0%/h", momentum.ValueText);
-        Assert.Equal("pace steady", momentum.StateText);
+        Assert.Equal("within recent range", momentum.StateText);
+    }
+
+    [Fact]
+    public void Presenter_WeeklyMomentumReportsEarlyAndEstablishedDurableConfidence()
+    {
+        var now = new DateTimeOffset(2026, 7, 21, 12, 0, 0, TimeSpan.Zero);
+        var current = new[]
+        {
+            new UsageTrendPoint(now.AddHours(-1), 40),
+            new UsageTrendPoint(now, 42)
+        };
+        var earlyRates = Enumerable.Range(0, 8)
+            .Select(index => new LimitHourlyUsageRate(now.AddDays(-2).AddHours(index), 1))
+            .Concat(Enumerable.Range(0, 8)
+                .Select(index => new LimitHourlyUsageRate(now.AddDays(-1).AddHours(index), 1)))
+            .ToArray();
+        var establishedRates = earlyRates
+            .Concat(Enumerable.Range(0, 8)
+                .Select(index => new LimitHourlyUsageRate(now.AddDays(-3).AddHours(index), 1)))
+            .ToArray();
+
+        var early = UsageTrendPresenter.BuildUsageMomentum(
+            current,
+            10_080,
+            measurementGaps: [],
+            baselineHourlyRates: earlyRates.Take(8).Concat(earlyRates.Skip(8).Take(1)).ToArray());
+        var established = UsageTrendPresenter.BuildUsageMomentum(
+            current,
+            10_080,
+            measurementGaps: [],
+            baselineHourlyRates: establishedRates);
+
+        Assert.Equal(UsageMomentumConfidence.EarlyEstimate, early.Confidence);
+        Assert.Equal("above recent baseline", early.StateText);
+        Assert.Equal(UsageMomentumConfidence.Established, established.Confidence);
+        Assert.Equal(24, established.BaselineHourCount);
+        Assert.Equal(3, established.BaselineDayCount);
+        Assert.Contains("usual 1–1%/h", established.BaselineText);
+    }
+
+    [Fact]
+    public void Presenter_WeeklyMomentum_OvernightOnlyEvidenceRemainsLearning()
+    {
+        var now = new DateTimeOffset(2026, 7, 21, 6, 0, 0, TimeSpan.Zero);
+        var current = new[]
+        {
+            new UsageTrendPoint(now.AddHours(-1), 40),
+            new UsageTrendPoint(now, 42)
+        };
+        var overnightRates = Enumerable.Range(0, 8)
+            .Select(index => new LimitHourlyUsageRate(now.AddHours(index - 12), 1))
+            .ToArray();
+
+        var momentum = UsageTrendPresenter.BuildUsageMomentum(
+            current,
+            10_080,
+            measurementGaps: [],
+            baselineHourlyRates: overnightRates);
+
+        Assert.True(momentum.IsLearning);
+        Assert.Equal(UsageMomentumConfidence.Learning, momentum.Confidence);
+        Assert.Equal("Need 8 measured hours on 2 days", momentum.StateText);
+    }
+
+    [Fact]
+    public void Presenter_WeeklyMomentumExcludesInactiveZeroHoursAndWaitsForCurrentActivity()
+    {
+        var now = new DateTimeOffset(2026, 7, 21, 12, 0, 0, TimeSpan.Zero);
+        var current = new[]
+        {
+            new UsageTrendPoint(now.AddHours(-1), 40),
+            new UsageTrendPoint(now, 40)
+        };
+        var rates = Enumerable.Range(0, 24)
+            .Select(index => new LimitHourlyUsageRate(
+                index < 4
+                    ? now.AddDays(-3).AddHours(index)
+                    : index < 8
+                        ? now.AddDays(-2).AddHours(index - 4)
+                        : now.AddDays(-1).AddHours(index - 8),
+                index < 8 ? 1 : 0,
+                index < 8 ? HourlyActivityEvidence.QuotaMovement : HourlyActivityEvidence.None))
+            .ToArray();
+
+        var momentum = UsageTrendPresenter.BuildUsageMomentum(
+            current,
+            10_080,
+            measurementGaps: [],
+            baselineHourlyRates: rates,
+            currentHourActivityEvidence: HourlyActivityEvidence.None,
+            activityCoverage: LocalActivityCoverage.Available);
+
+        Assert.Equal(8, momentum.BaselineHourCount);
+        Assert.Equal("Waiting for observed Codex activity", momentum.StateText);
+        Assert.Equal("Available", momentum.ActivityCoverageText);
+    }
+
+    [Fact]
+    public void Presenter_WeeklyMomentumWithMatureHistoryAndTooFewComparableHoursExplainsTheMissingEvidence()
+    {
+        var now = new DateTimeOffset(2026, 7, 21, 12, 0, 0, TimeSpan.Zero);
+        var points = Enumerable.Range(0, 26)
+            .Select(index => new UsageTrendPoint(now.AddHours(index - 25), index))
+            .ToArray();
+        var gaps = new[]
+        {
+            new UsageTrendGap(now.AddHours(-24.5), now.AddHours(-3.5))
+        };
+
+        var momentum = UsageTrendPresenter.BuildUsageMomentum(
+            points,
+            10_080,
+            measurementGaps: gaps);
+
+        Assert.True(momentum.IsLearning);
+        Assert.Equal(2d / 18, momentum.BaselineProgress, precision: 3);
+        Assert.Equal("11% ready", momentum.ValueText);
+        Assert.Equal("Need 8 measured hours on 2 days", momentum.StateText);
+    }
+
+    [Fact]
+    public void Presenter_WeeklyMomentumWithMatureHistoryAndCurrentGapWaitsForCurrentHour()
+    {
+        var now = new DateTimeOffset(2026, 7, 21, 12, 0, 0, TimeSpan.Zero);
+        var points = Enumerable.Range(0, 26)
+            .Select(index => new UsageTrendPoint(now.AddHours(index - 25), index))
+            .ToArray();
+
+        var momentum = UsageTrendPresenter.BuildUsageMomentum(
+            points,
+            10_080,
+            measurementGaps: [new UsageTrendGap(now.AddMinutes(-30), now)]);
+
+        Assert.True(momentum.IsLearning);
+        Assert.Equal(1, momentum.BaselineProgress);
+        Assert.Equal("Baseline ready", momentum.ValueText);
+        Assert.Equal("Need a measured current hour", momentum.StateText);
     }
 
     [Fact]
@@ -644,7 +778,7 @@ public sealed class UsageTrendSectionTests
     }
 
     [Fact]
-    public void Presenter_MomentumStaysLearningUntilTheDisplayedBaselineTargetIsComplete()
+    public void Presenter_MomentumUsesElapsedHistoryForWeeklyReadinessButKeepsFiveHourEvidenceGate()
     {
         var now = new DateTimeOffset(2026, 7, 20, 12, 0, 0, TimeSpan.Zero);
         var fiveHourPoints = Enumerable.Range(0, 6)
@@ -667,8 +801,8 @@ public sealed class UsageTrendSectionTests
 
         Assert.True(fiveHour.IsLearning);
         Assert.Equal("6m more data needed", fiveHour.StateText);
-        Assert.True(weekly.IsLearning);
-        Assert.Equal("6m more data needed", weekly.StateText);
+        Assert.False(weekly.IsLearning);
+        Assert.StartsWith("recent median", weekly.BaselineText);
     }
 
     [Fact]
@@ -803,8 +937,8 @@ public sealed class UsageTrendSectionTests
         var momentum = UsageTrendPresenter.BuildUsageMomentum(points, 10_080);
 
         Assert.Equal("↗ +0.1%/h", momentum.ValueText);
-        Assert.Equal("usage accelerating", momentum.StateText);
-        Assert.Equal("vs median day", momentum.BaselineText);
+        Assert.Equal("above recent baseline", momentum.StateText);
+        Assert.StartsWith("recent median", momentum.BaselineText);
         Assert.True(momentum.GaugeValue > 0);
         Assert.False(momentum.IsLearning);
     }
@@ -2696,6 +2830,53 @@ public sealed class UsageTrendSectionTests
         };
     }
 
+    [Fact]
+    public void ViewModel_ActivityDetailsResetOnlySelectedWindowAfterConfirmation()
+    {
+        var now = new DateTimeOffset(2026, 7, 21, 12, 0, 0, TimeSpan.Zero);
+        var controller = new RecordingMomentumBaselineController();
+        var viewModel = new UsageTrendSectionViewModel(new UsageTrendPresenter(), controller);
+        var selected = Trend(now, now.AddHours(3), isMock: false, [30, 31, 32]) with
+        {
+            BaselineHourlyRates = [new LimitHourlyUsageRate(now.AddDays(-2), 1, HourlyActivityEvidence.LocalEvent)],
+            ActivityCoverage = LocalActivityCoverage.Partial
+        };
+
+        viewModel.ApplySignals(new UsageSignalsSnapshot { UsageTrends = [selected] }, "codex", now);
+        viewModel.OpenMomentumDetailsCommand.Execute(null);
+        viewModel.RequestMomentumResetCommand.Execute(null);
+
+        Assert.True(viewModel.IsMomentumResetConfirmationOpen);
+        Assert.Contains("5-hour limit", viewModel.MomentumResetConfirmationText);
+        Assert.Contains("Local activity coverage: Partial", viewModel.MomentumActivityCoverageText);
+
+        viewModel.ConfirmMomentumResetCommand.Execute(null);
+
+        Assert.Equal("codex|300", controller.ResetBucketId);
+        Assert.Equal(now, controller.CutoffUtc);
+        Assert.Equal("Learned baseline reset. New activity will rebuild it.", viewModel.MomentumResetFeedback);
+        Assert.False(viewModel.IsMomentumResetConfirmationOpen);
+    }
+
+    [Fact]
+    public void ActivityMomentumDetails_MarkupKeepsPrivacyScopeAndAccessibleResetCopy()
+    {
+        var workspace = TestWorkspace.FindRoot();
+        var xaml = File.ReadAllText(Path.Combine(
+            workspace,
+            "src",
+            "PulseMeter",
+            "Slices",
+            "UsageTrend",
+            "UI",
+            "UsageTrendSection.xaml"));
+
+        Assert.Contains("AutomationProperties.Name=\"Activity-qualified momentum details\"", xaml);
+        Assert.Contains("Reset learned baseline…", xaml);
+        Assert.Contains("It does not change Codex history or account usage.", xaml);
+        Assert.Contains("PreviewKeyDown=\"MomentumActivityPopup_PreviewKeyDown\"", xaml);
+    }
+
     private static LimitUsageTrend Trend(
         DateTimeOffset now,
         DateTimeOffset reset,
@@ -2843,5 +3024,19 @@ public sealed class UsageTrendSectionTests
     private sealed class FixedUserIdleTimeProvider : IUserIdleTimeProvider
     {
         public TimeSpan GetIdleTime() => TimeSpan.Zero;
+    }
+
+    private sealed class RecordingMomentumBaselineController : IMomentumBaselineController
+    {
+        public string? ResetBucketId { get; private set; }
+
+        public DateTimeOffset? CutoffUtc { get; private set; }
+
+        public MomentumBaselineResetResult ResetSelectedWindow(string bucketId, DateTimeOffset cutoffUtc)
+        {
+            ResetBucketId = bucketId;
+            CutoffUtc = cutoffUtc;
+            return new MomentumBaselineResetResult(true, 1);
+        }
     }
 }

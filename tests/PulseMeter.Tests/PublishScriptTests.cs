@@ -8,19 +8,17 @@ public sealed class PublishScriptTests
         var script = File.ReadAllText(FindWorkspaceFile("scripts", "publish-local.ps1"));
 
         Assert.Contains("$localHostOutput = Join-Path $artifactsRoot \"PulseMeter-local-host-$timestamp\"", script);
-        Assert.Contains("$localHostDll = Join-Path $localHostOutput \"PulseMeter.dll\"", script);
-        Assert.Contains("$dotnetExe = Join-Path $env:ProgramFiles \"dotnet\\dotnet.exe\"", script);
+        Assert.Contains("$localHostExe = Join-Path $localHostOutput \"PulseMeter.exe\"", script);
         Assert.Contains("$launcherTarget = $appExe", script);
         Assert.Contains("Test-PulseMeterLaunch $appExe \"\" $output", script);
-        Assert.Contains("$launcherTarget = $dotnetExe", script);
-        Assert.Contains("$launcherArguments = [string]::Concat('\"', $localHostDll, '\"')", script);
-        Assert.Contains("$wscriptExe = Join-Path $env:WINDIR \"System32\\wscript.exe\"", script);
-        Assert.Contains("$script:launcherScript = Join-Path $launcherWorkingDirectory \"launch-pulsemeter.vbs\"", script);
-        Assert.Contains("shell.Run \"$escapedCommandLine\", 0, False", script);
-        Assert.Contains("$shortcut.TargetPath = $wscriptExe", script);
-        Assert.Contains("$shortcut.Arguments = [string]::Concat('\"', $launcherScript, '\"')", script);
+        Assert.Contains("$launcherTarget = $localHostExe", script);
+        Assert.Contains("$shortcut.TargetPath = $launcherTarget", script);
+        Assert.Contains("$shortcut.Arguments = $launcherArguments", script);
         Assert.Contains("Both published PulseMeter launchers were blocked. Existing shortcuts were not changed.", script);
-        Assert.Contains("CreateObject(\"WScript.Shell\")", script);
+        Assert.DoesNotContain("launch-pulsemeter.vbs", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("wscript.exe", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CreateObject(\"WScript.Shell\")", script);
+        Assert.DoesNotContain("shell.Run", script);
     }
 
     [Fact]
@@ -55,7 +53,7 @@ public sealed class PublishScriptTests
         Assert.Contains("/p:EnableCompressionInSingleFile=true", script);
         Assert.Contains("Published local self-contained app", script);
         Assert.Contains("--self-contained false", script);
-        Assert.Contains("/p:UseAppHost=false", script);
+        Assert.Contains("$localHostExe = Join-Path $localHostOutput \"PulseMeter.exe\"", script);
         Assert.Contains("Published local framework-dependent launcher", script);
     }
 
@@ -64,7 +62,7 @@ public sealed class PublishScriptTests
     {
         var script = File.ReadAllText(FindWorkspaceFile("scripts", "publish-local.ps1"));
 
-        Assert.Contains("PulseMeter-local-host-*\\PulseMeter.dll", script);
+        Assert.Contains("PulseMeter-local-host-*\\PulseMeter.exe", script);
         Assert.Contains("PulseMeter-win-x64-*\\PulseMeter.exe", script);
         Assert.DoesNotContain("[string]::Concat('*', $root, '*PulseMeter*')", script);
     }

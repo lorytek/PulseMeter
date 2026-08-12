@@ -2,7 +2,9 @@ using System.Drawing;
 using System.IO;
 using System.ComponentModel;
 using System.Windows.Forms;
+using PulseMeter.Slices.PulseMeterWindow.Business;
 using PulseMeter.Slices.PulseMeterWindow;
+using PulseMeter.Slices.SupportSnapshot.UI;
 
 namespace PulseMeter.Platform.Windows;
 
@@ -12,25 +14,44 @@ public sealed class TrayIconService : ITrayIconService
     private readonly PulseMeterWindowViewModel _viewModel;
     private readonly Action _shutdown;
     private readonly Icon _appIcon;
+    private readonly TrayConfidenceIconCache _confidenceIcons;
     private readonly NotifyIcon _notifyIcon;
     private readonly ContextMenuStrip _contextMenu;
     private readonly ToolStripMenuItem _mockModeItem;
     private readonly ToolStripMenuItem _autoShowItem;
     private readonly ToolStripMenuItem _autoHideItem;
     private readonly ToolStripMenuItem _alwaysOnTopItem;
+    private readonly ToolStripMenuItem _quickAccessHotkeyItem;
+    private readonly IQuickAccessWindowController _quickAccessWindowController;
+    private readonly ISupportSnapshotPresenter? _supportSnapshotPresenter;
+    private readonly ICodexDesktopProcessSnapshotPresenter? _desktopProcessSnapshotPresenter;
     private readonly PropertyChangedEventHandler _viewModelPropertyChangedHandler;
+    private readonly TrayConfidenceTransitionTracker _confidenceTransitions = new();
     private bool _disposed;
 
-    public TrayIconService(IPulseMeterWindow pulseMeterWindow, PulseMeterWindowViewModel viewModel, Action shutdown)
+    public TrayIconService(
+        IPulseMeterWindow pulseMeterWindow,
+        PulseMeterWindowViewModel viewModel,
+        Action shutdown,
+        IQuickAccessWindowController? quickAccessWindowController = null,
+        ISupportSnapshotPresenter? supportSnapshotPresenter = null,
+        Func<Icon, TrayConfidenceState, Icon>? confidenceIconFactory = null,
+        ICodexDesktopProcessSnapshotPresenter? desktopProcessSnapshotPresenter = null)
     {
         _pulseMeterWindow = pulseMeterWindow;
         _viewModel = viewModel;
         _shutdown = shutdown;
+        _quickAccessWindowController = quickAccessWindowController ?? new QuickAccessWindowController(pulseMeterWindow, viewModel);
+        _supportSnapshotPresenter = supportSnapshotPresenter;
+        _desktopProcessSnapshotPresenter = desktopProcessSnapshotPresenter;
 
         _contextMenu = new ContextMenuStrip();
         _contextMenu.Items.Add("Show PulseMeter", null, (_, _) => ShowPulseMeter());
         _contextMenu.Items.Add("Hide PulseMeter", null, (_, _) => HidePulseMeter());
+        _contextMenu.Items.Add("Quick access PulseMeter", null, (_, _) => QuickAccessPulseMeter());
         _contextMenu.Items.Add("Refresh", null, (_, _) => Refresh());
+        _contextMenu.Items.Add("Support snapshot…", null, (_, _) => ShowSupportSnapshot());
+        _contextMenu.Items.Add("Desktop process snapshot…", null, (_, _) => ShowDesktopProcessSnapshot());
         _contextMenu.Items.Add(new ToolStripSeparator());
 
         _mockModeItem = new ToolStripMenuItem("Mock Mode")
@@ -101,33 +122,80 @@ public sealed class TrayIconService : ITrayIconService
         };
         _viewModelPropertyChangedHandler = (_, e) =>
         {
+            if (string.IsNullOrEmpty(e.PropertyName)
+                || e.PropertyName == nameof(PulseMeterWindowViewModel.TrayConfidenceState))
+            {
+                _pulseMeterWindow.Invoke(UpdateConfidenceBeacon);
+            }
+
             if (!string.IsNullOrEmpty(e.PropertyName)
                 && e.PropertyName != nameof(PulseMeterWindowViewModel.UseMockMode)
                 && e.PropertyName != nameof(PulseMeterWindowViewModel.AutoShowWhenCodexFocused)
                 && e.PropertyName != nameof(PulseMeterWindowViewModel.AutoHideWhenFocusLeaves)
-                && e.PropertyName != nameof(PulseMeterWindowViewModel.IsAlwaysOnTop))
+                && e.PropertyName != nameof(PulseMeterWindowViewModel.IsAlwaysOnTop)
+                && e.PropertyName != nameof(PulseMeterWindowViewModel.IsQuickAccessHotkeyRequested))
             {
                 return;
             }
 
             _pulseMeterWindow.Invoke(() => SyncMenuCheckmarks(e.PropertyName));
         };
-        _viewModel.PropertyChanged += _viewModelPropertyChangedHandler;
         _contextMenu.Items.Add(_alwaysOnTopItem);
+
+        _quickAccessHotkeyItem = new ToolStripMenuItem("System-wide quick access shortcut (Ctrl+Alt+Shift+P)")
+        {
+            Checked = _viewModel.IsQuickAccessHotkeyRequested,
+            CheckOnClick = true
+        };
+        _quickAccessHotkeyItem.CheckedChanged += (_, _) =>
+        {
+            _pulseMeterWindow.Invoke(() =>
+            {
+                if (_viewModel.IsQuickAccessHotkeyRequested != _quickAccessHotkeyItem.Checked)
+                {
+                    _viewModel.IsQuickAccessHotkeyRequested = _quickAccessHotkeyItem.Checked;
+                }
+            });
+        };
+        _contextMenu.Items.Add(_quickAccessHotkeyItem);
 
         _contextMenu.Items.Add(new ToolStripSeparator());
         _contextMenu.Items.Add("Exit", null, (_, _) => Exit());
 
-        _appIcon = LoadAppIcon();
-        _notifyIcon = new NotifyIcon
+        Icon? appIcon = null;
+        TrayConfidenceIconCache? confidenceIcons = null;
+        NotifyIcon? notifyIcon = null;
+        var propertyChangedSubscribed = false;
+        try
         {
-            ContextMenuStrip = _contextMenu,
-            Icon = _appIcon,
-            Text = "PulseMeter",
-            Visible = true
-        };
+            appIcon = LoadAppIcon();
+            confidenceIcons = new TrayConfidenceIconCache(appIcon, confidenceIconFactory);
+            notifyIcon = new NotifyIcon();
+            notifyIcon.ContextMenuStrip = _contextMenu;
+            notifyIcon.Icon = appIcon;
+            notifyIcon.Text = TrayConfidenceBeacon.Tooltip(TrayConfidenceState.Starting);
 
-        _notifyIcon.DoubleClick += (_, _) => ShowPulseMeter(expand: true);
+            _appIcon = appIcon;
+            _confidenceIcons = confidenceIcons;
+            _notifyIcon = notifyIcon;
+            _notifyIcon.DoubleClick += (_, _) => ShowPulseMeter(expand: true);
+            _viewModel.PropertyChanged += _viewModelPropertyChangedHandler;
+            propertyChangedSubscribed = true;
+            UpdateConfidenceBeacon();
+            _notifyIcon.Visible = true;
+        }
+        catch
+        {
+            if (propertyChangedSubscribed)
+            {
+                _viewModel.PropertyChanged -= _viewModelPropertyChangedHandler;
+            }
+            notifyIcon?.Dispose();
+            confidenceIcons?.Dispose();
+            appIcon?.Dispose();
+            _contextMenu.Dispose();
+            throw;
+        }
     }
 
     private void SyncMenuCheckmarks(string? propertyName)
@@ -155,6 +223,12 @@ public sealed class TrayIconService : ITrayIconService
         {
             SetChecked(_alwaysOnTopItem, _viewModel.IsAlwaysOnTop);
         }
+
+        if (string.IsNullOrEmpty(propertyName)
+            || propertyName == nameof(PulseMeterWindowViewModel.IsQuickAccessHotkeyRequested))
+        {
+            SetChecked(_quickAccessHotkeyItem, _viewModel.IsQuickAccessHotkeyRequested);
+        }
     }
 
     private static void SetChecked(ToolStripMenuItem item, bool isChecked)
@@ -177,7 +251,32 @@ public sealed class TrayIconService : ITrayIconService
         _notifyIcon.Visible = false;
         _notifyIcon.Dispose();
         _contextMenu.Dispose();
+        _confidenceIcons.Dispose();
         _appIcon.Dispose();
+    }
+
+    private void UpdateConfidenceBeacon()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        var state = _viewModel.TrayConfidenceState;
+        if (!_confidenceTransitions.ShouldApply(state))
+        {
+            return;
+        }
+        _notifyIcon.Text = TrayConfidenceBeacon.Tooltip(state);
+        try
+        {
+            _notifyIcon.Icon = _confidenceIcons.Get(state);
+        }
+        catch (Exception)
+        {
+            // Keep the last-good/base icon. The fixed tooltip is still the accessible state signal.
+        }
+        _confidenceTransitions.MarkApplied(state);
     }
 
     public void ShowNotification(string title, string message)
@@ -254,9 +353,24 @@ public sealed class TrayIconService : ITrayIconService
         });
     }
 
+    private void QuickAccessPulseMeter()
+    {
+        _pulseMeterWindow.Invoke(_quickAccessWindowController.ToggleQuickAccess);
+    }
+
     private void Refresh()
     {
         _pulseMeterWindow.Invoke(() => _ = _viewModel.RefreshAsync());
+    }
+
+    private void ShowSupportSnapshot()
+    {
+        _pulseMeterWindow.Invoke(() => _supportSnapshotPresenter?.ShowPreview());
+    }
+
+    private void ShowDesktopProcessSnapshot()
+    {
+        _pulseMeterWindow.Invoke(() => _desktopProcessSnapshotPresenter?.ShowSnapshot());
     }
 
     private void Exit()

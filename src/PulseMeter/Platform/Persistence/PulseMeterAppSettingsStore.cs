@@ -11,7 +11,9 @@ public sealed record PulseMeterAppSettings(
     bool IsNavigationPanelExpanded = true,
     IReadOnlyList<RecoveryWatchSettings>? RecoveryWatches = null,
     bool AutoShowWhenCodexFocused = true,
-    bool AutoHideWhenFocusLeaves = false);
+    bool AutoHideWhenFocusLeaves = false,
+    bool HasShownTrayHideGuidance = false,
+    bool IsQuickAccessHotkeyRequested = false);
 
 /// <summary>A one-shot next-block watch, scoped to a stable rate-limit window.</summary>
 public sealed record RecoveryWatchSettings(

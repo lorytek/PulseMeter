@@ -113,6 +113,102 @@ public sealed class PulseMeterWindowVisibilityLifecycleTests
     }
 
     [Fact]
+    public void KeyboardDailyUsageNavigation_RequestsDestinationFocus_WhileMouseNavigationDoesNot()
+    {
+        RunOnStaThread(() =>
+        {
+            var viewModel = new PulseMeterWindowViewModel(new MockCodexUsageService())
+            {
+                IsDailyUsageVisible = true
+            };
+            var window = new PulseMeterWindow { DataContext = viewModel };
+            window.Show();
+            window.Activate();
+            window.UpdateLayout();
+
+            var dailyButton = Assert.Single(
+                FindVisualDescendants<Button>(window),
+                button => AutomationProperties.GetName(button) == "Go to daily usage");
+            var navigationRail = Assert.Single(FindVisualDescendants<PulseMeter.Slices.NavigationRail.UI.NavigationRail>(window));
+            var focusRequests = new List<bool>();
+            navigationRail.SectionRequested += (_, args) => focusRequests.Add(args.ShouldFocusDestination);
+
+            dailyButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+            Assert.False(Assert.Single(focusRequests));
+
+            dailyButton.Focus();
+            dailyButton.RaiseEvent(new System.Windows.Input.KeyEventArgs(
+                System.Windows.Input.Keyboard.PrimaryDevice,
+                PresentationSource.FromVisual(dailyButton),
+                0,
+                System.Windows.Input.Key.Enter)
+            {
+                RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent
+            });
+            dailyButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+
+            Assert.True(focusRequests.Last());
+
+            dailyButton.RaiseEvent(new System.Windows.Input.KeyEventArgs(
+                System.Windows.Input.Keyboard.PrimaryDevice,
+                PresentationSource.FromVisual(dailyButton),
+                0,
+                System.Windows.Input.Key.Enter)
+            {
+                RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent
+            });
+            dailyButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            Assert.True(focusRequests.Last());
+            var runwayButton = Assert.Single(
+                FindVisualDescendants<Button>(window),
+                button => AutomationProperties.GetName(button) == "Go to coding runway");
+            runwayButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+            Assert.False(focusRequests.Last());
+
+            dailyButton.RaiseEvent(new System.Windows.Input.KeyEventArgs(
+                System.Windows.Input.Keyboard.PrimaryDevice,
+                PresentationSource.FromVisual(dailyButton),
+                0,
+                System.Windows.Input.Key.Space)
+            {
+                RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyUpEvent
+            });
+            dailyButton.RaiseEvent(new System.Windows.Input.KeyboardFocusChangedEventArgs(
+                System.Windows.Input.Keyboard.PrimaryDevice,
+                0,
+                dailyButton,
+                window)
+            {
+                RoutedEvent = System.Windows.Input.Keyboard.LostKeyboardFocusEvent
+            });
+            dailyButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            Assert.False(focusRequests.Last());
+
+            dailyButton.RaiseEvent(new System.Windows.Input.KeyEventArgs(
+                System.Windows.Input.Keyboard.PrimaryDevice,
+                PresentationSource.FromVisual(dailyButton),
+                0,
+                System.Windows.Input.Key.Enter)
+            {
+                RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent
+            });
+            dailyButton.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(
+                System.Windows.Input.Mouse.PrimaryDevice,
+                0,
+                System.Windows.Input.MouseButton.Left)
+            {
+                RoutedEvent = System.Windows.Input.Mouse.PreviewMouseDownEvent
+            });
+            dailyButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            Assert.False(focusRequests.Last());
+            window.CloseForShutdown();
+        });
+    }
+
+    [Fact]
     public void CollapsingDailyUsage_KeepsDailyUsageSelectedAndAligned()
     {
         RunOnStaThread(() =>

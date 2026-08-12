@@ -21,6 +21,7 @@ public sealed class VisualHarnessPaths
     public string ResetCreditStatePath => Path.Combine(StateRoot, "reset-credits.json");
 
     public string RunwayObservationsPath => Path.Combine(StateRoot, "runway-observations.json");
+
 }
 
 public static class VisualHarnessWorkspace

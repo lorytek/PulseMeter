@@ -11,7 +11,7 @@ PulseMeter is not affiliated with OpenAI.
 
 ## Download the App
 
-[Download PulseMeter 0.6.0 for Windows](https://github.com/lorytek/PulseMeter/releases/latest/download/PulseMeter-0.6.0-win-x64-portable.zip), extract the ZIP, and run `PulseMeter.exe`.
+[Download PulseMeter 0.6.1 for Windows](https://github.com/lorytek/PulseMeter/releases/latest/download/PulseMeter-0.6.1-win-x64-portable.zip), extract the ZIP, and run `PulseMeter.exe`.
 
 - A matching `.sha256` checksum file is attached to each GitHub release.
 - Windows 10 or Windows 11, 64-bit.
@@ -19,19 +19,20 @@ PulseMeter is not affiliated with OpenAI.
 
 Only run release zips you downloaded from a PulseMeter release page you trust. The `Source code (zip)` and `Source code (tar.gz)` links on GitHub Releases are automatic GitHub source archives for developers, not the portable Windows app.
 
-## New in 0.6.0
+## New in 0.6.1
 
-- Added Block Planner for checking whether 15-minute to 8-hour coding blocks fit the selected 5-hour or 7-day limit at the current pace.
-- Added recovery watching that can notify when a risky coding block becomes likely to fit or when its quota resets.
-- Made Usage Momentum state-aware: learning remains neutral and clearly shows the remaining baseline data, with an accessible preview of the completed gauge.
-- Improved Coding Runway refresh behavior, keyboard point review, persisted samples, idle-time forecasting, and exact 24-hour weekly baselines.
-- Corrected missing Daily Usage records so they show as not recorded instead of a measured zero, and removed expired reset credits from the available count.
-- Hardened startup, shutdown, single-instance activation, local persistence, privacy-safe diagnostics, and UI service boundaries.
+- Added activity-qualified Usage Momentum, so inactive zero-use hours no longer dilute the learned baseline while Coding Runway remains wall-clock based.
+- Added a memory-only Return Note for keeping one next step visible while switching tasks.
+- Added optional quick access, clearer tray sync-state indicators, first-hide guidance, and stronger keyboard navigation across the dashboard.
+- Added privacy-safe PulseMeter support and Desktop process snapshots for diagnosing local reader and process-state problems without uploading logs.
+- Added Project location actions with explicit folder confirmation before opening Explorer or Windows PowerShell.
+- Suppressed stale cached usage warnings, hardened baseline migration/reset persistence, and expanded local publishing, lifecycle, privacy, and accessibility coverage.
 
 ## Version History
 
 | Version | Highlights |
 | --- | --- |
+| [0.6.1](CHANGELOG.md#061) | Activity-qualified momentum, Return Note, quick access, support snapshots, project location actions, and tray confidence state. |
 | [0.6.0](CHANGELOG.md#060) | Block Planner, recovery watching, state-aware Usage Momentum, and more resilient Coding Runway history and forecasting. |
 | [0.5.0](https://github.com/lorytek/PulseMeter/releases/tag/v0.5.0) | Graph-first Coding Runway for 5-hour and 7-day limits, statistical pace modelling, and persistent usage samples. |
 | [0.4.0](https://github.com/lorytek/PulseMeter/releases/tag/v0.4.0) | Project Health comparisons, clearer rate-limit guidance, and a redesigned analytical dashboard. |
@@ -84,7 +85,7 @@ Want to help share PulseMeter? See [DISCOVERABILITY.md](DISCOVERABILITY.md).
 
 ## Quick Start
 
-1. Download `PulseMeter-0.6.0-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
+1. Download `PulseMeter-0.6.1-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
 2. Extract the zip to a normal folder, for example `Documents\PulseMeter`.
 3. Run `PulseMeter.exe`.
 4. If Windows shows an unknown-publisher or SmartScreen warning, choose `More info`, then `Run anyway`.
@@ -117,9 +118,13 @@ That warning is expected for this build. It is still a trust decision: only run 
 - Burn Analysis ranking local projects by estimated token burn over the last 30 days.
 - Needs Attention automatic alert signals for local usage and rate-limit risk.
 - Runway Forecast estimates when the selected rate-limit pool may run out before reset.
+- Activity-qualified Usage Momentum that learns from locally observed Codex activity or meaningful quota movement.
+- A memory-only Return Note for the next step you want to resume during the current PulseMeter run.
+- Privacy-safe local support and Desktop process snapshots available from the tray.
+- Confirmed Project location actions for opening the observed folder or starting Windows PowerShell there.
 - Idle Drain Detector flags usage movement while Windows reports you were idle.
 - Live, stale, unavailable, or mock sync status.
-- A tray icon with show, hide, refresh, mock mode, and exit controls.
+- A tray icon with confidence state, show, hide, quick access, refresh, diagnostics, mock mode, and exit controls.
 
 Project usage, Burn Analysis, automatic alert signals, Limit Runway, and Idle Drain Detector are local estimates and diagnostics, not billing-exact claims.
 

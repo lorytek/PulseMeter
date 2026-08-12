@@ -42,4 +42,15 @@ public partial class UsageTrendSection
         e.Handled = true;
     }
 
+    private void MomentumActivityPopup_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape)
+        {
+            return;
+        }
+
+        MomentumActivityPopup.IsOpen = false;
+        e.Handled = true;
+    }
+
 }

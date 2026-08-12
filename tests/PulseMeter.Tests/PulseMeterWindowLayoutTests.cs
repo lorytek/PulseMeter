@@ -664,7 +664,7 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("x:Name=\"ToggleAttentionItemsButton\"", needsAttentionSection);
         Assert.Contains("x:Name=\"CollapseAttentionItemsButton\"", needsAttentionSection);
         Assert.Contains("Content=\"Show top 3\"", needsAttentionSection);
-        Assert.Contains("Visibility=\"{Binding IsShowingAll, Converter={StaticResource BooleanToVisibilityConverter}}\"", needsAttentionSection);
+        Assert.Contains("Visibility=\"{Binding ShouldShowCollapseAttentionItems, Converter={StaticResource BooleanToVisibilityConverter}}\"", needsAttentionSection);
         Assert.Contains("Click=\"CollapseAttentionItemsButton_Click\"", needsAttentionSection);
         Assert.Contains("IsVisibleChanged=\"CollapseAttentionItemsButton_IsVisibleChanged\"", needsAttentionSection);
         Assert.Contains("_restoreAttentionToggleFocusAfterCollapse = true", needsAttentionSectionCode);
@@ -1089,6 +1089,8 @@ public sealed class PulseMeterWindowLayoutTests
         var scrollEnd = windowXaml.IndexOf("</ScrollViewer>", scrollIndex, StringComparison.Ordinal);
         Assert.NotEqual(-1, scrollEnd);
         var scrollBlock = windowXaml[scrollIndex..scrollEnd];
+        Assert.Contains("VerticalScrollBarVisibility=\"Auto\"", scrollBlock);
+        Assert.Contains("HorizontalScrollBarVisibility=\"Disabled\"", scrollBlock);
         Assert.DoesNotContain("CompactTitleText", scrollBlock);
         Assert.DoesNotContain("StatusBadgeText", scrollBlock);
         Assert.Contains("BorderThickness=\"0,0,0,1\"", headerXaml);
@@ -1315,7 +1317,7 @@ public sealed class PulseMeterWindowLayoutTests
         var code = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml.cs"));
         var xaml = ReadXamlFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml");
         var handlerStart = code.IndexOf("private void NavigateToSection", StringComparison.Ordinal);
-        var handler = code[handlerStart..Math.Min(code.Length, handlerStart + 1_400)];
+        var handler = code[handlerStart..Math.Min(code.Length, handlerStart + 2_400)];
 
         Assert.Contains("ScrollToVerticalOffset", handler);
         Assert.Contains("TransformToAncestor(ExpandedContentScrollViewer)", handler);
@@ -1800,6 +1802,60 @@ public sealed class PulseMeterWindowLayoutTests
         };
 
         return string.Join(Environment.NewLine, paths.Select(ReadXamlFile));
+    }
+
+    [Fact]
+    public void SectionNavigation_UsesKeyboardActivationAndSemanticDestinationHeadings()
+    {
+        var navigation = ReadXamlFile("src", "PulseMeter", "Slices", "NavigationRail", "UI", "NavigationRail.xaml");
+        var navigationCode = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "NavigationRail", "UI", "NavigationRail.xaml.cs"));
+        var windowCode = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml.cs"));
+        var headings = new[]
+        {
+            ("ExpandedHeader", "ExpandedHeader.xaml", "OverviewHeading"),
+            ("RateLimits", "RateLimitsSection.xaml", "RateLimitsHeading"),
+            ("RateLimitsDaily", "RateLimitsDailySection.xaml", "WeeklyPaceHeading"),
+            ("UsageTrend", "UsageTrendSection.xaml", "UsageTrendHeading"),
+            ("BlockPlanner", "BlockPlannerSection.xaml", "BlockPlannerHeading"),
+            ("ResetCredits", "ResetCreditsSection.xaml", "ResetCreditsHeading"),
+            ("AccountUsage", "AccountUsageSection.xaml", "AccountUsageHeading"),
+            ("ProjectUsage", "ProjectUsageSection.xaml", "ProjectUsageHeading"),
+            ("UsageAttribution", "UsageAttributionSection.xaml", "BurnAnalysisHeading"),
+            ("DailyUsage", "DailyUsageSection.xaml", "DailyUsageHeading")
+        };
+
+        Assert.Contains("Event=\"PreviewKeyDown\" Handler=\"SectionButton_PreviewKeyDown\"", navigation);
+        Assert.Contains("e.Key == System.Windows.Input.Key.Enter", navigationCode);
+        Assert.Contains("e.Key == System.Windows.Input.Key.Space", navigationCode);
+        Assert.Contains("SectionButton_PreviewKeyUp", navigationCode);
+        Assert.Contains("SectionButton_PreviewMouseDown", navigationCode);
+        Assert.Contains("SectionButton_LostKeyboardFocus", navigationCode);
+        Assert.Contains("new NavigationSectionRequestedEventArgs(section, focusDestination)", navigationCode);
+        Assert.Contains("bool shouldFocusDestination = false", navigationCode);
+        Assert.Contains("QueueDestinationFocus", windowCode);
+        Assert.Contains("var focusGeneration = ++_destinationFocusGeneration", windowCode);
+        Assert.Contains("if (_destinationFocusGeneration != focusGeneration)", windowCode);
+        Assert.Contains("ExpandedHeaderControl.FindName(\"OverviewHeading\")", windowCode);
+        Assert.Contains("NavigationSection.DailyUsage => \"DailyUsageHeading\"", windowCode);
+        Assert.Contains("Keyboard.Focus(heading)", windowCode);
+        Assert.DoesNotContain("BringIntoView", windowCode);
+        Assert.False(new PulseMeter.Slices.NavigationRail.UI.NavigationSectionRequestedEventArgs(
+            PulseMeter.Slices.NavigationRail.Models.NavigationSection.Overview).ShouldFocusDestination);
+        Assert.True(new PulseMeter.Slices.NavigationRail.UI.NavigationSectionRequestedEventArgs(
+            PulseMeter.Slices.NavigationRail.Models.NavigationSection.Overview,
+            shouldFocusDestination: true).ShouldFocusDestination);
+        foreach (var (slice, file, heading) in headings)
+        {
+            var xaml = ReadXamlFile("src", "PulseMeter", "Slices", slice, "UI", file);
+            Assert.Contains($"x:Name=\"{heading}\"", xaml);
+            Assert.Contains("Focusable=\"True\"", xaml);
+            Assert.Contains("AutomationProperties.HeadingLevel=\"Level1\"", xaml);
+            Assert.Contains("FocusVisualStyle=\"{DynamicResource HeadingFocusVisualStyle}\"", xaml);
+        }
+        var controls = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Shared", "Styles", "PulseMeterControls.xaml"));
+        Assert.Contains("x:Key=\"HeadingFocusVisualStyle\"", controls);
+        Assert.Contains("BorderBrush=\"#1F73FF\"", controls);
+        Assert.Contains("BorderThickness=\"1\"", controls);
     }
 
     private static string ReadXamlFile(params string[] segments)

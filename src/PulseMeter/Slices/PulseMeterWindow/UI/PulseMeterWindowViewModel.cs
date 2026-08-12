@@ -20,6 +20,8 @@ using PulseMeter.Shared.Formatting;
 using PulseMeter.Slices.UsageCollection;
 using PulseMeter.Slices.UsageSignals;
 using PulseMeter.Slices.UsageTrend;
+using PulseMeter.Slices.SupportSnapshot.Business;
+using PulseMeter.Slices.ReturnNote.UI;
 
 using PulseMeter.Platform.Diagnostics;
 
@@ -35,13 +37,17 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     private readonly IUsageService _usageService;
     private readonly IUsageSignalsTracker _usageSignalsTracker;
     private readonly IBudgetAlertTracker _budgetAlertTracker;
+    private readonly ISupportSnapshotFactsStore _supportSnapshotFactsStore;
     private bool _autoHideWhenFocusLeaves;
     private bool _autoShowWhenCodexFocused = true;
     private int _autoSyncSeconds;
     private bool _isAlwaysOnTop;
     private bool _isExpanded;
     private bool _isHiddenByUser;
+    private bool _hasShownTrayHideGuidance;
+    private bool _isQuickAccessHotkeyRequested;
     private bool _isRefreshing;
+    private bool _isStarting = true;
     private bool _hasManualSyncFailure;
     private string _syncFeedbackText = string.Empty;
     private bool _useMockMode;
@@ -58,6 +64,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     };
     private UsageSnapshot? _lastAppliedSnapshot;
     private UsageSignalsSnapshot _usageSignals = UsageSignalsSnapshot.Empty;
+    private SyncStatus? _lastNeedsAttentionSyncStatus;
     private string? _selectedLimitKey;
 
     public PulseMeterWindowViewModel(
@@ -83,16 +90,23 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         IBudgetAlertTracker? budgetAlertTracker = null,
         string? selectedLimitKey = null,
         bool autoShowWhenCodexFocused = true,
-        bool autoHideWhenFocusLeaves = false)
+        bool autoHideWhenFocusLeaves = false,
+        bool hasShownTrayHideGuidance = false,
+        bool isQuickAccessHotkeyRequested = false,
+        ISupportSnapshotFactsStore? supportSnapshotFactsStore = null,
+        ReturnNoteSectionViewModel? returnNote = null)
     {
         _usageService = usageService;
         _usageSignalsTracker = usageSignalsTracker ?? new UsageSignalsTracker(new ZeroUserIdleTimeProvider());
         _budgetAlertTracker = budgetAlertTracker ?? new BudgetAlertTracker();
+        _supportSnapshotFactsStore = supportSnapshotFactsStore ?? new SupportSnapshotFactsStore();
         _selectedLimitKey = string.IsNullOrWhiteSpace(selectedLimitKey) ? null : selectedLimitKey.Trim();
         _autoSyncSeconds = SecondsFrom(autoSyncInterval ?? TimeSpan.FromSeconds(90));
         _isAlwaysOnTop = isAlwaysOnTop;
         _autoShowWhenCodexFocused = autoShowWhenCodexFocused;
         _autoHideWhenFocusLeaves = autoHideWhenFocusLeaves;
+        _hasShownTrayHideGuidance = hasShownTrayHideGuidance;
+        _isQuickAccessHotkeyRequested = isQuickAccessHotkeyRequested;
         DataBar = dataBar ?? new DataBarViewModel();
         ExpandedHeader = expandedHeader ?? new ExpandedHeaderViewModel();
         NavigationRail = navigationRail ?? new NavigationRailViewModel();
@@ -106,6 +120,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         ProjectUsage = projectUsage ?? new ProjectUsageSectionViewModel(new ProjectUsagePresenter());
         UsageAttribution = usageAttribution ?? new UsageAttributionSectionViewModel(new UsageAttributionPresenter());
         DailyUsage = dailyUsage ?? new DailyUsageSectionViewModel(new DailyUsagePresenter());
+        ReturnNote = returnNote ?? ReturnNoteSectionViewModel.CreateEmpty();
         NavigationRail.PropertyChanged += OnNavigationRailPropertyChanged;
         RateLimits.PropertyChanged += OnRateLimitsPropertyChanged;
         DailyUsage.PropertyChanged += OnDailyUsagePropertyChanged;
@@ -148,6 +163,8 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     public UsageAttributionSectionViewModel UsageAttribution { get; }
 
     public DailyUsageSectionViewModel DailyUsage { get; }
+
+    public ReturnNoteSectionViewModel ReturnNote { get; }
 
     public ObservableCollection<RateLimitBucket> Buckets { get; } = new();
 
@@ -343,6 +360,18 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         private set => SetField(ref _isHiddenByUser, value);
     }
 
+    public bool HasShownTrayHideGuidance
+    {
+        get => _hasShownTrayHideGuidance;
+        private set => SetField(ref _hasShownTrayHideGuidance, value);
+    }
+
+    public bool IsQuickAccessHotkeyRequested
+    {
+        get => _isQuickAccessHotkeyRequested;
+        set => SetField(ref _isQuickAccessHotkeyRequested, value);
+    }
+
     public bool IsRefreshing
     {
         get => _isRefreshing;
@@ -350,6 +379,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _isRefreshing, value))
             {
+                OnPropertyChanged(nameof(TrayConfidenceState));
                 OnPropertyChanged(nameof(CompactSummary));
                 OnPropertyChanged(nameof(CompactQuotaSummaryText));
                 OnPropertyChanged(nameof(HasSyncFeedback));
@@ -547,11 +577,16 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         _ => "Unknown"
     };
 
+    public TrayConfidenceState TrayConfidenceState => TrayConfidenceBeacon.Map(
+        IsStartingSnapshot,
+        IsRefreshing,
+        EffectiveSyncStatus);
+
     private SyncStatus EffectiveSyncStatus => _snapshot.SyncStatus == SyncStatus.Live && IsLiveSnapshotOverdue
         ? SyncStatus.Stale
         : _snapshot.SyncStatus;
 
-    private bool IsStartingSnapshot => _snapshot.Source.Equals("Starting", StringComparison.OrdinalIgnoreCase);
+    private bool IsStartingSnapshot => _isStarting;
 
     private bool IsLiveSnapshotOverdue
     {
@@ -664,8 +699,11 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
 
         _lastAppliedSnapshot = snapshot;
         var nowUtc = DateTimeOffset.UtcNow;
+        _supportSnapshotFactsStore.Observe(snapshot, nowUtc);
         UpdateAccountUsageFreshnessWarnings(snapshot);
         _snapshot = snapshot;
+        _isStarting = false;
+        OnPropertyChanged(nameof(TrayConfidenceState));
         var usageSignals = _usageSignalsTracker.Observe(snapshot, nowUtc, AutoSyncInterval);
         var budgetSignals = _budgetAlertTracker.Observe(snapshot, AutomaticBudgetSignalSettings, nowUtc);
         _usageSignals = MergeSignals(usageSignals, budgetSignals.AttentionSignals);
@@ -690,7 +728,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         RebuildDailyUsageRows();
         RebuildProjectUsageRows();
         RebuildUsageAttributionRows(nowUtc);
-        NeedsAttention.ApplySignals(_usageSignals);
+        ApplyNeedsAttentionSignals();
 
         RefreshComputedProperties();
     }
@@ -698,6 +736,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     public void RefreshClock()
     {
         RefreshQuotaRows();
+        OnPropertyChanged(nameof(TrayConfidenceState));
         OnPropertyChanged(nameof(CompactSummary));
         OnPropertyChanged(nameof(CompactQuotaSummaryText));
         OnPropertyChanged(nameof(ExpandedQuotaSummaryText));
@@ -714,7 +753,19 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         RefreshUsageAttributionRows(DateTimeOffset.UtcNow);
         UsageTrend.Refresh(DateTimeOffset.UtcNow);
         RunwayForecast.Refresh(DateTimeOffset.UtcNow);
-        NeedsAttention.Refresh(DateTimeOffset.UtcNow);
+        var effectiveSyncStatus = EffectiveSyncStatus;
+        if (_lastNeedsAttentionSyncStatus != effectiveSyncStatus)
+        {
+            if (effectiveSyncStatus is SyncStatus.Live or SyncStatus.Mocked)
+            {
+                ApplyNeedsAttentionSignals();
+            }
+            else
+            {
+                NeedsAttention.ApplyDisplaySignals(ProjectNeedsAttentionSignals(_usageSignals, effectiveSyncStatus));
+                _lastNeedsAttentionSyncStatus = effectiveSyncStatus;
+            }
+        }
         RefreshAccountDashboardProperties();
         OnPropertyChanged(nameof(TodayUsageText));
         OnPropertyChanged(nameof(TodayUsageValueText));
@@ -863,6 +914,17 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     public void MarkShownByUser()
     {
         IsHiddenByUser = false;
+    }
+
+    public bool TryMarkTrayHideGuidanceShown()
+    {
+        if (HasShownTrayHideGuidance)
+        {
+            return false;
+        }
+
+        HasShownTrayHideGuidance = true;
+        return true;
     }
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
@@ -1229,6 +1291,50 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
                 .OrderBy(signal => signal.Priority)
                 .ToList()
         };
+    }
+
+    internal static UsageSignalsSnapshot ProjectNeedsAttentionSignals(
+        UsageSignalsSnapshot usageSignals,
+        SyncStatus effectiveSyncStatus)
+    {
+        if (effectiveSyncStatus is SyncStatus.Live or SyncStatus.Mocked)
+        {
+            return usageSignals;
+        }
+
+        var syncSignals = usageSignals.AttentionSignals
+            .Where(signal => signal.Kind == UsageAttentionSignalKind.Sync)
+            .ToList();
+        if (effectiveSyncStatus == SyncStatus.Stale && syncSignals.Count == 0)
+        {
+            syncSignals.Add(new UsageAttentionSignal(
+                1,
+                "SYNC",
+                "Live data is stale",
+                "Showing last good usage data until the next successful sync.",
+                "#F97316",
+                Kind: UsageAttentionSignalKind.Sync));
+        }
+
+        return new UsageSignalsSnapshot
+        {
+            RunwaySignals = usageSignals.RunwaySignals,
+            RunwayForecasts = usageSignals.RunwayForecasts,
+            UsageTrends = usageSignals.UsageTrends,
+            IdleDrainIncident = usageSignals.IdleDrainIncident,
+            AttentionSignals = syncSignals,
+            ShowAllAttentionSignals = false
+        };
+    }
+
+    private void ApplyNeedsAttentionSignals()
+    {
+        var effectiveSyncStatus = EffectiveSyncStatus;
+        NeedsAttention.ApplySignals(
+            _usageSignals,
+            ProjectNeedsAttentionSignals(_usageSignals, effectiveSyncStatus),
+            reconcilePendingDismissal: effectiveSyncStatus is SyncStatus.Live or SyncStatus.Mocked);
+        _lastNeedsAttentionSyncStatus = effectiveSyncStatus;
     }
 
     private void RefreshAccountDashboardProperties()

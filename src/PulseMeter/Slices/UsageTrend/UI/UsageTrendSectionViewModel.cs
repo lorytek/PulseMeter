@@ -11,6 +11,7 @@ namespace PulseMeter.Slices.UsageTrend.UI;
 public sealed class UsageTrendSectionViewModel : INotifyPropertyChanged
 {
     private readonly IUsageTrendPresenter _presenter;
+    private readonly IMomentumBaselineController? _momentumBaselineController;
     private readonly Dictionary<string, UsageTrendForecastReference> _referenceForecasts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _selectedBlockDurations = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, RecoveryWatchSettings> _recoveryWatches = new(StringComparer.OrdinalIgnoreCase);
@@ -25,13 +26,23 @@ public sealed class UsageTrendSectionViewModel : INotifyPropertyChanged
     private bool _showRange = true;
     private bool _isRebuildingWindowOptions;
     private string? _recoveryConfirmationText;
+    private bool _isMomentumDetailsOpen;
+    private bool _isMomentumResetConfirmationOpen;
+    private string? _momentumResetFeedback;
 
-    public UsageTrendSectionViewModel(IUsageTrendPresenter presenter)
+    public UsageTrendSectionViewModel(
+        IUsageTrendPresenter presenter,
+        IMomentumBaselineController? momentumBaselineController = null)
     {
         _presenter = presenter;
+        _momentumBaselineController = momentumBaselineController;
         ResetChartCommand = new RelayCommand(_ => ResetChart());
         SelectBlockDurationCommand = new RelayCommand(SelectBlockDuration);
         ToggleRecoveryWatchCommand = new RelayCommand(_ => ToggleRecoveryWatch());
+        OpenMomentumDetailsCommand = new RelayCommand(_ => OpenMomentumDetails());
+        RequestMomentumResetCommand = new RelayCommand(_ => RequestMomentumReset());
+        CancelMomentumResetCommand = new RelayCommand(_ => CancelMomentumReset());
+        ConfirmMomentumResetCommand = new RelayCommand(_ => ConfirmMomentumReset());
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -47,6 +58,14 @@ public sealed class UsageTrendSectionViewModel : INotifyPropertyChanged
     public RelayCommand SelectBlockDurationCommand { get; }
 
     public RelayCommand ToggleRecoveryWatchCommand { get; }
+
+    public RelayCommand OpenMomentumDetailsCommand { get; }
+
+    public RelayCommand RequestMomentumResetCommand { get; }
+
+    public RelayCommand CancelMomentumResetCommand { get; }
+
+    public RelayCommand ConfirmMomentumResetCommand { get; }
 
     public UsageTrendWindowOption? SelectedWindow
     {
@@ -98,6 +117,9 @@ public sealed class UsageTrendSectionViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(IsMomentumLearning));
             OnPropertyChanged(nameof(MomentumBaselineProgress));
             OnPropertyChanged(nameof(MomentumAccessibleSummary));
+            OnPropertyChanged(nameof(MomentumActivityStatusText));
+            OnPropertyChanged(nameof(MomentumActivityEvidenceText));
+            OnPropertyChanged(nameof(MomentumActivityCoverageText));
             OnPropertyChanged(nameof(CurrentPaceText));
             OnPropertyChanged(nameof(SustainablePaceText));
             OnPropertyChanged(nameof(PaceComparisonText));
@@ -189,6 +211,61 @@ public sealed class UsageTrendSectionViewModel : INotifyPropertyChanged
 
     public string MomentumAccessibleSummary => ChartModel?.Summary.Momentum.AccessibleSummary
         ?? "Baseline progress: 0% ready. No samples collected.";
+
+    public string MomentumActivityStatusText => ChartModel is null
+        ? "Activity-qualified · Learning"
+        : $"Activity-qualified · {FormatMomentumConfidence(ChartModel.Summary.Momentum.Confidence)}";
+
+    public string MomentumActivityEvidenceText
+    {
+        get
+        {
+            var momentum = ChartModel?.Summary.Momentum;
+            var hours = momentum?.BaselineHourCount ?? 0;
+            var days = momentum?.BaselineDayCount ?? 0;
+            return $"{hours} measured active {(hours == 1 ? "hour" : "hours")} across {days} {(days == 1 ? "day" : "days")}";
+        }
+    }
+
+    public string MomentumActivityCoverageText => $"Local activity coverage: {ChartModel?.Summary.Momentum.ActivityCoverageText ?? "Unavailable"}";
+
+    public string MomentumScopeText => ChartModel?.Summary.Momentum.ScopeText
+        ?? "Account and plan scope are not verified.";
+
+    public string MomentumMeaningText => "Activity-qualified means locally observed execution or quota movement—not productivity or exact active-working time.";
+
+    public bool IsMomentumDetailsOpen
+    {
+        get => _isMomentumDetailsOpen;
+        set
+        {
+            if (_isMomentumDetailsOpen == value)
+            {
+                return;
+            }
+
+            _isMomentumDetailsOpen = value;
+            if (!value)
+            {
+                _isMomentumResetConfirmationOpen = false;
+                OnPropertyChanged(nameof(IsMomentumResetConfirmationOpen));
+                OnPropertyChanged(nameof(IsMomentumDetailsContentVisible));
+            }
+            OnPropertyChanged();
+        }
+    }
+
+    public bool IsMomentumResetConfirmationOpen => _isMomentumResetConfirmationOpen;
+
+    public bool IsMomentumDetailsContentVisible => !_isMomentumResetConfirmationOpen;
+
+    public bool HasMomentumResetFeedback => !string.IsNullOrWhiteSpace(_momentumResetFeedback);
+
+    public string MomentumResetFeedback => _momentumResetFeedback ?? string.Empty;
+
+    public string MomentumResetConfirmationText => SelectedWindow is null
+        ? "Reset this learned baseline?"
+        : $"Reset the learned baseline for {SelectedWindow.Label}? Runway samples and other quota windows stay unchanged.";
 
     public string CurrentPaceText => ChartModel?.Summary.CurrentPaceText ?? "—";
 
@@ -466,6 +543,66 @@ public sealed class UsageTrendSectionViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ShowRange));
         RefreshChart();
     }
+
+    private void OpenMomentumDetails()
+    {
+        _momentumResetFeedback = null;
+        OnPropertyChanged(nameof(HasMomentumResetFeedback));
+        OnPropertyChanged(nameof(MomentumResetFeedback));
+        IsMomentumDetailsOpen = true;
+    }
+
+    private void RequestMomentumReset()
+    {
+        if (_selectedWindow is null || _momentumBaselineController is null)
+        {
+            return;
+        }
+
+        _isMomentumResetConfirmationOpen = true;
+        OnPropertyChanged(nameof(IsMomentumResetConfirmationOpen));
+        OnPropertyChanged(nameof(IsMomentumDetailsContentVisible));
+        OnPropertyChanged(nameof(MomentumResetConfirmationText));
+    }
+
+    private void CancelMomentumReset()
+    {
+        _isMomentumResetConfirmationOpen = false;
+        OnPropertyChanged(nameof(IsMomentumResetConfirmationOpen));
+        OnPropertyChanged(nameof(IsMomentumDetailsContentVisible));
+    }
+
+    private void ConfirmMomentumReset()
+    {
+        if (_selectedWindow is null || _momentumBaselineController is null)
+        {
+            return;
+        }
+
+        var result = _momentumBaselineController.ResetSelectedWindow(_selectedWindow.BucketId, _now);
+        if (!result.Succeeded)
+        {
+            return;
+        }
+
+        _trends = _trends.Select(trend => trend.BucketId.Equals(_selectedWindow.BucketId, StringComparison.OrdinalIgnoreCase)
+            ? trend with { BaselineHourlyRates = [] }
+            : trend).ToArray();
+        _isMomentumResetConfirmationOpen = false;
+        _momentumResetFeedback = "Learned baseline reset. New activity will rebuild it.";
+        OnPropertyChanged(nameof(IsMomentumResetConfirmationOpen));
+        OnPropertyChanged(nameof(IsMomentumDetailsContentVisible));
+        OnPropertyChanged(nameof(HasMomentumResetFeedback));
+        OnPropertyChanged(nameof(MomentumResetFeedback));
+        RefreshChart();
+    }
+
+    private static string FormatMomentumConfidence(UsageMomentumConfidence confidence) => confidence switch
+    {
+        UsageMomentumConfidence.EarlyEstimate => "Early estimate",
+        UsageMomentumConfidence.Established => "Established",
+        _ => "Learning"
+    };
 
     private void SelectBlockDuration(object? parameter)
     {

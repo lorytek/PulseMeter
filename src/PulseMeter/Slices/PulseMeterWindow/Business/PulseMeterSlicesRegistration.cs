@@ -14,6 +14,7 @@ using PulseMeter.Slices.RunwayForecast;
 using PulseMeter.Slices.UsageAttribution;
 using PulseMeter.Slices.UsageSignals;
 using PulseMeter.Slices.UsageTrend;
+using PulseMeter.Slices.ReturnNote.Business;
 
 namespace PulseMeter.Slices.PulseMeterWindow.Business;
 
@@ -43,6 +44,7 @@ internal static class PulseMeterSlicesRegistration
         services.AddProjectUsageSlice();
         services.AddUsageAttributionSlice();
         services.AddDailyUsageSlice();
+        services.AddReturnNoteSlice();
 
         return services;
     }

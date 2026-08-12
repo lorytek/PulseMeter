@@ -27,6 +27,13 @@ public sealed record UsageTrendForecastReference(
 public sealed record UsageTrendVarianceSegment(UsageTrendPoint Start, UsageTrendPoint End);
 
 /// <summary>Adaptive pace change relative to the median baseline for the selected quota window.</summary>
+public enum UsageMomentumConfidence
+{
+    Learning,
+    EarlyEstimate,
+    Established
+}
+
 public sealed record UsageMomentumSummary(
     string ValueText,
     string StateText,
@@ -41,6 +48,18 @@ public sealed record UsageMomentumSummary(
 
     /// <summary>Plain-language description exposed to assistive technology.</summary>
     public string AccessibleSummary { get; init; } = string.Empty;
+
+    public UsageMomentumConfidence Confidence { get; init; } = UsageMomentumConfidence.Learning;
+
+    public int BaselineHourCount { get; init; }
+
+    public int BaselineDayCount { get; init; }
+
+    public LocalActivityCoverage ActivityCoverage { get; init; } = LocalActivityCoverage.Unavailable;
+
+    public string ActivityCoverageText { get; init; } = "Unavailable";
+
+    public string ScopeText { get; init; } = "Account and plan scope are not verified.";
 }
 
 /// <summary>Decision-oriented copy and metrics shown above the usage chart.</summary>

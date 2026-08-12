@@ -217,7 +217,7 @@
                     AutomationProperties.Name="Show top 3 attention signals"
                     FontSize="12"
                     Style="{DynamicResource LightButtonStyle}"
-                    Visibility="{Binding IsShowingAll, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    Visibility="{Binding ShouldShowCollapseAttentionItems, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
         </StackPanel>
     </Border>

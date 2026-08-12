@@ -19,8 +19,13 @@ public interface IUsageTrendPresenter
 public sealed class UsageTrendPresenter : IUsageTrendPresenter
 {
     private const int ProjectionPointCount = 13;
-    private const int DailyBaselineHours = 24;
-    private const int DailyBaselinePriorHours = DailyBaselineHours - 1;
+    private const int EarlyBaselineHours = 8;
+    private const int EarlyBaselineDays = 2;
+    private const int EstablishedBaselineHours = 24;
+    private const int EstablishedBaselineDays = 3;
+    private const int EarlyMinimumSpanHours = 18;
+    private const int EstablishedMinimumSpanHours = 42;
+    private const double BaselineHalfLifeDays = 7;
     private const double UnfavorableVarianceThresholdPoints = 1;
 
     public UsageTrendChartModel? BuildChart(
@@ -102,6 +107,10 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
         var summary = BuildRunwaySummary(
             actual,
             measurementGaps,
+            trend.BaselineHourlyRates,
+            trend.CurrentHourActivityEvidence,
+            trend.ActivityCoverage,
+            trend.LocalActivityUtcHours,
             last,
             trend.WindowDurationMins,
             forecast,
@@ -764,6 +773,10 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
     private static UsageTrendRunwaySummary BuildRunwaySummary(
         IReadOnlyList<UsageTrendPoint> actual,
         IReadOnlyList<UsageTrendGap> measurementGaps,
+        IReadOnlyList<LimitHourlyUsageRate> baselineHourlyRates,
+        HourlyActivityEvidence currentHourActivityEvidence,
+        LocalActivityCoverage activityCoverage,
+        IReadOnlyList<DateTimeOffset> localActivityUtcHours,
         UsageTrendPoint last,
         int? windowDurationMins,
         LimitRunwayForecast? forecast,
@@ -822,7 +835,11 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
             windowDurationMins,
             forecast?.ObservationDuration,
             forecast?.SampleCount,
-            measurementGaps);
+            measurementGaps,
+            baselineHourlyRates,
+            currentHourActivityEvidence,
+            activityCoverage,
+            localActivityUtcHours);
         var paceRatio = pacePerHour is double currentPace
             && currentPace > 0
             && sustainablePacePerHour is double sustainablePace
@@ -901,25 +918,45 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
         int? windowDurationMins,
         TimeSpan? observationDuration = null,
         int? sampleCount = null,
-        IReadOnlyList<UsageTrendGap>? measurementGaps = null)
+        IReadOnlyList<UsageTrendGap>? measurementGaps = null,
+        IReadOnlyList<LimitHourlyUsageRate>? baselineHourlyRates = null,
+        HourlyActivityEvidence currentHourActivityEvidence = HourlyActivityEvidence.QuotaMovement,
+        LocalActivityCoverage activityCoverage = LocalActivityCoverage.Unavailable,
+        IReadOnlyList<DateTimeOffset>? localActivityUtcHours = null)
     {
         var gaps = measurementGaps ?? Array.Empty<UsageTrendGap>();
         var isDailyBaseline = windowDurationMins >= 24 * 60;
-        var evidenceDuration = isDailyBaseline && measurementGaps is not null
-            ? CalculateMeasuredDuration(actual, gaps)
+        var evidenceDuration = isDailyBaseline
+            ? ResolveMomentumEvidenceDuration(actual, observationDuration: null)
             : ResolveMomentumEvidenceDuration(actual, observationDuration);
         var evidenceSamples = isDailyBaseline && measurementGaps is not null
             ? actual.Count
             : sampleCount is > 0 ? sampleCount.Value : actual.Count;
         var baselineTarget = ResolveMomentumBaselineTarget(windowDurationMins);
-        if (actual.Count < 2 || evidenceDuration < baselineTarget)
+        if (actual.Count < 2 || (!isDailyBaseline && evidenceDuration < baselineTarget))
         {
-            return LearningMomentum(windowDurationMins, evidenceDuration, evidenceSamples);
+            return WithActivityDetails(
+                LearningMomentum(windowDurationMins, evidenceDuration, evidenceSamples),
+                activityCoverage);
         }
 
         return isDailyBaseline
-            ? BuildDailyMedianMomentum(actual, gaps, evidenceDuration, evidenceSamples)
-            : BuildWindowMedianMomentum(actual, gaps, windowDurationMins, evidenceDuration, evidenceSamples);
+            ? BuildDailyMedianMomentum(
+                actual,
+                gaps,
+                evidenceSamples,
+                baselineHourlyRates,
+                currentHourActivityEvidence,
+                activityCoverage)
+            : BuildWindowMedianMomentum(
+                actual,
+                gaps,
+                windowDurationMins,
+                evidenceDuration,
+                evidenceSamples,
+                currentHourActivityEvidence,
+                activityCoverage,
+                localActivityUtcHours ?? []);
     }
 
     private static UsageMomentumSummary BuildWindowMedianMomentum(
@@ -927,80 +964,283 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
         IReadOnlyList<UsageTrendGap> measurementGaps,
         int? windowDurationMins,
         TimeSpan evidenceDuration,
-        int evidenceSamples)
+        int evidenceSamples,
+        HourlyActivityEvidence currentHourActivityEvidence,
+        LocalActivityCoverage activityCoverage,
+        IReadOnlyList<DateTimeOffset> localActivityUtcHours)
     {
         var latest = actual[^1].Timestamp;
         var currentRate = UsageRateBetween(actual, measurementGaps, latest.AddHours(-1), latest);
         var hours = Math.Max(2, (int)Math.Round((windowDurationMins ?? 300) / 60d));
         var historicalRates = Enumerable.Range(1, Math.Max(1, hours - 1))
-            .Select(offset => UsageRateBetween(
-                actual,
-                measurementGaps,
-                latest.AddHours(-(offset + 1)),
-                latest.AddHours(-offset)))
-            .Where(rate => rate is double value && double.IsFinite(value))
-            .Select(rate => rate!.Value)
+            .Select(offset =>
+            {
+                var startedAt = latest.AddHours(-(offset + 1));
+                var endedAt = latest.AddHours(-offset);
+                return new
+                {
+                    Rate = UsageRateBetween(actual, measurementGaps, startedAt, endedAt),
+                    HasLocalEvent = localActivityUtcHours.Any(hour => hour < endedAt && hour.AddHours(1) > startedAt)
+                };
+            })
+            .Where(item => item.Rate is double value
+                && double.IsFinite(value)
+                && (value >= 0.1 || item.HasLocalEvent))
+            .Select(item => item.Rate!.Value)
             .ToArray();
 
-        return currentRate is double current && historicalRates.Length >= hours - 1
-            ? CreateMomentum(current, Median(historicalRates), "vs 5h window median")
-            : LearningMomentum(windowDurationMins, evidenceDuration, evidenceSamples);
+        if (historicalRates.Length < hours - 1)
+        {
+            return WithActivityDetails(LearningMomentum(windowDurationMins, evidenceDuration, evidenceSamples), activityCoverage);
+        }
+
+        if (currentRate is not double current)
+        {
+            return WithActivityDetails(LearningMomentum(windowDurationMins, evidenceDuration, evidenceSamples), activityCoverage);
+        }
+
+        if (currentHourActivityEvidence == HourlyActivityEvidence.None)
+        {
+            return WithActivityDetails(
+                new UsageMomentumSummary("Baseline ready", "Waiting for observed Codex activity", "Activity-qualified recent hours", 0)
+                {
+                    IsLearning = true,
+                    BaselineProgress = 1,
+                    BaselineHourCount = historicalRates.Length,
+                    AccessibleSummary = "Activity-qualified baseline ready. Waiting for observed Codex activity before showing a direction."
+                },
+                activityCoverage);
+        }
+
+        return WithActivityDetails(CreateMomentum(current, Median(historicalRates), "vs 5h window median"), activityCoverage);
     }
 
     private static UsageMomentumSummary BuildDailyMedianMomentum(
         IReadOnlyList<UsageTrendPoint> actual,
         IReadOnlyList<UsageTrendGap> measurementGaps,
-        TimeSpan evidenceDuration,
-        int evidenceSamples)
+        int evidenceSamples,
+        IReadOnlyList<LimitHourlyUsageRate>? retainedBaselineRates,
+        HourlyActivityEvidence currentHourActivityEvidence,
+        LocalActivityCoverage activityCoverage)
     {
         var latest = actual[^1].Timestamp;
         var currentRate = UsageRateBetween(actual, measurementGaps, latest.AddHours(-1), latest);
-        var availablePriorHours = Math.Max(
-            0,
-            Math.Min(7 * 24 - 1, (int)Math.Floor((latest - actual[0].Timestamp).TotalHours) - 1));
-        var priorDayHourlyRates = Enumerable.Range(1, availablePriorHours)
-            .Select(offset => UsageRateBetween(
-                actual,
-                measurementGaps,
-                latest.AddHours(-(offset + 1)),
-                latest.AddHours(-offset)))
-            .Where(rate => rate is double value && double.IsFinite(value))
-            .Select(rate => rate!.Value)
-            .Take(DailyBaselinePriorHours)
-            .ToArray();
+        var baselineCutoff = latest.AddHours(-1);
+        var retained = retainedBaselineRates?
+            .Where(rate => double.IsFinite(rate.PercentPerHour) && rate.PercentPerHour is >= 0 and <= 100)
+            .Where(rate => rate.ActivityEvidence != HourlyActivityEvidence.None)
+            .Where(rate => rate.HourStartedAtUtc.AddHours(1) <= baselineCutoff)
+            .Select(rate => new WeightedHourlyRate(rate.HourStartedAtUtc, rate.PercentPerHour))
+            .ToArray() ?? [];
+        // A supplied collection is authoritative, even when every measured hour is inactive.
+        // The fallback exists only for legacy callers that do not yet carry classified facts.
+        var rates = retainedBaselineRates is not null
+            ? retained
+            : DerivePriorHourlyRates(actual, measurementGaps, latest);
+        var dayCount = rates
+            .Select(rate => DateOnly.FromDateTime(rate.ObservedAtUtc.ToLocalTime().DateTime))
+            .Distinct()
+            .Count();
+        var evidenceSpan = rates.Length < 2
+            ? (rates.Length == 1 ? TimeSpan.FromHours(1) : TimeSpan.Zero)
+            : rates.Max(rate => rate.ObservedAtUtc) - rates.Min(rate => rate.ObservedAtUtc) + TimeSpan.FromHours(1);
+        var confidence = ResolveMomentumConfidence(rates.Length, dayCount, evidenceSpan);
 
-        if (currentRate is double current && priorDayHourlyRates.Length == DailyBaselinePriorHours)
+        if (confidence == UsageMomentumConfidence.Learning)
         {
-            return CreateMomentum(current, Median(priorDayHourlyRates), "vs median day");
+            return WithActivityDetails(
+                LearningDurableBaseline(rates.Length, dayCount, evidenceSpan, evidenceSamples),
+                activityCoverage);
         }
 
-        if (currentRate is null && priorDayHourlyRates.Length == DailyBaselinePriorHours)
+        if (currentRate is not double current)
         {
-            return WaitingForCurrentMomentum(evidenceSamples);
+            return WithActivityDetails(
+                WaitingForCurrentMomentum(evidenceSamples, rates.Length, dayCount, confidence),
+                activityCoverage);
         }
 
-        var comparableEvidence = evidenceDuration >= TimeSpan.FromHours(24)
-            ? TimeSpan.FromHours(priorDayHourlyRates.Length)
-            : evidenceDuration;
-        return LearningMomentum(10_080, comparableEvidence, evidenceSamples);
+        if (currentHourActivityEvidence == HourlyActivityEvidence.None)
+        {
+            return WithActivityDetails(
+                WaitingForObservedActivity(rates.Length, dayCount, confidence),
+                activityCoverage);
+        }
+
+        var weighted = BuildRecencyWeights(rates, latest);
+        var median = WeightedQuantile(weighted, 0.5);
+        var lower = WeightedQuantile(weighted, 0.25);
+        var upper = WeightedQuantile(weighted, 0.75);
+        var confidenceLabel = FormatMomentumConfidence(confidence);
+        var baselineText = $"recent median {median:0.#}%/h · usual {lower:0.#}–{upper:0.#}%/h";
+        return WithActivityDetails(CreateDurableMomentum(current, median, lower, upper, baselineText) with
+        {
+            Confidence = confidence,
+            BaselineHourCount = rates.Length,
+            BaselineDayCount = dayCount,
+            AccessibleSummary = $"Usage momentum compared with a {confidenceLabel.ToLowerInvariant()} baseline of {rates.Length} measured hours across {FormatDayCount(dayCount)}. Recent median {median:0.#} percent per hour; usual range {lower:0.#} to {upper:0.#} percent per hour."
+        }, activityCoverage);
     }
 
-    private static UsageMomentumSummary WaitingForCurrentMomentum(int evidenceSamples)
-    {
-        var samplesText = evidenceSamples == 1
-            ? "1 sample"
-            : $"{Math.Max(0, evidenceSamples)} samples";
-        return new UsageMomentumSummary(
+    private static UsageMomentumSummary WaitingForObservedActivity(
+        int comparablePriorHours,
+        int dayCount,
+        UsageMomentumConfidence confidence) => new(
             "Baseline ready",
-            "Need a measured current hour",
-            $"24h usable now · {samplesText}",
+            "Waiting for observed Codex activity",
+            $"{FormatMomentumConfidence(confidence)} · {FormatComparablePriorHours(comparablePriorHours)} across {FormatDayCount(dayCount)}",
             0)
         {
             IsLearning = true,
             BaselineProgress = 1,
-            AccessibleSummary = $"Baseline ready. A measured current hour is needed before momentum can be calculated. 24 hours currently usable from {samplesText}."
+            Confidence = confidence,
+            BaselineHourCount = comparablePriorHours,
+            BaselineDayCount = dayCount,
+            AccessibleSummary = $"{FormatMomentumConfidence(confidence)} activity-qualified baseline ready. Waiting for observed Codex activity before showing a direction."
+        };
+
+    private static UsageMomentumSummary WithActivityDetails(
+        UsageMomentumSummary summary,
+        LocalActivityCoverage activityCoverage)
+    {
+        var coverageText = activityCoverage switch
+        {
+            LocalActivityCoverage.Available => "Available",
+            LocalActivityCoverage.Partial => "Partial",
+            _ => "Unavailable"
+        };
+        return summary with
+        {
+            ActivityCoverage = activityCoverage,
+            ActivityCoverageText = coverageText,
+            ScopeText = "Account and plan scope are not verified."
         };
     }
+
+    private static UsageMomentumSummary WaitingForCurrentMomentum(
+        int evidenceSamples,
+        int comparablePriorHours,
+        int dayCount,
+        UsageMomentumConfidence confidence)
+    {
+        var samplesText = evidenceSamples == 1
+            ? "1 sample"
+            : $"{Math.Max(0, evidenceSamples)} samples";
+        var comparableText = FormatComparablePriorHours(comparablePriorHours);
+        return new UsageMomentumSummary(
+            "Baseline ready",
+            "Need a measured current hour",
+            $"{FormatMomentumConfidence(confidence)} · {comparableText} across {FormatDayCount(dayCount)}",
+            0)
+        {
+            IsLearning = true,
+            BaselineProgress = 1,
+            Confidence = confidence,
+            BaselineHourCount = comparablePriorHours,
+            BaselineDayCount = dayCount,
+            AccessibleSummary = $"{FormatMomentumConfidence(confidence)} baseline ready. A measured current hour is needed before momentum can be calculated. {comparableText} are available across {FormatDayCount(dayCount)} from {samplesText}."
+        };
+    }
+
+    private static UsageMomentumSummary LearningDurableBaseline(
+        int comparablePriorHours,
+        int dayCount,
+        TimeSpan evidenceSpan,
+        int evidenceSamples)
+    {
+        var samplesText = evidenceSamples == 1
+            ? "1 sample"
+            : $"{Math.Max(0, evidenceSamples)} samples";
+        var comparableText = FormatComparablePriorHours(comparablePriorHours);
+        var progress = Math.Min(
+            Math.Clamp(comparablePriorHours / (double)EarlyBaselineHours, 0, 1),
+            Math.Min(
+                Math.Clamp(dayCount / (double)EarlyBaselineDays, 0, 1),
+                Math.Clamp(evidenceSpan.TotalHours / EarlyMinimumSpanHours, 0, 1)));
+        return new UsageMomentumSummary(
+            $"{progress * 100:0}% ready",
+            $"Need {EarlyBaselineHours} measured hours on {EarlyBaselineDays} days",
+            $"{comparableText} across {FormatDayCount(dayCount)} · {samplesText}",
+            0)
+        {
+            IsLearning = true,
+            BaselineProgress = progress,
+            BaselineHourCount = comparablePriorHours,
+            BaselineDayCount = dayCount,
+            AccessibleSummary = $"Learning baseline. {EarlyBaselineHours} measured hours on {EarlyBaselineDays} days with enough separation are needed. {comparableText} are currently available across {FormatDayCount(dayCount)} from {samplesText}."
+        };
+    }
+
+    private static string FormatComparablePriorHours(int count) =>
+        count == 1 ? "1 comparable prior hour" : $"{Math.Max(0, count)} comparable prior hours";
+
+    private static WeightedHourlyRate[] DerivePriorHourlyRates(
+        IReadOnlyList<UsageTrendPoint> actual,
+        IReadOnlyList<UsageTrendGap> measurementGaps,
+        DateTimeOffset latest)
+    {
+        var availableHours = Math.Max(0, Math.Min(28 * 24, (int)Math.Floor((latest - actual[0].Timestamp).TotalHours) - 1));
+        return Enumerable.Range(1, availableHours)
+            .Select(offset => new
+            {
+                StartedAt = latest.AddHours(-(offset + 1)),
+                Rate = UsageRateBetween(actual, measurementGaps, latest.AddHours(-(offset + 1)), latest.AddHours(-offset))
+            })
+            .Where(item => item.Rate is double value && double.IsFinite(value))
+            .Select(item => new WeightedHourlyRate(item.StartedAt, item.Rate!.Value))
+            .ToArray();
+    }
+
+    private static UsageMomentumConfidence ResolveMomentumConfidence(
+        int hourCount,
+        int dayCount,
+        TimeSpan evidenceSpan) =>
+        hourCount >= EstablishedBaselineHours && dayCount >= EstablishedBaselineDays && evidenceSpan >= TimeSpan.FromHours(EstablishedMinimumSpanHours)
+            ? UsageMomentumConfidence.Established
+            : hourCount >= EarlyBaselineHours && dayCount >= EarlyBaselineDays && evidenceSpan >= TimeSpan.FromHours(EarlyMinimumSpanHours)
+                ? UsageMomentumConfidence.EarlyEstimate
+                : UsageMomentumConfidence.Learning;
+
+    private static string FormatDayCount(int count) => count == 1 ? "1 day" : $"{Math.Max(0, count)} days";
+
+    private static string FormatMomentumConfidence(UsageMomentumConfidence confidence) => confidence switch
+    {
+        UsageMomentumConfidence.EarlyEstimate => "Early estimate",
+        UsageMomentumConfidence.Established => "Established",
+        _ => "Learning"
+    };
+
+    private static WeightedValue[] BuildRecencyWeights(IReadOnlyList<WeightedHourlyRate> rates, DateTimeOffset now) =>
+        rates.Select(rate => new WeightedValue(
+            rate.PercentPerHour,
+            Math.Pow(0.5, Math.Max(0, (now - rate.ObservedAtUtc).TotalDays) / BaselineHalfLifeDays)))
+            .ToArray();
+
+    private static double WeightedQuantile(IReadOnlyList<WeightedValue> values, double quantile)
+    {
+        var ordered = values.OrderBy(item => item.Value).ToArray();
+        if (ordered.Length == 0)
+        {
+            return 0;
+        }
+
+        var target = ordered.Sum(item => item.Weight) * Math.Clamp(quantile, 0, 1);
+        var cumulative = 0d;
+        foreach (var item in ordered)
+        {
+            cumulative += item.Weight;
+            if (cumulative >= target)
+            {
+                return item.Value;
+            }
+        }
+
+        return ordered[^1].Value;
+    }
+
+    private readonly record struct WeightedHourlyRate(DateTimeOffset ObservedAtUtc, double PercentPerHour);
+
+    private readonly record struct WeightedValue(double Value, double Weight);
 
     private static UsageMomentumSummary CreateMomentum(double currentRate, double medianRate, string baselineText)
     {
@@ -1073,6 +1313,45 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
         };
     }
 
+    private static UsageMomentumSummary CreateDurableMomentum(
+        double currentRate,
+        double medianRate,
+        double lowerRate,
+        double upperRate,
+        string baselineText)
+    {
+        var difference = currentRate - medianRate;
+        var spread = Math.Max(medianRate - lowerRate, upperRate - medianRate);
+        var steadyThreshold = Math.Max(0.05, Math.Max(Math.Abs(medianRate) * 0.1, spread * 0.5));
+        var scale = Math.Max(0.25, Math.Max(Math.Abs(medianRate), spread));
+        var gaugeValue = Math.Clamp(difference / scale, -1, 1);
+
+        string valueText;
+        string stateText;
+        if (Math.Abs(difference) <= steadyThreshold)
+        {
+            valueText = "→ 0%/h";
+            stateText = "within recent range";
+            gaugeValue = 0;
+        }
+        else if (difference > 0)
+        {
+            valueText = $"↗ +{difference:0.#}%/h";
+            stateText = "above recent baseline";
+        }
+        else
+        {
+            valueText = $"↘ -{Math.Abs(difference):0.#}%/h";
+            stateText = "below recent baseline";
+        }
+
+        return new UsageMomentumSummary(valueText, stateText, baselineText, gaugeValue)
+        {
+            IsLearning = false,
+            BaselineProgress = 1
+        };
+    }
+
     private static TimeSpan ResolveMomentumBaselineTarget(int? windowDurationMins) =>
         windowDurationMins >= 24 * 60
             ? TimeSpan.FromHours(24)
@@ -1090,26 +1369,6 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
         return actual.Count < 2
             ? TimeSpan.Zero
             : actual[^1].Timestamp - actual[0].Timestamp;
-    }
-
-    private static TimeSpan CalculateMeasuredDuration(
-        IReadOnlyList<UsageTrendPoint> actual,
-        IReadOnlyList<UsageTrendGap> measurementGaps)
-    {
-        var measuredTicks = 0L;
-        for (var index = 1; index < actual.Count; index++)
-        {
-            var start = actual[index - 1].Timestamp;
-            var end = actual[index].Timestamp;
-            if (end <= start || OverlapsMeasurementGap(measurementGaps, start, end))
-            {
-                continue;
-            }
-
-            measuredTicks += (end - start).Ticks;
-        }
-
-        return TimeSpan.FromTicks(measuredTicks);
     }
 
     private static string FormatBaselineDuration(TimeSpan duration)
@@ -1199,11 +1458,13 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
         {
             if (forecast.WindowDurationMins is >= 10_080)
             {
-                return momentum.IsLearning
-                    ? momentum.BaselineProgress >= 1
-                        ? $"Baseline ready • {momentum.StateText} · {momentum.BaselineText}"
-                        : $"Building 24h baseline • {momentum.BaselineText}"
-                    : $"{forecast.Confidence} evidence • {evidence} over latest 24h";
+                var days = momentum.BaselineDayCount == 1 ? "1 day" : $"{momentum.BaselineDayCount} days";
+                return momentum.Confidence switch
+                {
+                    UsageMomentumConfidence.Established => $"Established baseline • {momentum.BaselineHourCount} measured hours across {days}",
+                    UsageMomentumConfidence.EarlyEstimate => $"Early estimate • {momentum.BaselineHourCount} measured hours across {days}",
+                    _ => $"Learning weekly baseline • {momentum.BaselineHourCount}/{EarlyBaselineHours} hours across {momentum.BaselineDayCount}/{EarlyBaselineDays} days"
+                };
             }
 
             evidence = $"{evidence} over {FormatEvidenceDuration(duration)}";

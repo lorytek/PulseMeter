@@ -1,0 +1,43 @@
+<Window x:Class="PulseMeter.Slices.SupportSnapshot.UI.DesktopProcessSnapshotWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:automation="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        Title="Desktop process snapshot"
+        Width="680" MaxHeight="680" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
+        Background="#FFFFFF" FontFamily="Segoe UI"
+        Closing="Window_Closing">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <TextBlock Text="Desktop process snapshot" FontSize="18" FontWeight="SemiBold" />
+        <StackPanel Grid.Row="1" Margin="0,10,0,12">
+            <TextBlock Text="{Binding StatusText}" FontWeight="SemiBold" automation:AutomationProperties.LiveSetting="Polite" />
+            <TextBlock Margin="0,5,0,0" Text="{Binding VerifiedProcessCountText}" Foreground="#4B5563" />
+            <TextBlock Margin="0,3,0,0" Text="{Binding WorkingSetText}" Foreground="#4B5563" />
+            <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#4B5563"
+                       Text="Point-in-time sum; shared memory may be counted more than once." />
+            <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#4B5563"
+                       Text="PulseMeter checks installed app package identity, executable paths, and signatures locally. It does not read chats, prompts, logs, command lines, window titles, or project files, and it does not upload measurements. Raw identity details are not included in the snapshot." />
+        </StackPanel>
+        <TextBox Grid.Row="3" Text="{Binding PreviewText, Mode=OneWay}" IsReadOnly="True" IsUndoEnabled="False" AcceptsReturn="True"
+                 FontFamily="Consolas" FontSize="12" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                 MinHeight="210" Padding="10" Background="#F9FAFB" BorderBrush="#D1D5DB"
+                 automation:AutomationProperties.Name="Desktop process snapshot JSON preview" />
+        <Grid Grid.Row="4" Margin="0,14,0,0">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <TextBlock Grid.Row="0" VerticalAlignment="Center" Foreground="#4B5563" Text="{Binding CopyFeedback}" automation:AutomationProperties.LiveSetting="Polite" />
+            <Button Grid.Row="0" Grid.Column="1" Margin="8,0,0,0" Padding="14,6" Content="Measure now" Command="{Binding MeasureNowCommand}" IsDefault="True" automation:AutomationProperties.Name="Measure desktop process snapshot" />
+            <Button Grid.Row="0" Grid.Column="2" Margin="8,0,0,0" Padding="14,6" Content="Copy preview" Command="{Binding CopyPreviewCommand}" IsEnabled="{Binding CanCopyPreview}" automation:AutomationProperties.Name="Copy desktop process snapshot preview" />
+            <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Margin="0,12,0,0" TextWrapping="Wrap" Foreground="#4B5563"
+                       Text="This cannot establish the cause of lag or a memory leak." />
+            <Button Grid.Row="1" Grid.Column="2" Margin="8,8,0,0" Padding="14,6" Content="Close" Click="Close_Click" IsCancel="True" automation:AutomationProperties.Name="Close desktop process snapshot" />
+        </Grid>
+    </Grid>
+</Window>

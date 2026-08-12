@@ -3,6 +3,7 @@ using PulseMeter.Platform.Windows;
 using PulseMeter.Shared.Formatting;
 using PulseMeter.Shared.RateLimits;
 using PulseMeter.Slices.UsageCollection;
+using PulseMeter.Slices.UsageSignals.Models;
 
 namespace PulseMeter.Slices.UsageSignals.Business;
 
@@ -23,12 +24,20 @@ public interface IUsageSignalsTracker
     }
 }
 
-public sealed class UsageSignalsTracker : IUsageSignalsTracker
+public interface IMomentumBaselineController
+{
+    MomentumBaselineResetResult ResetSelectedWindow(string bucketId, DateTimeOffset cutoffUtc);
+}
+
+public sealed record MomentumBaselineResetResult(bool Succeeded, int RemovedHourCount);
+
+public sealed class UsageSignalsTracker : IUsageSignalsTracker, IMomentumBaselineController
 {
     private static readonly TimeSpan MinimumRunwayObservation = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan ShortRunwayHistory = TimeSpan.FromHours(3);
     private static readonly TimeSpan WeeklyRunwayHistory = TimeSpan.FromHours(24);
     private static readonly TimeSpan MaximumTrendHistory = TimeSpan.FromDays(7);
+    private static readonly TimeSpan MaximumBaselineHistory = TimeSpan.FromDays(28);
     private static readonly TimeSpan MeasurementGapThreshold = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan WeeklyFlatSampleCheckpointInterval = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan ShortFlatSampleCheckpointInterval = TimeSpan.FromMinutes(5);
@@ -53,12 +62,15 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
     private const int MinimumRunwaySamples = 3;
     private const int MaximumRunwaySamples = 1_024;
     private const int MaximumPersistedRunwayBuckets = 16;
+    private const int MaximumBaselineHoursPerBucket = 672;
 
     private readonly IUserIdleTimeProvider _idleTimeProvider;
     private readonly IRunwayObservationStateStore? _runwayObservationStateStore;
     // Runway needs a recent, bounded pace sample; idle drain needs a baseline that spans
     // only one continuous Windows-idle period. Keep those observations independently.
     private readonly Dictionary<string, BucketObservation> _observations = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, SortedDictionary<DateTimeOffset, BaselineHourlyFact>> _baselineHourlyRates = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, DateTimeOffset> _baselineResetCutoffs = new(StringComparer.OrdinalIgnoreCase);
     private IdleDrainIncident? _idleDrainIncident;
     private string? _dismissedIdleDrainBucketId;
     private DateTimeOffset? _dismissedIdleDrainResetsAtUtc;
@@ -66,6 +78,7 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
     private int _restoreAttempts;
     private DateTimeOffset? _nextRestoreAttemptUtc;
     private bool _runwayStateDirty;
+    private bool _unsupportedFutureSchema;
 
     public UsageSignalsTracker(IUserIdleTimeProvider idleTimeProvider, IRunwayObservationStateStore? runwayObservationStateStore = null)
     {
@@ -166,9 +179,14 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
                 _runwayStateDirty = true;
             }
 
+            if (CaptureCompletedHourlyBaselineRates(snapshot, nowUtc))
+            {
+                _runwayStateDirty = true;
+            }
+
             PersistRunwayObservations();
 
-            usageTrends.AddRange(BuildUsageTrends());
+            usageTrends.AddRange(BuildUsageTrends(snapshot));
 
             idleDrainIncident = _idleDrainIncident;
         }
@@ -198,6 +216,48 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
     public void Flush()
     {
         PersistRunwayObservations();
+    }
+
+    public MomentumBaselineResetResult ResetSelectedWindow(string bucketId, DateTimeOffset cutoffUtc)
+    {
+        if (string.IsNullOrWhiteSpace(bucketId))
+        {
+            return new MomentumBaselineResetResult(false, 0);
+        }
+
+        var normalizedCutoff = cutoffUtc.ToUniversalTime();
+        if (_unsupportedFutureSchema || _runwayObservationStateStore is null)
+        {
+            return new MomentumBaselineResetResult(false, 0);
+        }
+
+        var previousRates = _baselineHourlyRates.TryGetValue(bucketId, out var rates)
+            ? new SortedDictionary<DateTimeOffset, BaselineHourlyFact>(rates)
+            : null;
+        var removed = previousRates?.Count ?? 0;
+        var hadPreviousCutoff = _baselineResetCutoffs.TryGetValue(bucketId, out var previousCutoff);
+        _baselineHourlyRates.Remove(bucketId);
+        _baselineResetCutoffs[bucketId] = normalizedCutoff;
+        _runwayStateDirty = true;
+        if (PersistRunwayObservations())
+        {
+            return new MomentumBaselineResetResult(true, removed);
+        }
+
+        if (previousRates is not null)
+        {
+            _baselineHourlyRates[bucketId] = previousRates;
+        }
+        if (hadPreviousCutoff)
+        {
+            _baselineResetCutoffs[bucketId] = previousCutoff;
+        }
+        else
+        {
+            _baselineResetCutoffs.Remove(bucketId);
+        }
+        _runwayStateDirty = true;
+        return new MomentumBaselineResetResult(false, 0);
     }
 
     private void HydrateRestoredObservations(DateTimeOffset nowUtc)
@@ -230,11 +290,26 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
         _restoreAttempts = 0;
         _nextRestoreAttemptUtc = null;
         var state = loadResult.State;
+        if (loadResult.Status == RunwayObservationLoadStatus.Loaded
+            && state is { SchemaVersion: > RunwayObservationStateStore.CurrentSchemaVersion })
+        {
+            _unsupportedFutureSchema = true;
+            return;
+        }
         if (loadResult.Status != RunwayObservationLoadStatus.Loaded
             || state is null
-            || state.SchemaVersion != RunwayObservationStateStore.CurrentSchemaVersion
-            || state.Samples is null
-            || state.Samples.Any(sample => sample is null))
+            || state.SchemaVersion is < 1 or > RunwayObservationStateStore.CurrentSchemaVersion)
+        {
+            return;
+        }
+        RestoreBaselineResetCutoffs(state.BaselineResetCutoffs, nowUtc);
+        RestoreBaselineHourlyRates(state.BaselineHourlyRates, state.SchemaVersion, nowUtc);
+        if (state.SchemaVersion < RunwayObservationStateStore.CurrentSchemaVersion)
+        {
+            _runwayStateDirty = true;
+        }
+
+        if (state.Samples is null || state.Samples.Any(sample => sample is null))
         {
             return;
         }
@@ -251,6 +326,77 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
             }
 
             _observations[group.Key] = observation;
+        }
+    }
+
+    private void RestoreBaselineHourlyRates(
+        IReadOnlyList<BaselineHourlyUsageRateSample?>? storedRates,
+        int schemaVersion,
+        DateTimeOffset nowUtc)
+    {
+        if (storedRates is null)
+        {
+            return;
+        }
+
+        var cutoff = nowUtc - MaximumBaselineHistory;
+        foreach (var stored in storedRates)
+        {
+            if (stored is null
+                || string.IsNullOrWhiteSpace(stored.BucketId)
+                || stored.HourStartedAtUtc < cutoff
+                || stored.HourStartedAtUtc.AddHours(1) > nowUtc
+                || !double.IsFinite(stored.PercentPerHour)
+                || stored.PercentPerHour is < 0 or > 100)
+            {
+                continue;
+            }
+
+            if (!_baselineHourlyRates.TryGetValue(stored.BucketId, out var rates))
+            {
+                rates = new SortedDictionary<DateTimeOffset, BaselineHourlyFact>();
+                _baselineHourlyRates[stored.BucketId] = rates;
+            }
+
+            if (_baselineResetCutoffs.TryGetValue(stored.BucketId, out var resetCutoff)
+                && stored.HourStartedAtUtc < resetCutoff)
+            {
+                continue;
+            }
+
+            var activityEvidence = schemaVersion < 3
+                ? stored.PercentPerHour >= MinimumRunwayMovement
+                    ? HourlyActivityEvidence.QuotaMovement
+                    : HourlyActivityEvidence.None
+                : Enum.IsDefined(stored.ActivityEvidence)
+                    ? stored.ActivityEvidence
+                    : HourlyActivityEvidence.None;
+            rates[stored.HourStartedAtUtc] = new BaselineHourlyFact(stored.PercentPerHour, activityEvidence);
+        }
+
+        PruneBaselineHourlyRates(nowUtc);
+    }
+
+    private void RestoreBaselineResetCutoffs(
+        IReadOnlyList<BaselineResetCutoffSample?>? storedCutoffs,
+        DateTimeOffset nowUtc)
+    {
+        if (storedCutoffs is null)
+        {
+            return;
+        }
+
+        foreach (var stored in storedCutoffs)
+        {
+            if (stored is null
+                || string.IsNullOrWhiteSpace(stored.BucketId)
+                || stored.CutoffUtc > nowUtc.AddMinutes(5)
+                || stored.CutoffUtc < nowUtc - MaximumBaselineHistory)
+            {
+                continue;
+            }
+
+            _baselineResetCutoffs[stored.BucketId] = stored.CutoffUtc.ToUniversalTime();
         }
     }
 
@@ -448,13 +594,19 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
         return true;
     }
 
-    private void PersistRunwayObservations()
+    private bool PersistRunwayObservations()
     {
-        if (_runwayObservationStateStore is null
-            || !_restoreComplete
-            || !_runwayStateDirty)
+        if (_unsupportedFutureSchema)
         {
-            return;
+            return false;
+        }
+        if (!_runwayStateDirty)
+        {
+            return true;
+        }
+        if (_runwayObservationStateStore is null || !_restoreComplete)
+        {
+            return false;
         }
 
         var samples = _observations.Values
@@ -473,16 +625,37 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
                 sample.ObservedAtUtc,
                 sample.StartsAfterMeasurementGap))
             .ToArray();
+        var baselineRates = _baselineHourlyRates
+            .OrderByDescending(pair => pair.Value.Count == 0 ? DateTimeOffset.MinValue : pair.Value.Keys.Max())
+            .Take(MaximumPersistedRunwayBuckets)
+            .SelectMany(pair => pair.Value.Select(rate => new BaselineHourlyUsageRateSample(
+                pair.Key,
+                rate.Key,
+                rate.Value.PercentPerHour,
+                rate.Value.ActivityEvidence)))
+            .ToArray();
+        var baselineResetCutoffs = _baselineResetCutoffs
+            .OrderByDescending(pair => pair.Value)
+            .Take(MaximumPersistedRunwayBuckets)
+            .Select(pair => new BaselineResetCutoffSample(pair.Key, pair.Value))
+            .ToArray();
         try
         {
-            if (_runwayObservationStateStore.Save(new RunwayObservationState(RunwayObservationStateStore.CurrentSchemaVersion, samples)))
+            if (_runwayObservationStateStore.Save(new RunwayObservationState(
+                    RunwayObservationStateStore.CurrentSchemaVersion,
+                    samples,
+                    baselineRates,
+                    baselineResetCutoffs)))
             {
                 _runwayStateDirty = false;
+                return true;
             }
         }
         catch (Exception)
         {
         }
+
+        return false;
     }
 
     private bool RemoveExpiredObservationAnchors(DateTimeOffset nowUtc)
@@ -535,6 +708,11 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
         var signals = new List<UsageAttentionSignal>();
 
         AddSyncSignal(signals, snapshot);
+        if (snapshot.SyncStatus is SyncStatus.Stale or SyncStatus.Unavailable)
+        {
+            return signals;
+        }
+
         AddIdleDrainSignal(signals, idleDrainIncident);
         AddRunwaySignals(signals, runwaySignals);
         AddWeeklyLimitSignal(signals, snapshot);
@@ -727,7 +905,7 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
         return forecasts;
     }
 
-    private IReadOnlyList<LimitUsageTrend> BuildUsageTrends()
+    private IReadOnlyList<LimitUsageTrend> BuildUsageTrends(UsageSnapshot snapshot)
     {
         return _observations.Values
             .Where(observation => observation.RunwaySamples.Count > 0)
@@ -753,10 +931,225 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
                         .ToArray(),
                     IsMock: false)
                 {
-                    MeasurementGaps = gaps
+                    MeasurementGaps = gaps,
+                    BaselineHourlyRates = _baselineHourlyRates.TryGetValue(latest.BucketId, out var rates)
+                        ? rates.Select(rate => new LimitHourlyUsageRate(
+                            rate.Key,
+                            rate.Value.PercentPerHour,
+                            rate.Value.ActivityEvidence)).ToArray()
+                        : [],
+                    CurrentHourActivityEvidence = ResolveCurrentHourActivityEvidence(
+                        observation.RunwaySamples,
+                        snapshot.ActivityEvidence.UtcHours),
+                    ActivityCoverage = MapActivityCoverage(snapshot.ActivityEvidence.Coverage),
+                    LocalActivityUtcHours = snapshot.ActivityEvidence.UtcHours
                 };
             })
             .ToArray();
+    }
+
+    private bool CaptureCompletedHourlyBaselineRates(UsageSnapshot snapshot, DateTimeOffset nowUtc)
+    {
+        var changed = false;
+        var localActivityHours = snapshot.ActivityEvidence.UtcHours.ToHashSet();
+        foreach (var observation in _observations.Values)
+        {
+            if (observation.RunwaySamples.Count < 2
+                || observation.RunwaySamples[^1].WindowDurationMins is not int windowMinutes
+                || windowMinutes < 1_440)
+            {
+                continue;
+            }
+
+            var samples = observation.RunwaySamples;
+            var firstUtc = samples[0].ObservedAtUtc.ToUniversalTime();
+            var lastUtc = samples[^1].ObservedAtUtc.ToUniversalTime();
+            var firstHourTicks = firstUtc.Ticks - (firstUtc.Ticks % TimeSpan.TicksPerHour);
+            var hourStart = new DateTimeOffset(firstHourTicks, TimeSpan.Zero);
+            if (hourStart < firstUtc)
+            {
+                hourStart = hourStart.AddHours(1);
+            }
+
+            if (!_baselineHourlyRates.TryGetValue(samples[^1].BucketId, out var rates))
+            {
+                rates = new SortedDictionary<DateTimeOffset, BaselineHourlyFact>();
+                _baselineHourlyRates[samples[^1].BucketId] = rates;
+            }
+
+            else if (rates.Count > 0)
+            {
+                var firstUncapturedHour = rates.Keys.Max().AddHours(1);
+                if (hourStart < firstUncapturedHour)
+                {
+                    hourStart = firstUncapturedHour;
+                }
+            }
+
+            while (hourStart.AddHours(1) <= lastUtc)
+            {
+                var hourEnd = hourStart.AddHours(1);
+                if ((!_baselineResetCutoffs.TryGetValue(samples[^1].BucketId, out var resetCutoff)
+                        || hourStart >= resetCutoff)
+                    && !OverlapsRunwayGap(samples, hourStart, hourEnd)
+                    && TryInterpolateUsedPercent(samples, hourStart, out var startPercent)
+                    && TryInterpolateUsedPercent(samples, hourEnd, out var endPercent))
+                {
+                    var rate = Math.Max(0, endPercent - startPercent);
+                    var hasLocalEvent = localActivityHours.Contains(hourStart);
+                    var fact = new BaselineHourlyFact(
+                        rate,
+                        ClassifyActivityEvidence(hasLocalEvent, rate >= MinimumRunwayMovement));
+                    if (!rates.TryGetValue(hourStart, out var existing) || existing != fact)
+                    {
+                        rates[hourStart] = fact;
+                        changed = true;
+                    }
+                }
+
+                hourStart = hourEnd;
+            }
+
+            foreach (var capturedHour in rates.Keys.Where(localActivityHours.Contains).ToArray())
+            {
+                var existing = rates[capturedHour];
+                var upgraded = existing with
+                {
+                    ActivityEvidence = ClassifyActivityEvidence(
+                        hasLocalEvent: true,
+                        hasQuotaMovement: existing.PercentPerHour >= MinimumRunwayMovement)
+                };
+                if (existing != upgraded)
+                {
+                    rates[capturedHour] = upgraded;
+                    changed = true;
+                }
+            }
+        }
+
+        return PruneBaselineHourlyRates(nowUtc) || changed;
+    }
+
+    private static HourlyActivityEvidence ResolveCurrentHourActivityEvidence(
+        IReadOnlyList<BucketSample> samples,
+        IReadOnlyList<DateTimeOffset> localActivityHours)
+    {
+        if (samples.Count < 2)
+        {
+            return HourlyActivityEvidence.None;
+        }
+
+        var latest = samples[^1].ObservedAtUtc.ToUniversalTime();
+        var start = latest.AddHours(-1);
+        var hasLocalEvent = localActivityHours.Any(hour => hour < latest && hour.AddHours(1) > start);
+        var hasQuotaMovement = !OverlapsRunwayGap(samples, start, latest)
+            && TryInterpolateUsedPercent(samples, start, out var startPercent)
+            && TryInterpolateUsedPercent(samples, latest, out var endPercent)
+            && endPercent - startPercent >= MinimumRunwayMovement;
+        return ClassifyActivityEvidence(hasLocalEvent, hasQuotaMovement);
+    }
+
+    private static HourlyActivityEvidence ClassifyActivityEvidence(bool hasLocalEvent, bool hasQuotaMovement) =>
+        (hasLocalEvent, hasQuotaMovement) switch
+        {
+            (true, true) => HourlyActivityEvidence.Both,
+            (true, false) => HourlyActivityEvidence.LocalEvent,
+            (false, true) => HourlyActivityEvidence.QuotaMovement,
+            _ => HourlyActivityEvidence.None
+        };
+
+    private static LocalActivityCoverage MapActivityCoverage(ActivityEvidenceCoverage coverage) => coverage switch
+    {
+        ActivityEvidenceCoverage.Available => LocalActivityCoverage.Available,
+        ActivityEvidenceCoverage.Partial => LocalActivityCoverage.Partial,
+        _ => LocalActivityCoverage.Unavailable
+    };
+
+    private bool PruneBaselineHourlyRates(DateTimeOffset nowUtc)
+    {
+        var changed = false;
+        var cutoff = nowUtc.ToUniversalTime() - MaximumBaselineHistory;
+        foreach (var bucketId in _baselineHourlyRates.Keys.ToArray())
+        {
+            var rates = _baselineHourlyRates[bucketId];
+            foreach (var timestamp in rates.Keys.Where(timestamp => timestamp < cutoff).ToArray())
+            {
+                rates.Remove(timestamp);
+                changed = true;
+            }
+
+            while (rates.Count > MaximumBaselineHoursPerBucket)
+            {
+                rates.Remove(rates.Keys.First());
+                changed = true;
+            }
+
+            if (rates.Count == 0)
+            {
+                _baselineHourlyRates.Remove(bucketId);
+                changed = true;
+            }
+        }
+
+        return changed;
+    }
+
+    private static bool OverlapsRunwayGap(
+        IReadOnlyList<BucketSample> samples,
+        DateTimeOffset startUtc,
+        DateTimeOffset endUtc)
+    {
+        for (var index = 1; index < samples.Count; index++)
+        {
+            if (samples[index].StartsAfterMeasurementGap
+                && samples[index - 1].ObservedAtUtc < endUtc
+                && samples[index].ObservedAtUtc > startUtc)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryInterpolateUsedPercent(
+        IReadOnlyList<BucketSample> samples,
+        DateTimeOffset timestampUtc,
+        out double usedPercent)
+    {
+        usedPercent = 0;
+        for (var index = 0; index < samples.Count; index++)
+        {
+            var current = samples[index];
+            if (current.ObservedAtUtc == timestampUtc)
+            {
+                usedPercent = current.UsedPercent;
+                return true;
+            }
+
+            if (index == 0 || current.ObservedAtUtc < timestampUtc)
+            {
+                continue;
+            }
+
+            var previous = samples[index - 1];
+            if (previous.ObservedAtUtc > timestampUtc || current.StartsAfterMeasurementGap)
+            {
+                return false;
+            }
+
+            var totalTicks = current.ObservedAtUtc.Ticks - previous.ObservedAtUtc.Ticks;
+            if (totalTicks <= 0)
+            {
+                return false;
+            }
+
+            var progress = (timestampUtc.Ticks - previous.ObservedAtUtc.Ticks) / (double)totalTicks;
+            usedPercent = previous.UsedPercent + ((current.UsedPercent - previous.UsedPercent) * progress);
+            return double.IsFinite(usedPercent);
+        }
+
+        return false;
     }
 
     private static IReadOnlyList<LimitUsageTrend> BuildMockUsageTrends(
@@ -1792,4 +2185,8 @@ public sealed class UsageSignalsTracker : IUsageSignalsTracker
         double WeightedIncrementCount,
         double WeightedExposureMinutes,
         int PositiveIntervals);
+
+    private readonly record struct BaselineHourlyFact(
+        double PercentPerHour,
+        HourlyActivityEvidence ActivityEvidence);
 }

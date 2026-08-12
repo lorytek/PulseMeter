@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.IO;
 using PulseMeter.Platform.Persistence;
+using PulseMeter.Slices.UsageSignals.Models;
 
 namespace PulseMeter.Slices.UsageSignals.Business;
 
@@ -21,7 +22,21 @@ public enum RunwayObservationLoadStatus
 
 public sealed record RunwayObservationLoadResult(RunwayObservationLoadStatus Status, RunwayObservationState? State = null);
 
-public sealed record RunwayObservationState(int SchemaVersion, IReadOnlyList<RunwayObservationSample?>? Samples);
+public sealed record RunwayObservationState(
+    int SchemaVersion,
+    IReadOnlyList<RunwayObservationSample?>? Samples,
+    IReadOnlyList<BaselineHourlyUsageRateSample?>? BaselineHourlyRates = null,
+    IReadOnlyList<BaselineResetCutoffSample?>? BaselineResetCutoffs = null);
+
+public sealed record BaselineHourlyUsageRateSample(
+    string BucketId,
+    DateTimeOffset HourStartedAtUtc,
+    double PercentPerHour,
+    HourlyActivityEvidence ActivityEvidence = HourlyActivityEvidence.None);
+
+public sealed record BaselineResetCutoffSample(
+    string BucketId,
+    DateTimeOffset CutoffUtc);
 
 public sealed record RunwayObservationSample(
     string BucketId,
@@ -37,7 +52,7 @@ public sealed record RunwayObservationSample(
 
 public sealed class RunwayObservationStateStore : IRunwayObservationStateStore
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 3;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private readonly string _filePath;
 

@@ -624,6 +624,29 @@ public sealed class PulseMeterWindowLifecycleCoordinatorTests
     }
 
     [Fact]
+    public async Task QuickAccessHotkeyChange_IsSavedThroughTheSettingsLifecycle()
+    {
+        var usageService = new StubUsageService();
+        var viewModel = new PulseMeterWindowViewModel(usageService);
+        var settingsStore = new StubAppSettingsStore();
+        var coordinator = new PulseMeterWindowLifecycleCoordinator(
+            usageService,
+            viewModel,
+            new StubPulseMeterWindow(),
+            new StubTrayIconService(),
+            new StubForegroundWindowService(),
+            settingsStore,
+            new StubWindowStateStore(),
+            new StubPulseMeterTimerFactory(),
+            new ImmediateUiDispatcher());
+
+        await coordinator.StartAsync();
+        viewModel.IsQuickAccessHotkeyRequested = true;
+
+        Assert.True(settingsStore.Saved?.IsQuickAccessHotkeyRequested);
+    }
+
+    [Fact]
     public async Task FocusAutomationChanges_AreSavedThroughTheSettingsLifecycle()
     {
         var usageService = new StubUsageService();
@@ -646,6 +669,66 @@ public sealed class PulseMeterWindowLifecycleCoordinatorTests
 
         Assert.False(settingsStore.Saved?.AutoShowWhenCodexFocused);
         Assert.True(settingsStore.Saved?.AutoHideWhenFocusLeaves);
+    }
+
+    [Fact]
+    public async Task FirstUserHide_ShowsOneTrayGuidanceAndPersistsIt()
+    {
+        var usageService = new StubUsageService();
+        var viewModel = new PulseMeterWindowViewModel(usageService);
+        var tray = new StubTrayIconService();
+        var settingsStore = new StubAppSettingsStore();
+        var timerFactory = new StubPulseMeterTimerFactory();
+        var coordinator = new PulseMeterWindowLifecycleCoordinator(
+            usageService,
+            viewModel,
+            new StubPulseMeterWindow(),
+            tray,
+            new StubForegroundWindowService(),
+            settingsStore,
+            new StubWindowStateStore(),
+            timerFactory,
+            new ImmediateUiDispatcher());
+
+        await coordinator.StartAsync();
+
+        viewModel.MarkHiddenByUser();
+        viewModel.MarkShownByUser();
+        viewModel.MarkHiddenByUser();
+
+        var notification = Assert.Single(tray.RecoveryNotifications);
+        Assert.Equal("PulseMeter is still running", notification.Title);
+        Assert.Contains("tray icon", notification.Message, StringComparison.Ordinal);
+        Assert.Null(settingsStore.Saved);
+
+        timerFactory.Timers[0].RaiseTick();
+
+        Assert.True(settingsStore.Saved?.HasShownTrayHideGuidance);
+    }
+
+    [Fact]
+    public async Task UserHide_DoesNotRepeatPreviouslyShownTrayGuidance()
+    {
+        var usageService = new StubUsageService();
+        var viewModel = new PulseMeterWindowViewModel(
+            usageService,
+            hasShownTrayHideGuidance: true);
+        var tray = new StubTrayIconService();
+        var coordinator = new PulseMeterWindowLifecycleCoordinator(
+            usageService,
+            viewModel,
+            new StubPulseMeterWindow(),
+            tray,
+            new StubForegroundWindowService(),
+            new StubAppSettingsStore(),
+            new StubWindowStateStore(),
+            new StubPulseMeterTimerFactory(),
+            new ImmediateUiDispatcher());
+
+        await coordinator.StartAsync();
+        viewModel.MarkHiddenByUser();
+
+        Assert.Empty(tray.RecoveryNotifications);
     }
 
     [Fact]

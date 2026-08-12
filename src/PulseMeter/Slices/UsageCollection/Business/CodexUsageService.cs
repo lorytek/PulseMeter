@@ -323,6 +323,7 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
             DailyBuckets = confirmation.DailyBuckets,
             ProjectUsageRows = confirmation.ProjectUsageRows,
             UsageAttribution = confirmation.UsageAttribution,
+            ActivityEvidence = confirmation.ActivityEvidence,
             ResetCreditsAvailable = candidate.ResetCreditsAvailable,
             ResetCreditsExpiresAtUtc = candidate.ResetCreditsExpiresAtUtc,
             ResetCredits = candidate.ResetCredits,
@@ -580,10 +581,13 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
         CancellationToken cancellationToken)
     {
         IReadOnlyList<SharedRolloutSessionSummary> sessionSummaries;
+        ActivityEvidenceSnapshot activityEvidence;
         try
         {
             var cutoffDate = DateOnly.FromDateTime(request.Now.ToLocalTime().DateTime).AddDays(-29);
             sessionSummaries = await _rolloutAnalyticsSource.GetSessionSummariesAsync(cutoffDate, cancellationToken)
+                .ConfigureAwait(false);
+            activityEvidence = await _rolloutAnalyticsSource.GetActivityEvidenceAsync(cutoffDate, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -609,7 +613,8 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
                 cancellationToken)
             .ConfigureAwait(false);
 
-        if (projectUsageRows is null && usageAttribution is null)
+        if (projectUsageRows is null && usageAttribution is null
+            && activityEvidence.Coverage == ActivityEvidenceCoverage.Unavailable)
         {
             return;
         }
@@ -632,6 +637,8 @@ public sealed class CodexUsageService : IUsageService, IAsyncDisposable
             {
                 updatedSnapshot = CodexUsageParser.WithUsageAttribution(updatedSnapshot, usageAttribution);
             }
+
+            updatedSnapshot = CodexUsageParser.WithActivityEvidence(updatedSnapshot, activityEvidence);
 
             _lastGoodLiveSnapshot = updatedSnapshot;
         }
