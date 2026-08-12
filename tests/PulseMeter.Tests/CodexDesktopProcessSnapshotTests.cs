@@ -26,7 +26,7 @@ public sealed class CodexDesktopProcessSnapshotTests
     public void Formatter_ProducesExactSchemaV1SnakeCaseJson()
     {
         var snapshot = new CodexDesktopProcessSnapshot(1, Now, CodexDesktopProcessSnapshotStatus.Partial, 0, null, true, 1, CodexDesktopProcessSnapshot.CurrentIdentityRuleVersion);
-        Assert.Equal("""
+        var expected = """
         {
           "schema_version": 1,
           "captured_at_utc": "2026-08-11T12:00:00.0000000Z",
@@ -37,7 +37,10 @@ public sealed class CodexDesktopProcessSnapshotTests
           "unavailable_or_changed_count": 1,
           "identity_rule_version": "openai_codex_package_resource_v1"
         }
-        """, CodexDesktopProcessSnapshotFormatter.Format(snapshot));
+        """;
+        Assert.Equal(
+            expected.ReplaceLineEndings("\n"),
+            CodexDesktopProcessSnapshotFormatter.Format(snapshot).ReplaceLineEndings("\n"));
     }
 
     [Theory]
