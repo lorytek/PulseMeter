@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using PulseMeter.Shared.Commands;
 using PulseMeter.Slices.UsageCollection;
 
 namespace PulseMeter.Slices.ProjectUsage.UI;
@@ -8,17 +9,22 @@ namespace PulseMeter.Slices.ProjectUsage.UI;
 public sealed class ProjectUsageSectionViewModel : INotifyPropertyChanged
 {
     private readonly IProjectUsagePresenter _presenter;
+    private readonly IProjectLocationPresenter _projectLocationPresenter;
     private bool _isRebuildingRows;
     private ProjectUsageDisplayRow? _selectedProjectRow;
 
-    public ProjectUsageSectionViewModel(IProjectUsagePresenter presenter)
+    public ProjectUsageSectionViewModel(IProjectUsagePresenter presenter, IProjectLocationPresenter? projectLocationPresenter = null)
     {
         _presenter = presenter;
+        _projectLocationPresenter = projectLocationPresenter ?? new NullProjectLocationPresenter();
+        ProjectLocationCommand = new RelayCommand(_ => ShowProjectLocation(), _ => CanShowProjectLocation);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public ObservableCollection<ProjectUsageDisplayRow> ProjectUsageRows { get; } = new();
+
+    public RelayCommand ProjectLocationCommand { get; }
 
     public bool HasProjectUsage => ProjectUsageRows.Count > 0;
 
@@ -47,6 +53,8 @@ public sealed class ProjectUsageSectionViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(SelectedProjectSummary));
             OnPropertyChanged(nameof(SelectedProjectChatsText));
             OnPropertyChanged(nameof(SelectedProjectMomentText));
+            OnPropertyChanged(nameof(CanShowProjectLocation));
+            ProjectLocationCommand.RaiseCanExecuteChanged();
         }
     }
 
@@ -67,6 +75,8 @@ public sealed class ProjectUsageSectionViewModel : INotifyPropertyChanged
     public string SelectedProjectPathText => SelectedProjectRow?.FullPath ?? string.Empty;
 
     public bool HasSelectedProject => SelectedProjectRow is not null;
+
+    public bool CanShowProjectLocation => !string.IsNullOrWhiteSpace(SelectedProjectRow?.FullPath);
 
     public string SelectedProjectSummary => SelectedProjectRow is null
         ? "Choose a project to see its recent activity and local attribution evidence."
@@ -129,6 +139,20 @@ public sealed class ProjectUsageSectionViewModel : INotifyPropertyChanged
         return row is null
             ? $"No 7-day {direction} yet"
             : $"Largest 7-day {direction}: {row.DisplayName} {row.TrendText}";
+    }
+
+    private void ShowProjectLocation()
+    {
+        var selected = SelectedProjectRow;
+        if (selected is not null && !string.IsNullOrWhiteSpace(selected.FullPath))
+        {
+            _projectLocationPresenter.ShowLocation(selected.DisplayName, selected.FullPath);
+        }
+    }
+
+    private sealed class NullProjectLocationPresenter : IProjectLocationPresenter
+    {
+        public void ShowLocation(string projectDisplayName, string observedPath) { }
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)

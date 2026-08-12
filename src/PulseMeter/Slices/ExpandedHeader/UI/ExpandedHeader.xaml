@@ -27,11 +27,16 @@
                                     ViewboxUnits="RelativeToBoundingBox" />
                     </Border.Background>
                 </Border>
-                <TextBlock Text="{Binding CompactTitleText}"
+                <TextBlock x:Name="OverviewHeading"
+                           Text="{Binding CompactTitleText}"
                            Foreground="#111827"
                            FontSize="24"
                            VerticalAlignment="Center"
-                           FontWeight="SemiBold" />
+                           FontWeight="SemiBold"
+                           Focusable="True"
+                           KeyboardNavigation.IsTabStop="False"
+                           AutomationProperties.HeadingLevel="Level1"
+                           FocusVisualStyle="{DynamicResource HeadingFocusVisualStyle}" />
             </StackPanel>
 
             <StackPanel Grid.Column="1"

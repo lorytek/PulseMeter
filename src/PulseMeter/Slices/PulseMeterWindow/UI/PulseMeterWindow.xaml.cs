@@ -43,6 +43,8 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
     private bool _isClosingForShutdown;
     private DispatcherTimer? _expandCollapseFocusTimer;
     private HwndSource? _windowSource;
+    private Func<int, IntPtr, bool>? _windowMessageHandler;
+    private Action? _windowClosedHandler;
 
     public IPulseMeterWindowStateStore? WindowStateStore { get; set; }
 
@@ -122,6 +124,16 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
     {
         _isClosingForShutdown = true;
         Close();
+    }
+
+    public void SetWindowMessageHandler(Func<int, IntPtr, bool>? handler)
+    {
+        _windowMessageHandler = handler;
+    }
+
+    public void SetWindowClosedHandler(Action? handler)
+    {
+        _windowClosedHandler = handler;
     }
 
     private void Surface_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -226,7 +238,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
 
     private void NavigationRail_SectionRequested(object? sender, NavigationSectionRequestedEventArgs e)
     {
-        NavigateToSection(e.Section, restoreHiddenSection: false);
+        NavigateToSection(e.Section, restoreHiddenSection: false, focusDestination: e.ShouldFocusDestination);
     }
 
     private void UsageTrendSection_SectionRequested(object? sender, NavigationSectionRequestedEventArgs e)
@@ -263,8 +275,11 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         };
     }
 
-    private void NavigateToSection(NavigationSection section, bool restoreHiddenSection)
+    private long _destinationFocusGeneration;
+
+    private void NavigateToSection(NavigationSection section, bool restoreHiddenSection, bool focusDestination = false)
     {
+        var focusGeneration = ++_destinationFocusGeneration;
         if (_boundViewModel is null)
         {
             return;
@@ -278,6 +293,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         if (section == NavigationSection.Overview)
         {
             ExpandedContentScrollViewer.ScrollToTop();
+            QueueDestinationFocus(section, focusDestination, focusGeneration);
             return;
         }
 
@@ -286,6 +302,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         {
             _boundViewModel.NavigationRail.SelectSection(NavigationSection.Overview);
             ExpandedContentScrollViewer.ScrollToTop();
+            QueueDestinationFocus(NavigationSection.Overview, focusDestination, focusGeneration);
             return;
         }
 
@@ -314,6 +331,29 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         Dispatcher.BeginInvoke(
             new Action(() => _isProgrammaticSectionScroll = false),
             DispatcherPriority.ApplicationIdle);
+        QueueDestinationFocus(section, focusDestination, focusGeneration);
+    }
+
+    private void QueueDestinationFocus(NavigationSection section, bool focusDestination, long focusGeneration)
+    {
+        if (!focusDestination)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (_destinationFocusGeneration != focusGeneration)
+            {
+                return;
+            }
+
+            var heading = GetSectionHeading(section);
+            if (heading is { IsVisible: true, Focusable: true })
+            {
+                Keyboard.Focus(heading);
+            }
+        }), DispatcherPriority.ApplicationIdle);
     }
 
     private void PreserveSelectedSectionAfterDailyUsageLayoutChange()
@@ -451,6 +491,30 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         };
     }
 
+    private FrameworkElement? GetSectionHeading(NavigationSection section)
+    {
+        if (section == NavigationSection.Overview)
+        {
+            return ExpandedHeaderControl.FindName("OverviewHeading") as FrameworkElement;
+        }
+
+        var target = GetSectionTarget(section);
+        var headingName = section switch
+        {
+            NavigationSection.RateLimits => "RateLimitsHeading",
+            NavigationSection.WeeklyPace => "WeeklyPaceHeading",
+            NavigationSection.RunwayForecast => "UsageTrendHeading",
+            NavigationSection.BlockPlanner => "BlockPlannerHeading",
+            NavigationSection.ResetCredits => "ResetCreditsHeading",
+            NavigationSection.AccountUsage => "AccountUsageHeading",
+            NavigationSection.ProjectUsage => "ProjectUsageHeading",
+            NavigationSection.BurnAnalysis => "BurnAnalysisHeading",
+            NavigationSection.DailyUsage => "DailyUsageHeading",
+            _ => null
+        };
+        return headingName is null ? null : target?.FindName(headingName) as FrameworkElement;
+    }
+
     private void UpdateNavigationBottomSpacer()
     {
         if (NavigationBottomSpacer is null
@@ -531,6 +595,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        _windowClosedHandler?.Invoke();
         _windowSource?.RemoveHook(WndProc);
         _windowSource = null;
         SaveWindowState();
@@ -757,6 +822,12 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
+        if (_windowMessageHandler?.Invoke(msg, wParam) == true)
+        {
+            handled = true;
+            return IntPtr.Zero;
+        }
+
         if (msg == WmSysCommand && (wParam.ToInt64() & SysCommandMask) == ScMaximize)
         {
             RestoreMaximizedWindowToViewModelSize();

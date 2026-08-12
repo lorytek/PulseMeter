@@ -11,6 +11,11 @@ public sealed class UsageSummaryParserTests
         var snapshot = new UsageSnapshot
         {
             Buckets = [new RateLimitBucket { Label = "5h", UsedPercent = 20 }],
+            ActivityEvidence = new ActivityEvidenceSnapshot
+            {
+                Coverage = ActivityEvidenceCoverage.Partial,
+                UtcHours = [new DateTimeOffset(2026, 7, 1, 10, 0, 0, TimeSpan.Zero)]
+            },
             SyncStatus = SyncStatus.Live,
             Source = "AppServer",
             LastUpdatedUtc = DateTimeOffset.FromUnixTimeSeconds(1_730_000_000)
@@ -39,5 +44,6 @@ public sealed class UsageSummaryParserTests
         Assert.Equal(3, merged.CurrentStreakDays);
         Assert.Equal(5, merged.LongestStreakDays);
         Assert.Equal("2026-07-01", Assert.Single(merged.DailyBuckets).StartDate);
+        Assert.Same(snapshot.ActivityEvidence, merged.ActivityEvidence);
     }
 }

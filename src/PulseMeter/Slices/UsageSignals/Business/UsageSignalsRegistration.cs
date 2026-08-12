@@ -8,6 +8,8 @@ internal static class UsageSignalsRegistration
     {
         services.AddSingleton<IRunwayObservationStateStore, RunwayObservationStateStore>();
         services.AddSingleton<IUsageSignalsTracker, UsageSignalsTracker>();
+        services.AddSingleton<IMomentumBaselineController>(provider =>
+            (UsageSignalsTracker)provider.GetRequiredService<IUsageSignalsTracker>());
 
         return services;
     }

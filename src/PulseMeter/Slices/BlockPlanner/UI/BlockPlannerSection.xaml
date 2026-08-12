@@ -18,9 +18,14 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="Block planner"
+                    <TextBlock x:Name="BlockPlannerHeading"
+                               Text="Block planner"
                                Foreground="#0F172A"
                                FontFamily="Segoe UI"
+                               Focusable="True"
+                               KeyboardNavigation.IsTabStop="False"
+                               AutomationProperties.HeadingLevel="Level1"
+                               FocusVisualStyle="{DynamicResource HeadingFocusVisualStyle}"
                                FontSize="16"
                                FontWeight="SemiBold" />
                     <TextBlock Margin="0,2,0,0"

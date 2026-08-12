@@ -17,6 +17,9 @@ using PulseMeter.Platform.Windows;
 using PulseMeter.Slices.UsageCollection;
 using PulseMeter.Slices.UsageSignals;
 using PulseMeter.Slices.UsageTrend;
+using PulseMeter.Slices.ReturnNote.UI;
+using PulseMeter.Slices.SupportSnapshot.Business;
+using PulseMeter.Slices.SupportSnapshot.UI;
 
 namespace PulseMeter.Bootstrap.Composition;
 
@@ -27,6 +30,11 @@ internal static class PulseMeterWindowRegistration
     internal static IServiceCollection AddPulseMeterWindow(this IServiceCollection services, Action shutdown)
     {
         services.AddPulseMeterWindowCore(shutdown);
+        services.AddSingleton<IQuickAccessWindowController, QuickAccessWindowController>();
+        services.AddSingleton<IQuickAccessHotkeyService, QuickAccessHotkeyService>();
+        services.AddSingleton<SupportSnapshotFormatter>();
+        services.AddSingleton<ISupportSnapshotPresenter, SupportSnapshotPresenter>();
+        services.AddSingleton<ICodexDesktopProcessSnapshotPresenter, DesktopProcessSnapshotPresenter>();
         services.AddSingleton<ITrayIconService, TrayIconService>();
 
         return services;
@@ -35,6 +43,7 @@ internal static class PulseMeterWindowRegistration
     internal static IServiceCollection AddPulseMeterWindowCore(this IServiceCollection services, Action shutdown)
     {
         services.AddSingleton(shutdown);
+        services.AddSingleton<ISupportSnapshotFactsStore, SupportSnapshotFactsStore>();
         services.AddSingleton(sp =>
         {
             var appSettingsStore = sp.GetRequiredService<IPulseMeterAppSettingsStore>();
@@ -70,7 +79,11 @@ internal static class PulseMeterWindowRegistration
                 budgetAlertTracker: sp.GetRequiredService<IBudgetAlertTracker>(),
                 selectedLimitKey: appSettings?.SelectedRateLimitKey,
                 autoShowWhenCodexFocused: appSettings?.AutoShowWhenCodexFocused ?? true,
-                autoHideWhenFocusLeaves: appSettings?.AutoHideWhenFocusLeaves ?? false);
+                autoHideWhenFocusLeaves: appSettings?.AutoHideWhenFocusLeaves ?? false,
+                hasShownTrayHideGuidance: appSettings?.HasShownTrayHideGuidance ?? false,
+                isQuickAccessHotkeyRequested: appSettings?.IsQuickAccessHotkeyRequested ?? false,
+                supportSnapshotFactsStore: sp.GetRequiredService<ISupportSnapshotFactsStore>(),
+                returnNote: sp.GetRequiredService<ReturnNoteSectionViewModel>());
         });
 
         services.AddSingleton(sp => new PulseMeterWindow

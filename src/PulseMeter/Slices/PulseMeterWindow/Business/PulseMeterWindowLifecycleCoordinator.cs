@@ -26,6 +26,8 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
 {
     private static readonly TimeSpan ClockInterval = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan ForegroundInterval = TimeSpan.FromSeconds(1);
+    private const string TrayHideGuidanceTitle = "PulseMeter is still running";
+    private const string TrayHideGuidanceMessage = "Open PulseMeter from its tray icon. Choose Exit there when you want to stop it.";
 
     private readonly IUsageService _usageService;
     private readonly PulseMeterWindowViewModel _viewModel;
@@ -36,6 +38,7 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
     private readonly IPulseMeterWindowStateStore _windowStateStore;
     private readonly IPulseMeterTimerFactory _timerFactory;
     private readonly IUiDispatcher _dispatcher;
+    private readonly IQuickAccessHotkeyService? _quickAccessHotkeyService;
     private IPulseMeterTimer? _clockTimer;
     private IPulseMeterTimer? _foregroundTimer;
     private IPulseMeterTimer? _refreshTimer;
@@ -56,7 +59,8 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
         IPulseMeterAppSettingsStore appSettingsStore,
         IPulseMeterWindowStateStore windowStateStore,
         IPulseMeterTimerFactory timerFactory,
-        IUiDispatcher dispatcher)
+        IUiDispatcher dispatcher,
+        IQuickAccessHotkeyService? quickAccessHotkeyService = null)
     {
         _usageService = usageService;
         _viewModel = viewModel;
@@ -67,6 +71,7 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
         _windowStateStore = windowStateStore;
         _timerFactory = timerFactory;
         _dispatcher = dispatcher;
+        _quickAccessHotkeyService = quickAccessHotkeyService;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken = default)
@@ -83,6 +88,7 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
         {
             SubscribeEventHandlers();
             _pulseMeterWindow.Show();
+            _quickAccessHotkeyService?.Start();
             StartTimers();
 
             await _usageService.StartAsync(refreshCancellation.Token).ConfigureAwait(false);
@@ -132,6 +138,7 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
         CaptureFailure(ref firstFailure, CancelRefreshes);
         CaptureFailure(ref firstFailure, StopTimers);
         CaptureFailure(ref firstFailure, UnsubscribeEventHandlers);
+        CaptureFailure(ref firstFailure, () => _quickAccessHotkeyService?.Dispose());
         CaptureFailure(ref firstFailure, _viewModel.FlushUsageHistory);
         CaptureFailure(ref firstFailure, PersistAppSettingsForShutdown);
         CaptureFailure(ref firstFailure, PersistWindowStateForShutdown);
@@ -226,6 +233,7 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
         TryRollback(CancelRefreshes);
         TryRollback(StopTimers);
         TryRollback(UnsubscribeEventHandlers);
+        TryRollback(() => _quickAccessHotkeyService?.Dispose());
         TryRollback(_pulseMeterWindow.Hide);
     }
 
@@ -343,6 +351,14 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(PulseMeterWindowViewModel.IsHiddenByUser)
+            && _viewModel.IsHiddenByUser
+            && _viewModel.TryMarkTrayHideGuidanceShown())
+        {
+            _pendingAppSettings = CaptureAppSettings(_viewModel);
+            _trayIconService.ShowNotification(TrayHideGuidanceTitle, TrayHideGuidanceMessage);
+        }
+
         if (e.PropertyName is nameof(PulseMeterWindowViewModel.AutoSyncSeconds)
             or nameof(PulseMeterWindowViewModel.SelectedLimitKey)
             or nameof(PulseMeterWindowViewModel.IsAlwaysOnTop)
@@ -357,7 +373,8 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
             or nameof(PulseMeterWindowViewModel.IsAccountUsageVisible)
             or nameof(PulseMeterWindowViewModel.IsProjectUsageVisible)
             or nameof(PulseMeterWindowViewModel.IsUsageAttributionVisible)
-            or nameof(PulseMeterWindowViewModel.IsDailyUsageVisible))
+            or nameof(PulseMeterWindowViewModel.IsDailyUsageVisible)
+            or nameof(PulseMeterWindowViewModel.IsQuickAccessHotkeyRequested))
         {
             QueueAppSettingsSave();
         }
@@ -440,7 +457,9 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
             viewModel.IsNavigationPanelExpanded,
             viewModel.UsageTrend.CaptureRecoveryWatches(),
             viewModel.AutoShowWhenCodexFocused,
-            viewModel.AutoHideWhenFocusLeaves);
+            viewModel.AutoHideWhenFocusLeaves,
+            viewModel.HasShownTrayHideGuidance,
+            viewModel.IsQuickAccessHotkeyRequested);
     }
 
     private void UpdateForegroundVisibility()

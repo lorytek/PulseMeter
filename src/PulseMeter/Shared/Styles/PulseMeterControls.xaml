@@ -13,6 +13,20 @@
         <Setter Property="FontFamily" Value="Segoe UI" />
     </Style>
 
+    <Style x:Key="HeadingFocusVisualStyle" TargetType="{x:Type Control}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Control}">
+                    <Border Margin="-2"
+                            BorderBrush="#1F73FF"
+                            BorderThickness="1">
+                        <AdornedElementPlaceholder />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="UsageMetricTextStyle" TargetType="TextBlock">
         <Setter Property="Foreground" Value="#F7FAFC" />
         <Setter Property="FontFamily" Value="Segoe UI" />

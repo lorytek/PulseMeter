@@ -4,6 +4,9 @@ using PulseMeter.Platform.Persistence;
 using PulseMeter.Platform.Windows;
 using PulseMeter.Slices.ResetCredits.Business;
 using PulseMeter.Slices.ResetCredits.Models;
+using PulseMeter.Slices.SupportSnapshot.Business;
+using PulseMeter.Slices.SupportSnapshot.Models;
+using PulseMeter.Slices.SupportSnapshot.UI;
 using PulseMeter.Slices.UsageAttribution.Business;
 using PulseMeter.Slices.UsageCollection.Business;
 using PulseMeter.Slices.UsageCollection.Models;
@@ -118,6 +121,14 @@ public sealed class VisualHarnessTests : IDisposable
         Assert.Null(provider.GetService<IAppServerProcessFactory>());
         Assert.Null(provider.GetService<IJsonRpcClientFactory>());
         Assert.NotNull(provider.GetRequiredService<PulseMeterWindowViewModel>());
+        Assert.NotNull(provider.GetRequiredService<SupportSnapshotFormatter>());
+        Assert.IsType<VisualHarnessDesktopProcessSnapshotService>(
+            provider.GetRequiredService<ICodexDesktopProcessSnapshotService>());
+        Assert.IsType<VisualHarnessProjectLocationActionService>(
+            provider.GetRequiredService<IProjectLocationActionService>());
+        Assert.IsType<VisualHarnessProjectFolderPicker>(
+            provider.GetRequiredService<IProjectFolderPicker>());
+        Assert.Null(provider.GetService<ICodexDesktopProcessSnapshotProbe>());
     }
 
     [Theory]
@@ -140,6 +151,71 @@ public sealed class VisualHarnessTests : IDisposable
     public void ScenarioParser_RejectsMissingOrUnsafeValues(string argument)
     {
         Assert.Throws<ArgumentException>(() => VisualHarnessScenarioParser.Parse([argument]));
+    }
+
+    [Theory]
+    [InlineData(new string[0], false)]
+    [InlineData(new[] { "--scenario=healthy" }, false)]
+    [InlineData(new[] { "--support-snapshot" }, true)]
+    [InlineData(new[] { "--SUPPORT-SNAPSHOT", "--scenario", "stale" }, true)]
+    public void ScenarioParser_RecognizesSupportSnapshotPreviewFlag(string[] args, bool expected)
+    {
+        Assert.Equal(expected, VisualHarnessScenarioParser.ShouldOpenSupportSnapshot(args));
+    }
+
+    [Theory]
+    [InlineData(new string[0], DesktopProcessSnapshotVisualScenario.None)]
+    [InlineData(new[] { "--desktop-process-snapshot" }, DesktopProcessSnapshotVisualScenario.Idle)]
+    [InlineData(new[] { "--desktop-process-snapshot=complete" }, DesktopProcessSnapshotVisualScenario.Complete)]
+    [InlineData(new[] { "--desktop-process-snapshot", "partial" }, DesktopProcessSnapshotVisualScenario.Partial)]
+    public void ScenarioParser_RecognizesExplicitDesktopProcessSnapshotModes(
+        string[] args,
+        DesktopProcessSnapshotVisualScenario expected)
+    {
+        Assert.Equal(expected, VisualHarnessScenarioParser.ParseDesktopProcessSnapshot(args));
+    }
+
+    [Theory]
+    [InlineData("--desktop-process-snapshot=live")]
+    [InlineData("--desktop-process-snapshot=unavailable")]
+    public void ScenarioParser_RejectsUnsafeDesktopProcessSnapshotModes(string argument)
+    {
+        Assert.Throws<ArgumentException>(() => VisualHarnessScenarioParser.ParseDesktopProcessSnapshot([argument]));
+    }
+
+    [Theory]
+    [InlineData(new string[0], ProjectLocationVisualScenario.None)]
+    [InlineData(new[] { "--project-location" }, ProjectLocationVisualScenario.Success)]
+    [InlineData(new[] { "--project-location=invalid" }, ProjectLocationVisualScenario.InvalidLocation)]
+    [InlineData(new[] { "--project-location", "failed" }, ProjectLocationVisualScenario.LaunchFailed)]
+    public void ScenarioParser_RecognizesExplicitProjectLocationModes(string[] args, ProjectLocationVisualScenario expected)
+    {
+        Assert.Equal(expected, VisualHarnessScenarioParser.ParseProjectLocation(args));
+    }
+
+    [Theory]
+    [InlineData("--project-location=live")]
+    [InlineData("--project-location=unknown")]
+    public void ScenarioParser_RejectsUnsafeProjectLocationModes(string argument)
+    {
+        Assert.Throws<ArgumentException>(() => VisualHarnessScenarioParser.ParseProjectLocation([argument]));
+    }
+
+    [Fact]
+    public async Task DesktopProcessSnapshotHarnessService_UsesDeterministicCompletedAndPartialPreviewData()
+    {
+        var complete = new VisualHarnessDesktopProcessSnapshotService(DesktopProcessSnapshotVisualScenario.Complete);
+        var partial = new VisualHarnessDesktopProcessSnapshotService(DesktopProcessSnapshotVisualScenario.Partial);
+
+        var completeSnapshot = await complete.CaptureAsync();
+        var partialSnapshot = await partial.CaptureAsync();
+
+        Assert.Equal(CodexDesktopProcessSnapshotStatus.Complete, completeSnapshot.Status);
+        Assert.Equal(CodexDesktopProcessSnapshotStatus.Partial, partialSnapshot.Status);
+        Assert.Equal(1, complete.CaptureCount);
+        Assert.Equal(1, partial.CaptureCount);
+        Assert.Contains("\"status\": \"complete\"", CodexDesktopProcessSnapshotFormatter.Format(completeSnapshot));
+        Assert.Contains("\"status\": \"partial\"", CodexDesktopProcessSnapshotFormatter.Format(partialSnapshot));
     }
 
     [Theory]
@@ -243,7 +319,10 @@ public sealed class VisualHarnessTests : IDisposable
         Assert.Contains("Interlocked.Exchange(ref _shutdownRequested, 1)", app, StringComparison.Ordinal);
         Assert.Contains("VisualHarnessWorkspace.LocateFromAny(", app, StringComparison.Ordinal);
         Assert.Contains("catch (Exception exception)", app, StringComparison.Ordinal);
-        Assert.Contains("visual harness shutdown failed", app, StringComparison.Ordinal);
+        Assert.Contains("private static void WriteFailure", app, StringComparison.Ordinal);
+        Assert.Contains("exception.GetBaseException().GetType().Name", app, StringComparison.Ordinal);
+        Assert.DoesNotContain("failed: {exception}", app, StringComparison.Ordinal);
+        Assert.DoesNotContain("failed: {task.Exception}", app, StringComparison.Ordinal);
         Assert.Contains("Shutdown(-1)", app, StringComparison.Ordinal);
     }
 

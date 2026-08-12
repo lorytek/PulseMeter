@@ -8,6 +8,8 @@ public interface IPulseMeterWindow
 
     bool IsVisible { get; }
 
+    bool IsActive => false;
+
     WindowState WindowState { get; set; }
 
     void Invoke(Action action);
@@ -23,4 +25,12 @@ public interface IPulseMeterWindow
     void CloseForShutdown();
 
     bool Activate();
+
+    void SetWindowMessageHandler(Func<int, IntPtr, bool>? handler)
+    {
+    }
+
+    void SetWindowClosedHandler(Action? handler)
+    {
+    }
 }

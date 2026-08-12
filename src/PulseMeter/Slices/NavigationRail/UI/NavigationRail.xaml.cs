@@ -7,6 +7,9 @@ namespace PulseMeter.Slices.NavigationRail.UI;
 public partial class NavigationRail
 {
     private bool _restoreCustomizeFocusAfterClose;
+    private System.Windows.Controls.Button? _enterActivatedSectionButton;
+    private System.Windows.Controls.Button? _spaceActivatedSectionButton;
+    private System.Windows.Threading.DispatcherOperation? _keyboardGestureCleanup;
 
     public event EventHandler<NavigationSectionRequestedEventArgs>? SectionRequested;
 
@@ -31,8 +34,49 @@ public partial class NavigationRail
             return;
         }
 
+        var focusDestination = ReferenceEquals(sender, _enterActivatedSectionButton)
+            || ReferenceEquals(sender, _spaceActivatedSectionButton);
+        ClearKeyboardActivation();
         viewModel.SelectSection(section);
-        SectionRequested?.Invoke(this, new NavigationSectionRequestedEventArgs(section));
+        SectionRequested?.Invoke(this, new NavigationSectionRequestedEventArgs(section, focusDestination));
+    }
+
+    private void SectionButton_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Button button && e.Key == System.Windows.Input.Key.Enter)
+        {
+            ClearKeyboardActivation();
+            _enterActivatedSectionButton = button;
+            ScheduleKeyboardActivationCleanup();
+        }
+    }
+
+    private void SectionButton_PreviewKeyUp(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Button button && e.Key == System.Windows.Input.Key.Space)
+        {
+            ClearKeyboardActivation();
+            _spaceActivatedSectionButton = button;
+            ScheduleKeyboardActivationCleanup();
+        }
+    }
+
+    private void SectionButton_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) => ClearKeyboardActivation();
+
+    private void SectionButton_LostKeyboardFocus(object sender, System.Windows.Input.KeyboardFocusChangedEventArgs e) => ClearKeyboardActivation();
+
+    private void ScheduleKeyboardActivationCleanup()
+    {
+        _keyboardGestureCleanup?.Abort();
+        _keyboardGestureCleanup = Dispatcher.BeginInvoke(new Action(ClearKeyboardActivation), System.Windows.Threading.DispatcherPriority.ContextIdle);
+    }
+
+    private void ClearKeyboardActivation()
+    {
+        _enterActivatedSectionButton = null;
+        _spaceActivatedSectionButton = null;
+        _keyboardGestureCleanup?.Abort();
+        _keyboardGestureCleanup = null;
     }
 
     private void CustomizeDashboardButton_Click(object sender, RoutedEventArgs e)
@@ -107,10 +151,13 @@ public partial class NavigationRail
 
 public sealed class NavigationSectionRequestedEventArgs : EventArgs
 {
-    public NavigationSectionRequestedEventArgs(NavigationSection section)
+    public NavigationSectionRequestedEventArgs(NavigationSection section, bool shouldFocusDestination = false)
     {
         Section = section;
+        ShouldFocusDestination = shouldFocusDestination;
     }
 
     public NavigationSection Section { get; }
+
+    public bool ShouldFocusDestination { get; }
 }

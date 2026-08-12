@@ -7,9 +7,7 @@ $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $output = Join-Path $artifactsRoot "PulseMeter-win-x64-$timestamp"
 $appExe = Join-Path $output "PulseMeter.exe"
 $localHostOutput = Join-Path $artifactsRoot "PulseMeter-local-host-$timestamp"
-$localHostDll = Join-Path $localHostOutput "PulseMeter.dll"
-$dotnetExe = Join-Path $env:ProgramFiles "dotnet\dotnet.exe"
-$wscriptExe = Join-Path $env:WINDIR "System32\wscript.exe"
+$localHostExe = Join-Path $localHostOutput "PulseMeter.exe"
 $icon = Join-Path $root "src\PulseMeter\Assets\PulseMeter.ico"
 $shortcutPath = Join-Path $root "PulseMeter.lnk"
 $desktopShortcutPath = Join-Path ([Environment]::GetFolderPath("Desktop")) "PulseMeter.lnk"
@@ -18,43 +16,20 @@ $launcherTarget = $appExe
 $launcherArguments = ""
 $launcherWorkingDirectory = $output
 $launcherDescription = "self-contained executable"
-$launcherScript = ""
-
-function Escape-VbScriptString([string]$value) {
-    return $value.Replace('"', '""')
-}
-
-function Save-PulseMeterLauncher {
-    $script:launcherScript = Join-Path $launcherWorkingDirectory "launch-pulsemeter.vbs"
-    $commandLine = [string]::Concat('"', $launcherTarget, '"')
-    if (-not [string]::IsNullOrWhiteSpace($launcherArguments)) {
-        $commandLine = [string]::Concat($commandLine, " ", $launcherArguments)
-    }
-
-    $escapedWorkingDirectory = Escape-VbScriptString $launcherWorkingDirectory
-    $escapedCommandLine = Escape-VbScriptString $commandLine
-    $launcherContent = @"
-Set shell = CreateObject("WScript.Shell")
-shell.CurrentDirectory = "$escapedWorkingDirectory"
-shell.Run "$escapedCommandLine", 0, False
-"@
-    Set-Content -LiteralPath $launcherScript -Value $launcherContent -Encoding ASCII
-}
-
 function Save-PulseMeterShortcut([string]$path) {
     $shortcut = $script:shell.CreateShortcut($path)
-    $shortcut.TargetPath = $wscriptExe
-    $shortcut.Arguments = [string]::Concat('"', $launcherScript, '"')
+    $shortcut.TargetPath = $launcherTarget
+    $shortcut.Arguments = $launcherArguments
     $shortcut.WorkingDirectory = $launcherWorkingDirectory
     $shortcut.IconLocation = $icon
     $shortcut.Save()
 }
 
 function Stop-WorkspacePulseMeterInstances {
-    $localLauncherPattern = [string]::Concat('*', (Join-Path $artifactsRoot 'PulseMeter-local-host-*\PulseMeter.dll'), '*')
+    $localHostPattern = Join-Path $artifactsRoot 'PulseMeter-local-host-*\PulseMeter.exe'
     $publishedExePattern = Join-Path $artifactsRoot 'PulseMeter-win-x64-*\PulseMeter.exe'
     $processes = Get-CimInstance Win32_Process | Where-Object {
-        ($_.Name -eq "dotnet.exe" -and $_.CommandLine -like $localLauncherPattern) -or
+        ($_.Name -eq "PulseMeter.exe" -and $_.ExecutablePath -like $localHostPattern) -or
         ($_.Name -eq "PulseMeter.exe" -and $_.ExecutablePath -like $publishedExePattern)
     }
 
@@ -144,19 +119,11 @@ if (-not (Test-Path -LiteralPath $appExe)) {
     throw "Published application executable was not created: $appExe"
 }
 
-if (-not (Test-Path -LiteralPath $dotnetExe)) {
-    throw "The local .NET host was not found: $dotnetExe"
-}
-
-if (-not (Test-Path -LiteralPath $wscriptExe)) {
-    throw "Windows Script Host was not found: $wscriptExe"
-}
-
 dotnet publish $project `
     -c Release `
     --self-contained false `
     -o $localHostOutput `
-    /p:UseAppHost=false `
+    /p:UseAppHost=true `
     /p:PublishSingleFile=false `
     /p:DebugType=embedded `
     /p:DebugSymbols=false
@@ -165,8 +132,8 @@ if ($LASTEXITCODE -ne 0) {
     throw "Local host publish failed with exit code $LASTEXITCODE"
 }
 
-if (-not (Test-Path -LiteralPath $localHostDll)) {
-    throw "Published local host DLL was not created: $localHostDll"
+if (-not (Test-Path -LiteralPath $localHostExe)) {
+    throw "Published local host executable was not created: $localHostExe"
 }
 
 if (-not (Test-Path -LiteralPath $icon)) {
@@ -182,11 +149,11 @@ catch {
     Write-Warning "The self-contained executable was blocked. Trying the framework-dependent launcher."
     try {
         Test-PulseMeterLaunch `
-            $dotnetExe `
-            ([string]::Concat('"', $localHostDll, '"')) `
+            $localHostExe `
+            "" `
             $localHostOutput
-        $launcherTarget = $dotnetExe
-        $launcherArguments = [string]::Concat('"', $localHostDll, '"')
+        $launcherTarget = $localHostExe
+        $launcherArguments = ""
         $launcherWorkingDirectory = $localHostOutput
         $launcherDescription = "framework-dependent launcher"
     }
@@ -199,7 +166,6 @@ catch {
     }
 }
 
-Save-PulseMeterLauncher
 $shell = New-Object -ComObject WScript.Shell
 Save-PulseMeterShortcut $shortcutPath
 Save-PulseMeterShortcut $desktopShortcutPath
@@ -227,14 +193,12 @@ foreach ($staleShortcutPath in $staleShortcutPaths) {
 Write-Host "Published local self-contained app:"
 Write-Host "  $appExe"
 Write-Host "Published local framework-dependent launcher:"
-Write-Host "  $dotnetExe $localHostDll"
+Write-Host "  $localHostExe"
 Write-Host "Updated shortcut:"
 Write-Host "  $shortcutPath"
 Write-Host "Updated desktop shortcut:"
 Write-Host "  $desktopShortcutPath"
 Write-Host "Shortcut target:"
-Write-Host "  $wscriptExe `"$launcherScript`""
-Write-Host "Hidden launcher target:"
 Write-Host "  $launcherTarget $launcherArguments ($launcherDescription)"
 
 Start-Process -FilePath $desktopShortcutPath

@@ -13,13 +13,18 @@
                                 <StackPanel>
                                     <Grid>
                                         <StackPanel>
-                                            <Button Padding="0"
+                                            <Button x:Name="DailyUsageHeading"
+                                                    Padding="0"
                                                     HorizontalAlignment="Left"
                                                     Background="Transparent"
                                                     BorderThickness="0"
                                                     ToolTip="{Binding DailyUsageExpandCollapseTooltip}"
                                                     AutomationProperties.Name="{Binding DailyUsageExpandCollapseTooltip, StringFormat={}{0} section}"
-                                                    Click="DailyUsageExpandCollapseButton_Click">
+                                                    Click="DailyUsageExpandCollapseButton_Click"
+                                                    Focusable="True"
+                                                    IsTabStop="False"
+                                                    AutomationProperties.HeadingLevel="Level1"
+                                                    FocusVisualStyle="{DynamicResource HeadingFocusVisualStyle}">
                                                 <Button.Template>
                                                     <ControlTemplate TargetType="Button">
                                                         <ContentPresenter />

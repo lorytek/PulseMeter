@@ -1,5 +1,5 @@
 ﻿param(
-    [string]$Version = "0.6.0",
+    [string]$Version = "0.6.1",
     [switch]$SkipTests,
     [switch]$FrameworkDependent
 )

@@ -19,6 +19,8 @@ public sealed class NeedsAttentionSectionViewModel : INotifyPropertyChanged
     private readonly IPulseMeterTimer? _copyFeedbackTimer;
     private readonly IPulseMeterTimer? _dismissUndoTimer;
     private UsageSignalsSnapshot _signals = UsageSignalsSnapshot.Empty;
+    private UsageSignalsSnapshot _displaySignals = UsageSignalsSnapshot.Empty;
+    private bool _hasDisplayProjection;
     private UsageAttentionSignal? _pendingDismissedSignal;
     private int _pendingDismissedSignalIndex;
     private string _copyFeedbackText = string.Empty;
@@ -79,10 +81,13 @@ public sealed class NeedsAttentionSectionViewModel : INotifyPropertyChanged
 
             _isShowingAll = value;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(ShouldShowCollapseAttentionItems));
             OnPropertyChanged(nameof(ToggleAttentionItemsText));
             OnPropertyChanged(nameof(ToggleAttentionItemsAccessibleLabel));
         }
     }
+
+    public bool ShouldShowCollapseAttentionItems => IsShowingAll && HasHiddenAttentionItems;
 
     public string ToggleAttentionItemsText => IsShowingAll
         ? "Show top 3"
@@ -138,6 +143,15 @@ public sealed class NeedsAttentionSectionViewModel : INotifyPropertyChanged
 
     public void ApplySignals(UsageSignalsSnapshot signals)
     {
+        ApplySignals(signals, signals, reconcilePendingDismissal: true);
+    }
+
+    public void ApplySignals(
+        UsageSignalsSnapshot signals,
+        UsageSignalsSnapshot displaySignals,
+        bool reconcilePendingDismissal)
+    {
+        var displayFollowsSource = ReferenceEquals(signals, displaySignals);
         if (_pendingDismissedSignal is not null)
         {
             var incomingSignals = signals.AttentionSignals.ToList();
@@ -149,7 +163,7 @@ public sealed class NeedsAttentionSectionViewModel : INotifyPropertyChanged
                 incomingSignals.RemoveAt(incomingIndex);
                 signals = WithAttentionSignals(signals, incomingSignals);
             }
-            else
+            else if (reconcilePendingDismissal)
             {
                 _dismissUndoTimer?.Stop();
                 ClearPendingDismissal();
@@ -157,7 +171,16 @@ public sealed class NeedsAttentionSectionViewModel : INotifyPropertyChanged
         }
 
         _signals = signals;
-        Refresh();
+        _displaySignals = displayFollowsSource ? signals : displaySignals;
+        _hasDisplayProjection = !displayFollowsSource;
+        Refresh(preserveShowingAllIntent: _hasDisplayProjection);
+    }
+
+    public void ApplyDisplaySignals(UsageSignalsSnapshot displaySignals)
+    {
+        _displaySignals = displaySignals;
+        _hasDisplayProjection = !ReferenceEquals(_signals, displaySignals);
+        Refresh(preserveShowingAllIntent: _hasDisplayProjection);
     }
 
     public void Refresh(DateTimeOffset now)
@@ -177,15 +200,15 @@ public sealed class NeedsAttentionSectionViewModel : INotifyPropertyChanged
         }
     }
 
-    private void Refresh()
+    private void Refresh(bool preserveShowingAllIntent = false)
     {
         NeedsAttentionItems.Clear();
-        foreach (var item in _presenter.BuildItems(_signals))
+        foreach (var item in _presenter.BuildItems(_displaySignals))
         {
             NeedsAttentionItems.Add(item);
         }
 
-        if (!HasHiddenAttentionItems)
+        if (!HasHiddenAttentionItems && !preserveShowingAllIntent)
         {
             IsShowingAll = false;
         }
@@ -194,6 +217,7 @@ public sealed class NeedsAttentionSectionViewModel : INotifyPropertyChanged
 
         OnPropertyChanged(nameof(HasNeedsAttention));
         OnPropertyChanged(nameof(HasHiddenAttentionItems));
+        OnPropertyChanged(nameof(ShouldShowCollapseAttentionItems));
         OnPropertyChanged(nameof(NeedsAttentionSummaryText));
         OnPropertyChanged(nameof(ToggleAttentionItemsText));
         OnPropertyChanged(nameof(ToggleAttentionItemsAccessibleLabel));
@@ -240,6 +264,10 @@ public sealed class NeedsAttentionSectionViewModel : INotifyPropertyChanged
         var originalSignal = attentionSignals[signalIndex];
         attentionSignals.RemoveAt(signalIndex);
         _signals = WithAttentionSignals(_signals, attentionSignals);
+        if (!_hasDisplayProjection)
+        {
+            _displaySignals = _signals;
+        }
 
         if (_dismissUndoTimer is null)
         {
@@ -270,6 +298,10 @@ public sealed class NeedsAttentionSectionViewModel : INotifyPropertyChanged
         {
             attentionSignals.Insert(Math.Min(_pendingDismissedSignalIndex, attentionSignals.Count), _pendingDismissedSignal);
             _signals = WithAttentionSignals(_signals, attentionSignals);
+            if (!_hasDisplayProjection)
+            {
+                _displaySignals = _signals;
+            }
         }
 
         ClearPendingDismissal();

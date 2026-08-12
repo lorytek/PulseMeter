@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.1
+
+- Added activity-qualified Usage Momentum using privacy-safe local activity-hour markers or meaningful quota movement while keeping Coding Runway wall-clock based.
+- Added durable schema-v3 momentum evidence, safe v2 migration, selected-window baseline reset, future-schema protection, and clearer evidence/coverage copy.
+- Added a memory-only Return Note, optional quick access, tray confidence states, first-hide guidance, and improved keyboard navigation.
+- Added preview-first PulseMeter support snapshots and local Desktop process snapshots with explicit privacy boundaries.
+- Added Project location actions that validate a user-confirmed folder before opening Explorer or starting Windows PowerShell.
+- Suppressed stale cached non-sync attention signals and expanded lifecycle, persistence, publishing, privacy, accessibility, and visual-harness regression coverage.
+
 ## 0.6.0
 
 - Added Block Planner with window-appropriate coding durations, current-pace fit guidance, and recovery watching for risky blocks.

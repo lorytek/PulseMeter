@@ -15,7 +15,9 @@ public sealed class PulseMeterAppSettingsStoreTests
             SelectedRateLimitKey: "codex_bengalfox",
             IsNavigationPanelExpanded: false,
             AutoShowWhenCodexFocused: false,
-            AutoHideWhenFocusLeaves: true);
+            AutoHideWhenFocusLeaves: true,
+            HasShownTrayHideGuidance: true,
+            IsQuickAccessHotkeyRequested: true);
 
         store.Save(settings);
 
@@ -29,6 +31,8 @@ public sealed class PulseMeterAppSettingsStoreTests
         Assert.False(loaded.IsNavigationPanelExpanded);
         Assert.False(loaded.AutoShowWhenCodexFocused);
         Assert.True(loaded.AutoHideWhenFocusLeaves);
+        Assert.True(loaded.HasShownTrayHideGuidance);
+        Assert.True(loaded.IsQuickAccessHotkeyRequested);
         Assert.DoesNotContain("budgetAlerts", json);
         Assert.True(File.Exists(path + ".bak"));
     }
@@ -45,6 +49,8 @@ public sealed class PulseMeterAppSettingsStoreTests
         Assert.NotNull(loaded);
         Assert.True(loaded.AutoShowWhenCodexFocused);
         Assert.False(loaded.AutoHideWhenFocusLeaves);
+        Assert.False(loaded.HasShownTrayHideGuidance);
+        Assert.False(loaded.IsQuickAccessHotkeyRequested);
     }
 
     [Fact]

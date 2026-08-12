@@ -63,6 +63,21 @@ public sealed class SharedRolloutAnalyticsSource
         }
     }
 
+    /// <summary>
+    /// Returns privacy-safe local activity evidence from the existing rollout parse cache.
+    /// Only distinct UTC hour starts are exposed.
+    /// </summary>
+    public Task<ActivityEvidenceSnapshot> GetActivityEvidenceAsync(
+        DateOnly cutoffDate,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_sessionGenerationLock)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(GetActivityEvidence(cutoffDate, cancellationToken));
+        }
+    }
+
     public Task<IReadOnlyList<RateLimitHistoryPoint>> GetRateLimitHistoryAsync(
         DateTimeOffset cutoffUtc,
         CancellationToken cancellationToken = default)
@@ -86,7 +101,7 @@ public sealed class SharedRolloutAnalyticsSource
             return Array.Empty<RateLimitHistoryPoint>();
         }
 
-        var threads = ReadAndCacheThreads(databasePath, databaseSignature, cutoffDate);
+        var threads = ReadAndCacheThreads(databasePath, databaseSignature, cutoffDate, out _);
 
         var observedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var history = new List<RateLimitHistoryPoint>();
@@ -133,7 +148,7 @@ public sealed class SharedRolloutAnalyticsSource
             return Array.Empty<SharedRolloutSessionSummary>();
         }
 
-        var threads = ReadAndCacheThreads(databasePath, databaseSignature, cutoffDate);
+        var threads = ReadAndCacheThreads(databasePath, databaseSignature, cutoffDate, out _);
 
         var observedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var summaries = new List<SharedRolloutSessionSummary>(threads.Count);
@@ -146,8 +161,8 @@ public sealed class SharedRolloutAnalyticsSource
             }
 
             var rolloutPath = ResolveRolloutPath(thread.RolloutPath);
-            if (!TryGetRolloutSummaries(rolloutPath, cutoffDate, cancellationToken, observedPaths, out var tokenSummaries)
-                || tokenSummaries.Count == 0)
+            if (!TryGetRolloutData(rolloutPath, cutoffDate, cancellationToken, observedPaths, out var rolloutData)
+                || rolloutData.Summaries.Count == 0)
             {
                 continue;
             }
@@ -157,35 +172,97 @@ public sealed class SharedRolloutAnalyticsSource
                 thread.Cwd,
                 thread.UpdatedAtUtc,
                 thread.Title,
-                tokenSummaries));
+                rolloutData.Summaries));
         }
 
         PruneUnobservedRollouts(observedPaths);
         return Array.AsReadOnly(summaries.ToArray());
     }
 
+    private ActivityEvidenceSnapshot GetActivityEvidence(
+        DateOnly cutoffDate,
+        CancellationToken cancellationToken)
+    {
+        var databasePath = Path.Combine(_codexHome, "state_5.sqlite");
+        if (!TryGetDatabaseSignature(databasePath, cutoffDate, out var databaseSignature))
+        {
+            return ActivityEvidenceSnapshot.Unavailable;
+        }
+
+        var threads = ReadAndCacheThreads(databasePath, databaseSignature, cutoffDate, out var databaseReadWasCurrent);
+        var observedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var utcHours = new HashSet<DateTimeOffset>();
+        var eligibleRolloutCount = 0;
+        var successfulRolloutCount = 0;
+        var isPartial = !databaseReadWasCurrent;
+
+        foreach (var thread in threads)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!LocalProjectPathNormalizer.IsUserProjectPath(thread.Cwd))
+            {
+                continue;
+            }
+
+            eligibleRolloutCount++;
+            if (!TryGetRolloutData(
+                    ResolveRolloutPath(thread.RolloutPath),
+                    cutoffDate,
+                    cancellationToken,
+                    observedPaths,
+                    out var rolloutData))
+            {
+                isPartial = true;
+                continue;
+            }
+
+            successfulRolloutCount++;
+            isPartial |= rolloutData.ActivityEvidenceCoverage == ActivityEvidenceCoverage.Partial;
+            foreach (var hour in rolloutData.UtcHours)
+            {
+                utcHours.Add(hour);
+            }
+        }
+
+        PruneUnobservedRollouts(observedPaths);
+        var coverage = eligibleRolloutCount == 0 || successfulRolloutCount == 0
+            ? ActivityEvidenceCoverage.Unavailable
+            : isPartial
+                ? ActivityEvidenceCoverage.Partial
+                : ActivityEvidenceCoverage.Available;
+        return new ActivityEvidenceSnapshot
+        {
+            Coverage = coverage,
+            UtcHours = Array.AsReadOnly(utcHours.Order().ToArray())
+        };
+    }
+
     private IReadOnlyList<ThreadRow> ReadAndCacheThreads(
         string databasePath,
         DatabaseSignature databaseSignature,
-        DateOnly cutoffDate)
+        DateOnly cutoffDate,
+        out bool databaseReadWasCurrent)
     {
         lock (_databaseSnapshotLock)
         {
             if (_databaseSnapshot is { Signature: var cachedSignature, Threads: var cachedThreads }
                 && cachedSignature == databaseSignature)
             {
+                databaseReadWasCurrent = true;
                 return cachedThreads;
             }
 
             if (TryReadThreads(databasePath, cutoffDate, out var threads))
             {
                 _databaseSnapshot = new DatabaseSnapshot(databaseSignature, threads);
+                databaseReadWasCurrent = true;
                 return threads;
             }
 
             // A database can be temporarily unavailable while Codex writes it. Keep the last
             // successful snapshot, but do not mark the failed read as a successful empty result.
             // Its signature will remain stale, so the next generation retries the database read.
+            databaseReadWasCurrent = false;
             return _databaseSnapshot?.Threads ?? Array.Empty<ThreadRow>();
         }
     }
@@ -242,14 +319,14 @@ public sealed class SharedRolloutAnalyticsSource
         }
     }
 
-    private bool TryGetRolloutSummaries(
+    private bool TryGetRolloutData(
         string rolloutPath,
         DateOnly cutoffDate,
         CancellationToken cancellationToken,
         ISet<string> observedPaths,
-        out IReadOnlyList<SharedRolloutTokenSummary> summaries)
+        out RolloutData rolloutData)
     {
-        summaries = Array.Empty<SharedRolloutTokenSummary>();
+        rolloutData = RolloutData.Empty;
         if (string.IsNullOrWhiteSpace(rolloutPath))
         {
             return false;
@@ -271,7 +348,7 @@ public sealed class SharedRolloutAnalyticsSource
 
         if (_rolloutCache.TryGetValue(normalizedPath, out var cached) && cached.Signature == signature)
         {
-            summaries = cached.Summaries;
+            rolloutData = cached.Data;
             return true;
         }
 
@@ -279,7 +356,7 @@ public sealed class SharedRolloutAnalyticsSource
         // parsed prefix is still valid history. Retry once so a stable generation can be cached,
         // then return the latest prefix without caching it instead of making an active thread's
         // entire history disappear until the next refresh.
-        IReadOnlyList<SharedRolloutTokenSummary>? latestParsed = null;
+        RolloutData? latestParsed = null;
         for (var attempt = 0; attempt < 2; attempt++)
         {
             if (!TryParseRollout(normalizedPath, cutoffDate, cancellationToken, out var parsed))
@@ -293,7 +370,7 @@ public sealed class SharedRolloutAnalyticsSource
             if (TryGetFileSignature(normalizedPath, cutoffDate, out var currentSignature)
                 && currentSignature == signature)
             {
-                summaries = parsed;
+                rolloutData = parsed;
                 _rolloutCache[normalizedPath] = new RolloutCacheEntry(signature, parsed);
                 return true;
             }
@@ -303,13 +380,13 @@ public sealed class SharedRolloutAnalyticsSource
 
         if (latestParsed is not null)
         {
-            summaries = latestParsed;
+            rolloutData = latestParsed;
             return true;
         }
 
         if (cached is not null)
         {
-            summaries = cached.Summaries;
+            rolloutData = cached.Data;
             return true;
         }
 
@@ -320,10 +397,12 @@ public sealed class SharedRolloutAnalyticsSource
         string rolloutPath,
         DateOnly cutoffDate,
         CancellationToken cancellationToken,
-        out IReadOnlyList<SharedRolloutTokenSummary> summaries)
+        out RolloutData rolloutData)
     {
         var parsed = new List<SharedRolloutTokenSummary>();
         var cumulativeTotals = new HashSet<long>();
+        var utcHours = new HashSet<DateTimeOffset>();
+        var activityEvidenceCoverage = ActivityEvidenceCoverage.Available;
         try
         {
             Interlocked.Increment(ref _rolloutParseCount);
@@ -335,6 +414,16 @@ public sealed class SharedRolloutAnalyticsSource
                     continue;
                 }
 
+                var activityMarker = ReadActivityHour(line, cutoffDate);
+                if (activityMarker.IsMalformed)
+                {
+                    activityEvidenceCoverage = ActivityEvidenceCoverage.Partial;
+                }
+                else if (activityMarker.UtcHour is { } utcHour)
+                {
+                    utcHours.Add(utcHour);
+                }
+
                 if (ReadTokenCountLine(line, cutoffDate) is { } summary
                     && (summary.CumulativeTotalTokens is not long total || cumulativeTotals.Add(total)))
                 {
@@ -344,16 +433,19 @@ public sealed class SharedRolloutAnalyticsSource
         }
         catch (IOException)
         {
-            summaries = Array.Empty<SharedRolloutTokenSummary>();
+            rolloutData = RolloutData.Empty;
             return false;
         }
         catch (UnauthorizedAccessException)
         {
-            summaries = Array.Empty<SharedRolloutTokenSummary>();
+            rolloutData = RolloutData.Empty;
             return false;
         }
 
-        summaries = Array.AsReadOnly(parsed.ToArray());
+        rolloutData = new RolloutData(
+            Array.AsReadOnly(parsed.ToArray()),
+            Array.AsReadOnly(utcHours.Order().ToArray()),
+            activityEvidenceCoverage);
         return true;
     }
 
@@ -584,6 +676,57 @@ public sealed class SharedRolloutAnalyticsSource
         }
     }
 
+    private static ActivityHourReadResult ReadActivityHour(string line, DateOnly cutoffDate)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(line);
+            var root = document.RootElement;
+            if (!StringEquals(root, "type", "event_msg"))
+            {
+                return ActivityHourReadResult.NotActivityEvent;
+            }
+
+            if (!TryGetObject(root, "payload", out var payload))
+            {
+                return ActivityHourReadResult.Malformed;
+            }
+
+            if (!StringEquals(payload, "type", "token_count"))
+            {
+                return ActivityHourReadResult.NotActivityEvent;
+            }
+
+            if (!TryGetObject(payload, "info", out var info)
+                || !TryGetObject(info, "last_token_usage", out var usage)
+                || (ReadLong(usage, "total_tokens") ?? ReadLong(usage, "totalTokens")) is not long totalTokens
+                || totalTokens <= 0)
+            {
+                return ActivityHourReadResult.Malformed;
+            }
+
+            var timestamp = ReadTimestamp(root);
+            if (timestamp is null)
+            {
+                return ActivityHourReadResult.Malformed;
+            }
+
+            var utc = timestamp.Value.ToUniversalTime();
+            if (DateOnly.FromDateTime(utc.ToLocalTime().DateTime) < cutoffDate)
+            {
+                return ActivityHourReadResult.NotInRange;
+            }
+
+            return new ActivityHourReadResult(
+                new DateTimeOffset(utc.Year, utc.Month, utc.Day, utc.Hour, 0, 0, TimeSpan.Zero),
+                IsMalformed: false);
+        }
+        catch (JsonException)
+        {
+            return ActivityHourReadResult.Malformed;
+        }
+    }
+
     private static bool TryGetFileSignature(string path, DateOnly cutoffDate, out FileSignature signature)
     {
         try
@@ -686,7 +829,23 @@ public sealed class SharedRolloutAnalyticsSource
         DatabaseFileSignature Wal,
         DateOnly CutoffDate);
     private sealed record DatabaseSnapshot(DatabaseSignature Signature, IReadOnlyList<ThreadRow> Threads);
-    private sealed record RolloutCacheEntry(FileSignature Signature, IReadOnlyList<SharedRolloutTokenSummary> Summaries);
+    private sealed record RolloutCacheEntry(FileSignature Signature, RolloutData Data);
+    private sealed record RolloutData(
+        IReadOnlyList<SharedRolloutTokenSummary> Summaries,
+        IReadOnlyList<DateTimeOffset> UtcHours,
+        ActivityEvidenceCoverage ActivityEvidenceCoverage)
+    {
+        public static RolloutData Empty { get; } = new(
+            Array.Empty<SharedRolloutTokenSummary>(),
+            Array.Empty<DateTimeOffset>(),
+            ActivityEvidenceCoverage.Unavailable);
+    }
+    private readonly record struct ActivityHourReadResult(DateTimeOffset? UtcHour, bool IsMalformed)
+    {
+        public static ActivityHourReadResult Malformed { get; } = new(null, IsMalformed: true);
+        public static ActivityHourReadResult NotActivityEvent { get; } = new(null, IsMalformed: false);
+        public static ActivityHourReadResult NotInRange { get; } = new(null, IsMalformed: false);
+    }
     private sealed record RateLimitRolloutCacheEntry(
         FileSignature Signature,
         IReadOnlyList<RateLimitHistoryPoint> Observations);

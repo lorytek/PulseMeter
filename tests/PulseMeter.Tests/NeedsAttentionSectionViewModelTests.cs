@@ -187,6 +187,59 @@ public sealed class NeedsAttentionSectionViewModelTests
     }
 
     [Fact]
+    public void DisplayProjection_PreservesPendingIdleDismissalAcrossTemporarySuppression()
+    {
+        var timerFactory = new StubTimerFactory();
+        var tracker = new RecordingUsageSignalsTracker();
+        var viewModel = new NeedsAttentionSectionViewModel(
+            new NeedsAttentionPresenter(),
+            tracker,
+            timerFactory: timerFactory);
+        viewModel.ApplySignals(new UsageSignalsSnapshot { AttentionSignals = [IdleSignal()] });
+        viewModel.DismissSignalCommand.Execute(Assert.Single(viewModel.NeedsAttentionItems));
+
+        viewModel.ApplyDisplaySignals(new UsageSignalsSnapshot { AttentionSignals = [Signal(0, "SYNC")] });
+
+        Assert.True(viewModel.HasPendingDismissal);
+        Assert.True(timerFactory.DismissTimer.Started);
+        Assert.Equal("SYNC", Assert.Single(viewModel.NeedsAttentionItems).BadgeText);
+
+        viewModel.ApplySignals(new UsageSignalsSnapshot { AttentionSignals = [IdleSignal()] });
+
+        Assert.True(viewModel.HasPendingDismissal);
+        Assert.Empty(viewModel.NeedsAttentionItems);
+
+        viewModel.UndoDismissCommand.Execute(null);
+
+        Assert.False(viewModel.HasPendingDismissal);
+        Assert.Equal("IDLE", Assert.Single(viewModel.NeedsAttentionItems).BadgeText);
+        Assert.Equal(0, tracker.DismissCount);
+    }
+
+    [Fact]
+    public void DisplayProjection_PreservesShowAllIntentAcrossTemporarySuppression()
+    {
+        var signals = new UsageSignalsSnapshot
+        {
+            AttentionSignals = [Signal(1, "ONE"), Signal(2, "TWO"), Signal(3, "THREE"), Signal(4, "FOUR")]
+        };
+        var viewModel = new NeedsAttentionSectionViewModel(new NeedsAttentionPresenter());
+        viewModel.ApplySignals(signals);
+        viewModel.ToggleAttentionItemsCommand.Execute(null);
+
+        viewModel.ApplyDisplaySignals(new UsageSignalsSnapshot { AttentionSignals = [Signal(0, "SYNC")] });
+        Assert.True(viewModel.IsShowingAll);
+        Assert.False(viewModel.ShouldShowCollapseAttentionItems);
+        Assert.Equal("SYNC", Assert.Single(viewModel.VisibleNeedsAttentionItems).BadgeText);
+
+        viewModel.ApplyDisplaySignals(signals);
+
+        Assert.True(viewModel.IsShowingAll);
+        Assert.True(viewModel.ShouldShowCollapseAttentionItems);
+        Assert.Equal(4, viewModel.VisibleNeedsAttentionItems.Count);
+    }
+
+    [Fact]
     public void FlushUsageHistory_CommitsPendingDismissalBeforeTheAppExits()
     {
         var timerFactory = new StubTimerFactory();

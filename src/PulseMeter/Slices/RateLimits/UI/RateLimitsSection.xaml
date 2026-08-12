@@ -15,11 +15,16 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="RATE LIMITS"
+                <TextBlock x:Name="RateLimitsHeading"
+                           Text="RATE LIMITS"
                            Foreground="#111827"
                            FontSize="20"
                            FontWeight="Bold"
-                           VerticalAlignment="Center" />
+                           VerticalAlignment="Center"
+                           Focusable="True"
+                           KeyboardNavigation.IsTabStop="False"
+                           AutomationProperties.HeadingLevel="Level1"
+                           FocusVisualStyle="{DynamicResource HeadingFocusVisualStyle}" />
                 <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
                             VerticalAlignment="Center">
