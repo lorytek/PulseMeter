@@ -388,7 +388,7 @@ public sealed class UsageTrendSectionTests
 
         Assert.StartsWith("Now · ", UsageTrendChart.FormatLatestPointLabel(now.AddMinutes(-4), now));
         Assert.StartsWith("Latest · ", UsageTrendChart.FormatLatestPointLabel(now.AddMinutes(-6), now));
-        Assert.Equal("Now · 53%", UsageTrendChart.FormatLatestUsageLabel(now.AddMinutes(-4), now, 53));
+        Assert.Equal("Used · 53%", UsageTrendChart.FormatLatestUsageLabel(now.AddMinutes(-4), now, 53));
         Assert.Equal("Latest · 53%", UsageTrendChart.FormatLatestUsageLabel(now.AddMinutes(-6), now, 53));
         Assert.DoesNotContain(Environment.NewLine, UsageTrendChart.FormatLatestUsageLabel(now, now, 53));
     }
@@ -499,7 +499,7 @@ public sealed class UsageTrendSectionTests
     }
 
     [Fact]
-    public void Presenter_WeeklyEvidenceShowsProgressTowardTwentyFourHourHistory()
+    public void Presenter_WeeklyEvidenceWaitsOnlyForTheFirstActivityQualifiedHour()
     {
         var now = new DateTimeOffset(2026, 7, 21, 8, 30, 0, TimeSpan.Zero);
         var reset = now.AddDays(4);
@@ -533,11 +533,11 @@ public sealed class UsageTrendSectionTests
 
         var model = Assert.IsType<UsageTrendChartModel>(chart);
         Assert.Equal(
-            "Learning weekly baseline • 0/8 hours across 0/2 days",
+            "Waiting for the first activity-qualified hour",
             model.Summary.ConfidenceText);
         Assert.True(model.Summary.Momentum.IsLearning);
-        Assert.Equal("0% ready", model.Summary.Momentum.ValueText);
-        Assert.Equal("Need 8 measured hours on 2 days", model.Summary.Momentum.StateText);
+        Assert.Equal("Waiting", model.Summary.Momentum.ValueText);
+        Assert.Equal("Need the first completed active hour", model.Summary.Momentum.StateText);
         Assert.Equal("0 comparable prior hours across 0 days · 2 samples", model.Summary.Momentum.BaselineText);
         Assert.Equal(0, model.Summary.Momentum.BaselineProgress);
     }
@@ -563,11 +563,12 @@ public sealed class UsageTrendSectionTests
             4,
             []);
 
-        Assert.True(earlierForecastEvidence.IsLearning);
-        Assert.Equal("9 comparable prior hours across 1 day · 11 samples", earlierForecastEvidence.BaselineText);
+        Assert.False(earlierForecastEvidence.IsLearning);
+        Assert.Equal(UsageMomentumConfidence.FirstLook, earlierForecastEvidence.Confidence);
+        Assert.Equal(9, earlierForecastEvidence.BaselineHourCount);
         Assert.Equal(earlierForecastEvidence.ValueText, laterShrinkingForecastEvidence.ValueText);
         Assert.Equal(earlierForecastEvidence.BaselineText, laterShrinkingForecastEvidence.BaselineText);
-        Assert.Equal(0.5, laterShrinkingForecastEvidence.BaselineProgress, precision: 3);
+        Assert.Equal(earlierForecastEvidence.BaselineHourCount, laterShrinkingForecastEvidence.BaselineHourCount);
     }
 
     [Fact]
@@ -612,8 +613,8 @@ public sealed class UsageTrendSectionTests
 
         Assert.False(momentum.IsLearning);
         Assert.StartsWith("recent median", momentum.BaselineText);
-        Assert.Equal("→ 0%/h", momentum.ValueText);
-        Assert.Equal("within recent range", momentum.StateText);
+        Assert.Equal("About the same", momentum.ValueText);
+        Assert.Equal("as recent active-hour baseline", momentum.StateText);
     }
 
     [Fact]
@@ -647,7 +648,7 @@ public sealed class UsageTrendSectionTests
             baselineHourlyRates: establishedRates);
 
         Assert.Equal(UsageMomentumConfidence.EarlyEstimate, early.Confidence);
-        Assert.Equal("above recent baseline", early.StateText);
+        Assert.Equal("than recent active-hour baseline", early.StateText);
         Assert.Equal(UsageMomentumConfidence.Established, established.Confidence);
         Assert.Equal(24, established.BaselineHourCount);
         Assert.Equal(3, established.BaselineDayCount);
@@ -655,7 +656,7 @@ public sealed class UsageTrendSectionTests
     }
 
     [Fact]
-    public void Presenter_WeeklyMomentum_OvernightOnlyEvidenceRemainsLearning()
+    public void Presenter_WeeklyMomentum_OvernightOnlyEvidenceProvidesAFirstLookButNotAnEarlyEstimate()
     {
         var now = new DateTimeOffset(2026, 7, 21, 6, 0, 0, TimeSpan.Zero);
         var current = new[]
@@ -673,9 +674,9 @@ public sealed class UsageTrendSectionTests
             measurementGaps: [],
             baselineHourlyRates: overnightRates);
 
-        Assert.True(momentum.IsLearning);
-        Assert.Equal(UsageMomentumConfidence.Learning, momentum.Confidence);
-        Assert.Equal("Need 8 measured hours on 2 days", momentum.StateText);
+        Assert.False(momentum.IsLearning);
+        Assert.Equal(UsageMomentumConfidence.FirstLook, momentum.Confidence);
+        Assert.Equal("than recent active-hour baseline", momentum.StateText);
     }
 
     [Fact]
@@ -712,7 +713,7 @@ public sealed class UsageTrendSectionTests
     }
 
     [Fact]
-    public void Presenter_WeeklyMomentumWithMatureHistoryAndTooFewComparableHoursExplainsTheMissingEvidence()
+    public void Presenter_WeeklyMomentumWithTwoComparableHoursProvidesAFirstLook()
     {
         var now = new DateTimeOffset(2026, 7, 21, 12, 0, 0, TimeSpan.Zero);
         var points = Enumerable.Range(0, 26)
@@ -728,14 +729,14 @@ public sealed class UsageTrendSectionTests
             10_080,
             measurementGaps: gaps);
 
-        Assert.True(momentum.IsLearning);
-        Assert.Equal(2d / 18, momentum.BaselineProgress, precision: 3);
-        Assert.Equal("11% ready", momentum.ValueText);
-        Assert.Equal("Need 8 measured hours on 2 days", momentum.StateText);
+        Assert.False(momentum.IsLearning);
+        Assert.Equal(UsageMomentumConfidence.FirstLook, momentum.Confidence);
+        Assert.Equal(2, momentum.BaselineHourCount);
+        Assert.StartsWith("recent median", momentum.BaselineText);
     }
 
     [Fact]
-    public void Presenter_WeeklyMomentumWithMatureHistoryAndCurrentGapWaitsForCurrentHour()
+    public void Presenter_WeeklyMomentumWithCurrentGapWaitsForFifteenMeasuredMinutes()
     {
         var now = new DateTimeOffset(2026, 7, 21, 12, 0, 0, TimeSpan.Zero);
         var points = Enumerable.Range(0, 26)
@@ -749,8 +750,87 @@ public sealed class UsageTrendSectionTests
 
         Assert.True(momentum.IsLearning);
         Assert.Equal(1, momentum.BaselineProgress);
-        Assert.Equal("Baseline ready", momentum.ValueText);
-        Assert.Equal("Need a measured current hour", momentum.StateText);
+        Assert.Equal("Measuring activity", momentum.ValueText);
+        Assert.Equal("First look after 15 measured minutes", momentum.StateText);
+    }
+
+    [Fact]
+    public void Presenter_WeeklyMomentumStartsAfterOnePriorHourAndFifteenCurrentMinutes()
+    {
+        var now = new DateTimeOffset(2026, 7, 21, 12, 0, 0, TimeSpan.Zero);
+        var current = new[]
+        {
+            new UsageTrendPoint(now.AddMinutes(-15), 40),
+            new UsageTrendPoint(now, 40.5)
+        };
+        var baseline = new[]
+        {
+            new LimitHourlyUsageRate(now.AddHours(-2), 1, HourlyActivityEvidence.LocalEvent)
+        };
+
+        var momentum = UsageTrendPresenter.BuildUsageMomentum(
+            current,
+            10_080,
+            measurementGaps: [],
+            baselineHourlyRates: baseline,
+            currentHourActivityEvidence: HourlyActivityEvidence.LocalEvent,
+            activityCoverage: LocalActivityCoverage.Available);
+
+        Assert.False(momentum.IsLearning);
+        Assert.Equal(UsageMomentumConfidence.FirstLook, momentum.Confidence);
+        Assert.Equal("than recent active-hour baseline", momentum.StateText);
+        Assert.StartsWith("15m live · recent median", momentum.BaselineText);
+        Assert.Contains("15m of measured activity", momentum.AccessibleSummary);
+    }
+
+    [Fact]
+    public void Presenter_WeeklyMomentumDoesNotAnnualizeLessThanFifteenMinutes()
+    {
+        var now = new DateTimeOffset(2026, 7, 21, 12, 0, 0, TimeSpan.Zero);
+        var current = new[]
+        {
+            new UsageTrendPoint(now.AddMinutes(-14), 40),
+            new UsageTrendPoint(now, 40.5)
+        };
+        var baseline = new[]
+        {
+            new LimitHourlyUsageRate(now.AddHours(-2), 1, HourlyActivityEvidence.QuotaMovement)
+        };
+
+        var momentum = UsageTrendPresenter.BuildUsageMomentum(
+            current,
+            10_080,
+            measurementGaps: [],
+            baselineHourlyRates: baseline,
+            currentHourActivityEvidence: HourlyActivityEvidence.QuotaMovement);
+
+        Assert.True(momentum.IsLearning);
+        Assert.Equal(UsageMomentumConfidence.FirstLook, momentum.Confidence);
+        Assert.Equal("Measuring activity", momentum.ValueText);
+        Assert.Equal("First look after 15 measured minutes", momentum.StateText);
+    }
+
+    [Fact]
+    public void Presenter_WeeklyMomentumExplainsSlowerUsageInPlainLanguage()
+    {
+        var now = new DateTimeOffset(2026, 7, 21, 12, 0, 0, TimeSpan.Zero);
+        var momentum = UsageTrendPresenter.BuildUsageMomentum(
+            [
+                new UsageTrendPoint(now.AddMinutes(-30), 40),
+                new UsageTrendPoint(now, 41)
+            ],
+            10_080,
+            measurementGaps: [],
+            baselineHourlyRates:
+            [
+                new LimitHourlyUsageRate(now.AddHours(-2), 4, HourlyActivityEvidence.LocalEvent)
+            ],
+            currentHourActivityEvidence: HourlyActivityEvidence.LocalEvent,
+            activityCoverage: LocalActivityCoverage.Available);
+
+        Assert.False(momentum.IsLearning);
+        Assert.Equal("2%/h slower", momentum.ValueText);
+        Assert.Equal("than recent active-hour baseline", momentum.StateText);
     }
 
     [Fact]
@@ -875,6 +955,18 @@ public sealed class UsageTrendSectionTests
         }
     }
 
+    [Fact]
+    public void MomentumGauge_LiveMotionBreathesAroundTheMeasuredValueWithoutChangingItsMeaning()
+    {
+        const double measuredValue = 0.5;
+
+        Assert.Equal(measuredValue, UsageMomentumGauge.CalculateLiveNeedleValue(measuredValue, 0), 6);
+        Assert.Equal(0.56, UsageMomentumGauge.CalculateLiveNeedleValue(measuredValue, 0.5), 6);
+        Assert.Equal(0.44, UsageMomentumGauge.CalculateLiveNeedleValue(measuredValue, 1.5), 6);
+        Assert.Equal(1, UsageMomentumGauge.CalculateLiveNeedleValue(1, 0.5), 6);
+        Assert.Equal(0, UsageMomentumGauge.CalculateLiveNeedleValue(double.NaN, double.NaN), 6);
+    }
+
     private static void AssertLearningArcIsNeutral(System.Windows.Media.Imaging.BitmapSource bitmap)
     {
         var pixels = new byte[bitmap.PixelWidth * bitmap.PixelHeight * 4];
@@ -912,8 +1004,8 @@ public sealed class UsageTrendSectionTests
 
         var momentum = UsageTrendPresenter.BuildUsageMomentum(points, 300);
 
-        Assert.Equal("↗ +1%/h", momentum.ValueText);
-        Assert.Equal("usage accelerating", momentum.StateText);
+        Assert.Equal("1%/h faster", momentum.ValueText);
+        Assert.Equal("than recent baseline", momentum.StateText);
         Assert.Equal("vs 5h window median", momentum.BaselineText);
         Assert.Equal(1, momentum.GaugeValue);
         Assert.False(momentum.IsLearning);
@@ -936,8 +1028,8 @@ public sealed class UsageTrendSectionTests
 
         var momentum = UsageTrendPresenter.BuildUsageMomentum(points, 10_080);
 
-        Assert.Equal("↗ +0.1%/h", momentum.ValueText);
-        Assert.Equal("above recent baseline", momentum.StateText);
+        Assert.Equal("0.1%/h faster", momentum.ValueText);
+        Assert.Equal("than recent active-hour baseline", momentum.StateText);
         Assert.StartsWith("recent median", momentum.BaselineText);
         Assert.True(momentum.GaugeValue > 0);
         Assert.False(momentum.IsLearning);
@@ -982,9 +1074,10 @@ public sealed class UsageTrendSectionTests
         Assert.Contains("left at this pace", chart.Summary.Headline);
         Assert.Equal("Medium evidence • 5 samples over 40m", chart.Summary.ConfidenceText);
         Assert.Equal("5%/h", chart.Summary.CurrentPaceText);
-        Assert.Equal("-12%", chart.Summary.PaceComparisonText);
-        Assert.Equal("will reach limit before reset", chart.Summary.PaceComparisonLabel);
-        Assert.Contains("Reduce pace", chart.Summary.RecommendationText);
+        Assert.Equal(UsagePaceBand.FarAboveSustainable, chart.Summary.CurrentPaceBand);
+        Assert.Equal("3.5×", chart.Summary.PaceComparisonText);
+        Assert.Equal("above sustainable pace", chart.Summary.PaceComparisonLabel);
+        Assert.Contains("limit may arrive before reset", chart.Summary.RecommendationText);
         Assert.Contains("5 observed points", chart.AccessibleSummary);
         Assert.Contains("Resets", chart.AccessibleSummary);
         Assert.DoesNotContain("Plan your next block", chart.AccessibleSummary);
@@ -999,6 +1092,45 @@ public sealed class UsageTrendSectionTests
         var projectionOnly = chart with { ShowProjection = true, ShowRange = false };
         Assert.False(UsageTrendChart.ShouldDrawForecastWindow(projectionOnly));
         Assert.True(UsageTrendChart.ShouldDrawForecastLimit(projectionOnly));
+    }
+
+    [Theory]
+    [InlineData(double.NaN, UsagePaceBand.Unknown)]
+    [InlineData(0, UsagePaceBand.Unknown)]
+    [InlineData(0.94, UsagePaceBand.BelowSustainable)]
+    [InlineData(0.95, UsagePaceBand.AtSustainable)]
+    [InlineData(1.05, UsagePaceBand.AtSustainable)]
+    [InlineData(1.06, UsagePaceBand.AboveSustainable)]
+    [InlineData(1.5, UsagePaceBand.AboveSustainable)]
+    [InlineData(1.51, UsagePaceBand.FarAboveSustainable)]
+    public void Presenter_ResolvesCurrentPaceColorBand(double ratio, UsagePaceBand expected)
+    {
+        Assert.Equal(expected, UsageTrendPresenter.ResolvePaceBand(ratio));
+    }
+
+    [Theory]
+    [InlineData(UsagePaceBand.BelowSustainable, "and below sustainable pace")]
+    [InlineData(UsagePaceBand.AtSustainable, "and near sustainable pace")]
+    [InlineData(UsagePaceBand.AboveSustainable, "but above sustainable pace")]
+    [InlineData(UsagePaceBand.FarAboveSustainable, "but above sustainable pace")]
+    public void Presenter_TypicalMomentumAlsoStatesSustainablePacePosition(
+        UsagePaceBand paceBand,
+        string expectedState)
+    {
+        var momentum = new UsageMomentumSummary(
+            "About the same",
+            "as recent active-hour baseline",
+            "recent median 0.7%/h",
+            0)
+        {
+            AccessibleSummary = "Usage momentum is about the same as the recent active-hour baseline."
+        };
+
+        var clarified = UsageTrendPresenter.ClarifyMomentumForSustainablePace(momentum, paceBand);
+
+        Assert.Equal("Typical for you", clarified.ValueText);
+        Assert.Equal(expectedState, clarified.StateText);
+        Assert.Contains(expectedState, clarified.AccessibleSummary);
     }
 
     [Fact]
@@ -1057,7 +1189,55 @@ public sealed class UsageTrendSectionTests
         Assert.Equal("Likely fits", advisor.State);
         Assert.Equal(UsageTrendBlockAdvisorStatus.LikelyFits, advisor.Status);
         Assert.Equal("2h", Assert.Single(advisor.Options, option => option.IsSelected).Label);
+        Assert.Equal("A 2-hour block", advisor.SubjectText);
+        Assert.Equal("likely fits", advisor.VerdictText);
+        Assert.Equal("High confidence", advisor.ConfidenceText);
+        Assert.Equal("Reset", advisor.ConstraintLabel);
+        Assert.Equal(
+            $"{now.AddHours(2).ToLocalTime():h:mm tt} · +2h",
+            advisor.EndsAtText);
+        Assert.Equal(100, advisor.TimelineProgressPercent);
+        Assert.Contains("The selected 2h block ends", advisor.TimelineAccessibleSummary);
         Assert.Contains("stay below the limit until reset", advisor.Detail);
+    }
+
+    [Theory]
+    [InlineData(60, 25)]
+    [InlineData(120, 50)]
+    [InlineData(240, 75)]
+    [InlineData(480, 100)]
+    public void Presenter_NextBlockAdvisor_WeeklyDurationMovesTimelineByOptionPosition(
+        int selectedDurationMinutes,
+        double expectedTimelineProgressPercent)
+    {
+        var now = new DateTimeOffset(2026, 8, 14, 14, 35, 0, TimeSpan.Zero);
+        var reset = now.AddDays(3);
+        var forecast = WeeklyForecast(now, reset, LimitRunwayForecastConfidence.Medium) with
+        {
+            State = LimitRunwayForecastState.OnTrack,
+            ExhaustsAtUtc = null,
+            EarliestExhaustsAtUtc = null,
+            LatestExhaustsAtUtc = null
+        };
+        var trend = Trend(now, reset, isMock: false, [20, 22, 24]) with
+        {
+            BucketId = "codex|10080",
+            WindowLabel = "7d",
+            WindowDurationMins = 10_080
+        };
+
+        var chart = new UsageTrendPresenter().BuildChart(
+            trend,
+            forecast,
+            now,
+            showProjection: true,
+            showRange: true,
+            selectedBlockDurationMinutes: selectedDurationMinutes);
+
+        var advisor = Assert.IsType<UsageTrendChartModel>(chart).BlockAdvisor;
+        Assert.NotNull(advisor);
+        Assert.Equal(selectedDurationMinutes, Assert.Single(advisor.Options, option => option.IsSelected).DurationMinutes);
+        Assert.Equal(expectedTimelineProgressPercent, advisor.TimelineProgressPercent);
     }
 
     [Theory]
@@ -1090,6 +1270,57 @@ public sealed class UsageTrendSectionTests
         Assert.DoesNotContain("between", advisor.Detail, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("earliest", advisor.Detail, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("latest", advisor.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(LimitRunwayForecastState.OnTrack)]
+    [InlineData(LimitRunwayForecastState.Stable)]
+    public void Presenter_NextBlockAdvisor_QuietLowConfidenceForecastUsesEstablishedBaseline(
+        LimitRunwayForecastState state)
+    {
+        var now = new DateTimeOffset(2026, 8, 16, 11, 41, 0, TimeSpan.Zero);
+        var reset = now.AddDays(4);
+        var establishedRates = Enumerable.Range(0, 8)
+            .Select(index => new LimitHourlyUsageRate(now.AddDays(-3).AddHours(index), 0.4))
+            .Concat(Enumerable.Range(0, 8)
+                .Select(index => new LimitHourlyUsageRate(now.AddDays(-2).AddHours(index), 0.4)))
+            .Concat(Enumerable.Range(0, 8)
+                .Select(index => new LimitHourlyUsageRate(now.AddDays(-1).AddHours(index), 0.4)))
+            .ToArray();
+        var trend = Trend(now, reset, isMock: false, [33, 33, 33]) with
+        {
+            BucketId = "codex|10080",
+            WindowLabel = "7d",
+            WindowDurationMins = 10_080,
+            BaselineHourlyRates = establishedRates,
+            ActivityCoverage = LocalActivityCoverage.Available
+        };
+        var forecast = WeeklyForecast(now, reset, LimitRunwayForecastConfidence.Low) with
+        {
+            State = state,
+            UsedPercent = 33,
+            PercentPerHour = state == LimitRunwayForecastState.OnTrack ? 0.4 : 0,
+            ExhaustsAtUtc = null,
+            EarliestExhaustsAtUtc = null,
+            LatestExhaustsAtUtc = null
+        };
+
+        var chart = new UsageTrendPresenter().BuildChart(
+            trend,
+            forecast,
+            now,
+            showProjection: true,
+            showRange: true,
+            selectedBlockDurationMinutes: 240);
+
+        var model = Assert.IsType<UsageTrendChartModel>(chart);
+        Assert.Equal(UsageMomentumConfidence.Established, model.Summary.Momentum.Confidence);
+        var advisor = Assert.IsType<UsageTrendBlockAdvisor>(model.BlockAdvisor);
+        Assert.Equal(UsageTrendBlockAdvisorStatus.LikelyFits, advisor.Status);
+        Assert.Equal("likely fits", advisor.VerdictText);
+        Assert.Equal("Established baseline", advisor.ConfidenceText);
+        Assert.Contains("established activity-qualified baseline", advisor.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("needs more evidence", advisor.AccessibleSummary, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -1508,8 +1739,20 @@ public sealed class UsageTrendSectionTests
         Assert.Contains("The selected duration is announced as selected.", xaml);
         Assert.Contains("Command=\"{Binding DataContext.SelectBlockDurationCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}\"", xaml);
         Assert.Contains("CommandParameter=\"{Binding DurationMinutes}\"", xaml);
+        Assert.Contains("<ComboBox ItemsSource=\"{Binding WindowOptions}\"", xaml);
+        Assert.Contains("SelectedItem=\"{Binding SelectedWindow, Mode=TwoWay}\"", xaml);
+        Assert.Contains("Text=\"{Binding BlockAdvisorSubjectText}\"", xaml);
+        Assert.Contains("Text=\"{Binding BlockAdvisorVerdictText}\"", xaml);
+        Assert.Contains("Text=\"{Binding BlockAdvisorEndsAtText}\"", xaml);
+        Assert.Contains("Text=\"{Binding BlockAdvisorConstraintTimeText}\"", xaml);
+        Assert.Contains("Value=\"{Binding BlockAdvisorTimelineProgressPercent, Mode=OneWay}\"", xaml);
+        Assert.Contains("x:Name=\"BlockPlannerConstraintEndpoint\"", xaml);
+        Assert.Contains("<DataTrigger Binding=\"{Binding BlockAdvisorTimelineProgressPercent}\" Value=\"100\">", xaml);
+        Assert.Contains("<Setter Property=\"Visibility\" Value=\"Collapsed\" />", xaml);
+        Assert.Contains("AutomationProperties.HelpText=\"{Binding BlockAdvisorTimelineAccessibleSummary}\"", xaml);
+        Assert.Contains("Text=\"Based on current pace, not task cost.\"", xaml);
         Assert.Contains("Text=\"{Binding NextConstraintHeadline}\"", xaml);
-        Assert.Contains("Text=\"{Binding NextConstraintDetail}\"", xaml);
+        Assert.Contains("ToolTip=\"{Binding NextConstraintDetail}\"", xaml);
         Assert.Contains("AutomationProperties.HelpText=\"{Binding NextConstraintAccessibleSummary}\"", xaml);
         Assert.Contains("IsKeyboardFocused", xaml);
         Assert.Contains("Recovery watch", xaml);
@@ -1942,11 +2185,25 @@ public sealed class UsageTrendSectionTests
             {
                 var now = new DateTimeOffset(2026, 7, 22, 10, 0, 0, TimeSpan.Zero);
                 var reset = now.AddHours(3);
+                var weeklyReset = now.AddDays(4);
                 var viewModel = new UsageTrendSectionViewModel(new UsageTrendPresenter());
                 viewModel.ApplySignals(new UsageSignalsSnapshot
                 {
-                    UsageTrends = [Trend(now, reset, isMock: false, [70, 78, 86])],
-                    RunwayForecasts = [Forecast(now, reset, LimitRunwayForecastConfidence.Medium, isMock: false)]
+                    UsageTrends =
+                    [
+                        Trend(now, reset, isMock: false, [70, 78, 86]),
+                        Trend(now, weeklyReset, isMock: false, [30, 32, 34]) with
+                        {
+                            BucketId = "codex|10080",
+                            WindowLabel = "7d",
+                            WindowDurationMins = 10_080
+                        }
+                    ],
+                    RunwayForecasts =
+                    [
+                        Forecast(now, reset, LimitRunwayForecastConfidence.Medium, isMock: false),
+                        WeeklyForecast(now, weeklyReset, LimitRunwayForecastConfidence.High)
+                    ]
                 }, "codex", now);
                 var section = new PulseMeter.Slices.BlockPlanner.UI.BlockPlannerSection { DataContext = viewModel };
                 window = new System.Windows.Window
@@ -1964,21 +2221,18 @@ public sealed class UsageTrendSectionTests
                 section.UpdateLayout();
 
                 var selector = Assert.Single(
-                    FindVisualDescendants<System.Windows.Controls.ListBox>(section),
-                    list => AutomationProperties.GetName(list) == "Block planner limit window");
-                var item = Assert.IsType<System.Windows.Controls.ListBoxItem>(
-                    selector.ItemContainerGenerator.ContainerFromIndex(0));
-                Assert.True(item.Focus());
+                    FindVisualDescendants<System.Windows.Controls.ComboBox>(section),
+                    combo => AutomationProperties.GetName(combo) == "Block planner limit window");
+                Assert.True(selector.Focus());
                 section.Dispatcher.Invoke(
                     () => { },
                     System.Windows.Threading.DispatcherPriority.ApplicationIdle);
-                item.ApplyTemplate();
                 var segment = Assert.IsType<System.Windows.Controls.Border>(
-                    item.Template.FindName("Segment", item));
+                    section.FindName("BlockWindowSelectorBorder"));
                 var borderBrush = Assert.IsType<System.Windows.Media.SolidColorBrush>(segment.BorderBrush);
 
-                Assert.True(item.IsKeyboardFocusWithin);
-                Assert.Equal(new System.Windows.Thickness(2), segment.BorderThickness);
+                Assert.True(selector.IsKeyboardFocusWithin);
+                Assert.Equal(new System.Windows.Thickness(1), segment.BorderThickness);
                 Assert.Equal(System.Windows.Media.Color.FromRgb(0x1F, 0x73, 0xFF), borderBrush.Color);
             }
             catch (Exception exception)
@@ -1995,6 +2249,59 @@ public sealed class UsageTrendSectionTests
         thread.Start();
 
         Assert.True(thread.Join(TestTimeouts.UiThread), "The Block planner keyboard-focus test did not finish.");
+        if (threadFailure is not null)
+        {
+            ExceptionDispatchInfo.Capture(threadFailure).Throw();
+        }
+    }
+
+    [Fact]
+    public void BlockPlanner_SingleWindowSelectorBehavesAsAStaticPill()
+    {
+        Exception? threadFailure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var now = new DateTimeOffset(2026, 7, 22, 10, 0, 0, TimeSpan.Zero);
+                var reset = now.AddHours(3);
+                var viewModel = new UsageTrendSectionViewModel(new UsageTrendPresenter());
+                viewModel.ApplySignals(new UsageSignalsSnapshot
+                {
+                    UsageTrends = [Trend(now, reset, isMock: false, [70, 78, 86])],
+                    RunwayForecasts = [Forecast(now, reset, LimitRunwayForecastConfidence.Medium, isMock: false)]
+                }, "codex", now);
+                var section = new PulseMeter.Slices.BlockPlanner.UI.BlockPlannerSection { DataContext = viewModel };
+                section.ApplyTemplate();
+                section.Measure(new System.Windows.Size(900, 600));
+                section.Arrange(new Rect(0, 0, 900, 600));
+                section.UpdateLayout();
+
+                var selector = Assert.Single(
+                    FindVisualDescendants<System.Windows.Controls.ComboBox>(section),
+                    combo => AutomationProperties.GetName(combo) == "Block planner limit window");
+                selector.ApplyTemplate();
+                var arrow = Assert.IsType<System.Windows.Controls.TextBlock>(
+                    selector.Template.FindName("DropDownArrow", selector));
+
+                Assert.Single(selector.Items);
+                Assert.False(selector.Focusable);
+                Assert.False(selector.IsHitTestVisible);
+                Assert.Equal(System.Windows.Visibility.Collapsed, arrow.Visibility);
+            }
+            catch (Exception exception)
+            {
+                threadFailure = exception;
+            }
+            finally
+            {
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.InvokeShutdown();
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+
+        Assert.True(thread.Join(TestTimeouts.UiThread), "The single-window selector test did not finish.");
         if (threadFailure is not null)
         {
             ExceptionDispatchInfo.Capture(threadFailure).Throw();
@@ -2233,10 +2540,8 @@ public sealed class UsageTrendSectionTests
             chart.ProjectedPoints,
             point => point.Timestamp == likelyLimit.AddMinutes(-7) && point.UsedPercent == 100);
         Assert.Equal(likelyLimit.AddHours(2), chart.ForecastWindowEnd);
-        Assert.Equal("Estimated to reach the limit", chart.Summary.ForecastLeadText);
-        Assert.Equal(
-            likelyLimit.AddMinutes(-7).ToLocalTime().ToString("ddd, MMM d, h:mm tt", CultureInfo.CurrentCulture),
-            chart.Summary.ForecastWhenText);
+        Assert.StartsWith("Limit in about ", chart.Summary.ForecastLeadText);
+        Assert.StartsWith("• reset in ", chart.Summary.ForecastWhenText);
         Assert.Contains("earlier history was not measured", chart.AccessibleSummary);
         Assert.Contains("estimated limit time at the modeled pace", chart.AccessibleSummary);
     }
@@ -2797,6 +3102,7 @@ public sealed class UsageTrendSectionTests
             "",
             momentum,
             "",
+            UsagePaceBand.Unknown,
             "",
             "",
             "",
@@ -2872,6 +3178,9 @@ public sealed class UsageTrendSectionTests
             "UsageTrendSection.xaml"));
 
         Assert.Contains("AutomationProperties.Name=\"Activity-qualified momentum details\"", xaml);
+        Assert.Contains("Foreground=\"{Binding MomentumValueBrush}\"", xaml);
+        Assert.Contains("Binding=\"{Binding CurrentPaceBand}\" Value=\"AboveSustainable\"", xaml);
+        Assert.Contains("Binding=\"{Binding CurrentPaceBand}\" Value=\"FarAboveSustainable\"", xaml);
         Assert.Contains("Reset learned baseline…", xaml);
         Assert.Contains("It does not change Codex history or account usage.", xaml);
         Assert.Contains("PreviewKeyDown=\"MomentumActivityPopup_PreviewKeyDown\"", xaml);

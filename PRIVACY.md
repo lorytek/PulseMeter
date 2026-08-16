@@ -26,6 +26,8 @@ PulseMeter does not send usage analytics, crash reports, or maintainer-owned tra
 
 PulseMeter stores its own settings under `%LOCALAPPDATA%\PulseMeter`, including window state, sync settings, inferred reset-credit expiry timestamps, and a bounded Runway Forecast observation history. Runway observations contain rate-limit bucket and display labels, window duration, used percentage, reset time, and observation time. They do not contain prompt text, message content, project paths, thread IDs, credentials, or account identifiers.
 
+Return Notes are user-entered text stored locally under `%LOCALAPPDATA%\PulseMeter`. Their payload is protected with Windows Data Protection for the current Windows user. PulseMeter does not upload Return Notes. They may still contain sensitive information if a user enters it, so the app advises against storing secrets or customer data.
+
 ## Credentials
 
 PulseMeter does not ask for passwords, API keys, or tokens. It does not display, log, or store Codex access tokens, account IDs, or server credit IDs.

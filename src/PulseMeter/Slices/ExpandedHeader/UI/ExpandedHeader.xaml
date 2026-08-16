@@ -1,6 +1,10 @@
 <UserControl x:Class="PulseMeter.Slices.ExpandedHeader.UI.ExpandedHeader"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </UserControl.Resources>
+
     <Border x:Name="ExpandedStickyHeader"
             Padding="24,32,30,16"
             Background="#FFFFFF"
@@ -12,8 +16,16 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Orientation="Horizontal"
-                        VerticalAlignment="Center">
+            <Grid Grid.Column="0"
+                  x:Name="ExpandedHeaderIdentity"
+                  Margin="0,0,14,0"
+                  VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
                 <Border x:Name="ExpandedHeaderLogo"
                         Width="26"
                         Height="26"
@@ -27,19 +39,39 @@
                                     ViewboxUnits="RelativeToBoundingBox" />
                     </Border.Background>
                 </Border>
-                <TextBlock x:Name="OverviewHeading"
+                <TextBlock Grid.Column="1"
+                           x:Name="OverviewHeading"
                            Text="{Binding CompactTitleText}"
                            Foreground="#111827"
                            FontSize="24"
                            VerticalAlignment="Center"
                            FontWeight="SemiBold"
+                           TextTrimming="CharacterEllipsis"
                            Focusable="True"
                            KeyboardNavigation.IsTabStop="False"
                            AutomationProperties.HeadingLevel="Level1"
                            FocusVisualStyle="{DynamicResource HeadingFocusVisualStyle}" />
-            </StackPanel>
+                <Border Grid.Column="2"
+                        x:Name="HeaderWeeklyUsageBadge"
+                        Margin="12,0,0,0"
+                        Padding="9,4"
+                        VerticalAlignment="Center"
+                        Background="#F8FAFC"
+                        BorderBrush="{Binding WeeklyUsageBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        ToolTip="Weekly quota remaining"
+                        AutomationProperties.Name="{Binding WeeklyUsageAccessibleLabel}"
+                        Visibility="{Binding HasWeeklyUsage, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <TextBlock Text="{Binding WeeklyUsageText}"
+                               Foreground="{Binding WeeklyUsageBrush}"
+                               FontSize="13"
+                               FontWeight="SemiBold" />
+                </Border>
+            </Grid>
 
             <StackPanel Grid.Column="1"
+                        x:Name="ExpandedHeaderActions"
                         Orientation="Horizontal"
                         VerticalAlignment="Top">
                 <StackPanel Margin="0,0,18,0"

@@ -147,22 +147,22 @@ public sealed class ReleasePackagingTests
     }
 
     [Fact]
-    public void Version061ReleaseDocs_DescribeActivityAndDiagnosticsRelease()
+    public void Version062ReleaseDocs_DescribePersistenceAndTaskbarRelease()
     {
         var project = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "PulseMeter.csproj"));
         var packageScript = File.ReadAllText(FindWorkspaceFile("scripts", "package-release.ps1"));
         var checklist = File.ReadAllText(FindWorkspaceFile("RELEASE_CHECKLIST.md"));
         var changelog = File.ReadAllText(FindWorkspaceFile("CHANGELOG.md"));
-        var releaseNotes = File.ReadAllText(FindWorkspaceFile("RELEASE_NOTES_v0.6.1.md"));
+        var releaseNotes = File.ReadAllText(FindWorkspaceFile("RELEASE_NOTES_v0.6.2.md"));
 
-        Assert.Contains("<Version>0.6.1</Version>", project);
-        Assert.Contains("[string]$Version = \"0.6.1\"", packageScript);
-        Assert.Contains("PulseMeter-0.6.1-win-x64-portable.zip", checklist);
-        Assert.Contains("## 0.6.1", changelog);
-        Assert.Contains("PulseMeter 0.6.1", releaseNotes);
-        Assert.Contains("Activity-qualified", releaseNotes);
-        Assert.Contains("Return Note", releaseNotes);
-        Assert.Contains("support snapshot", releaseNotes, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("<Version>0.6.2</Version>", project);
+        Assert.Contains("[string]$Version = \"0.6.2\"", packageScript);
+        Assert.Contains("PulseMeter-0.6.2-win-x64-portable.zip", checklist);
+        Assert.Contains("## 0.6.2", changelog);
+        Assert.Contains("PulseMeter 0.6.2", releaseNotes);
+        Assert.Contains("persistent Return Notes", releaseNotes, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("taskbar", releaseNotes, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Open in Codex", releaseNotes);
         Assert.Contains("Apache License 2.0", releaseNotes);
     }
 

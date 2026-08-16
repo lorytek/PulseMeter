@@ -178,9 +178,29 @@ public sealed class PulseMeterWindowViewModelSelectionTests
         Assert.Equal(["99%", "50% left"], viewModel.CompactQuotaRows.Select(row => row.CompactRemainingPercentText));
         Assert.Equal(["7:28 PM", "4d 18h 48m"], viewModel.CompactQuotaRows.Select(row => row.ResetDisplayText));
         Assert.Equal([false, true], viewModel.CompactQuotaRows.Select(row => row.ShowCompactSeparator));
+        Assert.True(viewModel.ExpandedHeader.HasWeeklyUsage);
+        Assert.Equal("50% left", viewModel.ExpandedHeader.WeeklyUsageText);
+        Assert.Equal("Weekly quota, 50% left", viewModel.ExpandedHeader.WeeklyUsageAccessibleLabel);
         Assert.Equal(
             "5h \u2022 99% | Weekly \u2022 50% left",
             viewModel.CompactQuotaSummaryText);
+    }
+
+    [Fact]
+    public void ExpandedHeader_HidesWeeklyUsageWhenSelectedTrackHasNoWeeklyWindow()
+    {
+        var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
+
+        viewModel.ApplySnapshot(new UsageSnapshot
+        {
+            Buckets = [Bucket("codex", "General", "5h", 20)],
+            Source = "AppServer",
+            SyncStatus = SyncStatus.Live,
+            LastUpdatedUtc = DateTimeOffset.UtcNow
+        });
+
+        Assert.False(viewModel.ExpandedHeader.HasWeeklyUsage);
+        Assert.Equal(string.Empty, viewModel.ExpandedHeader.WeeklyUsageText);
     }
 
     [Fact]

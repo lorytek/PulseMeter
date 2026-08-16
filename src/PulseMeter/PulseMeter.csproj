@@ -10,7 +10,7 @@
     <ApplicationIcon>Assets\PulseMeter.ico</ApplicationIcon>
     <AssemblyName>PulseMeter</AssemblyName>
     <RootNamespace>PulseMeter</RootNamespace>
-    <Version>0.6.1</Version>
+    <Version>0.6.2</Version>
     <Authors>PulseMeter contributors</Authors>
     <Product>PulseMeter</Product>
     <AssemblyTitle>PulseMeter</AssemblyTitle>
@@ -25,6 +25,7 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.1" />
   </ItemGroup>
 
   <ItemGroup>

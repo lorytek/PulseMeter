@@ -30,6 +30,7 @@ public sealed record UsageTrendVarianceSegment(UsageTrendPoint Start, UsageTrend
 public enum UsageMomentumConfidence
 {
     Learning,
+    FirstLook,
     EarlyEstimate,
     Established
 }
@@ -62,6 +63,16 @@ public sealed record UsageMomentumSummary(
     public string ScopeText { get; init; } = "Account and plan scope are not verified.";
 }
 
+/// <summary>Visual band for current pace relative to the sustainable pace.</summary>
+public enum UsagePaceBand
+{
+    Unknown,
+    BelowSustainable,
+    AtSustainable,
+    AboveSustainable,
+    FarAboveSustainable
+}
+
 /// <summary>Decision-oriented copy and metrics shown above the usage chart.</summary>
 public sealed record UsageTrendRunwaySummary(
     string Headline,
@@ -71,6 +82,7 @@ public sealed record UsageTrendRunwaySummary(
     string UsedPercentText,
     UsageMomentumSummary Momentum,
     string CurrentPaceText,
+    UsagePaceBand CurrentPaceBand,
     string SustainablePaceText,
     string PaceComparisonText,
     string PaceComparisonLabel,
@@ -93,7 +105,26 @@ public sealed record UsageTrendBlockAdvisor(
     string Detail,
     string AccessibleSummary,
     IReadOnlyList<UsageTrendBlockOption> Options,
-    UsageTrendBlockAdvisorStatus Status);
+    UsageTrendBlockAdvisorStatus Status)
+{
+    public string SubjectText { get; init; } = "A selected block";
+
+    public string VerdictText { get; init; } = "needs more evidence";
+
+    public string NowText { get; init; } = string.Empty;
+
+    public string EndsAtText { get; init; } = string.Empty;
+
+    public string ConstraintLabel { get; init; } = "Reset";
+
+    public string ConstraintTimeText { get; init; } = string.Empty;
+
+    public string ConfidenceText { get; init; } = "Confidence unavailable";
+
+    public string TimelineAccessibleSummary { get; init; } = string.Empty;
+
+    public double TimelineProgressPercent { get; init; }
+}
 
 /// <summary>One compact duration choice in the next-block advisor.</summary>
 public sealed record UsageTrendBlockOption(

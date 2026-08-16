@@ -4,6 +4,48 @@
              xmlns:shared="clr-namespace:PulseMeter.Shared.UI">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <Style x:Key="OpenSelectedProjectButtonStyle"
+               TargetType="Button">
+            <Setter Property="MinHeight" Value="38" />
+            <Setter Property="Padding" Value="14,8" />
+            <Setter Property="Background" Value="#1F73FF" />
+            <Setter Property="BorderBrush" Value="#1F73FF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="7">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#1764D8" />
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="#1764D8" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#1557B0" />
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="#1557B0" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="ProjectHealthRowStyle" TargetType="ListBoxItem">
             <Setter Property="Padding" Value="0" />
             <Setter Property="Margin" Value="0" />
@@ -186,13 +228,23 @@
             </Grid>
             <Border Height="1" Margin="0,8,0,0" Background="#E5E7EB" />
 
-            <Button Margin="0,10,0,4"
+            <Button Margin="0,10,0,8"
                     HorizontalAlignment="Left"
-                    Padding="12,5"
-                    Content="Project location…"
+                    Style="{StaticResource OpenSelectedProjectButtonStyle}"
                     Command="{Binding ProjectLocationCommand}"
                     IsEnabled="{Binding CanShowProjectLocation}"
-                    AutomationProperties.Name="Open selected project location" />
+                    ToolTip="Open options for the selected project"
+                    AutomationProperties.Name="Open selected project">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE8B7;"
+                               FontFamily="Segoe MDL2 Assets"
+                               FontSize="15"
+                               VerticalAlignment="Center" />
+                    <TextBlock Margin="8,0,0,0"
+                               Text="Open selected project"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
 
             <ListBox ItemsSource="{Binding ProjectUsageRows}"
                      SelectedItem="{Binding SelectedProjectRow, Mode=TwoWay}"

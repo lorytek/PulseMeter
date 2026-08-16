@@ -25,11 +25,24 @@ public sealed class BrandingAssetTests
     }
 
     [Fact]
+    public void App_AssignsAStableTaskbarIdentityBeforeShowingAnyUi()
+    {
+        var source = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Bootstrap", "Startup", "App.xaml.cs"));
+
+        Assert.Contains("PulseMeterAppUserModelId = \"PulseMeter.Desktop\"", source);
+        Assert.Contains("ExactSpelling = true", source);
+        Assert.Contains("SetCurrentProcessExplicitAppUserModelID(PulseMeterAppUserModelId)", source);
+        Assert.True(
+            source.IndexOf("SetCurrentProcessExplicitAppUserModelID(PulseMeterAppUserModelId)", StringComparison.Ordinal)
+                < source.IndexOf("base.OnStartup(e)", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void ExpandedHeader_ShowsPulseMeterLogoBeforeTitle()
     {
         var xaml = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "ExpandedHeader", "UI", "ExpandedHeader.xaml"));
         var headerStart = xaml.IndexOf("x:Name=\"ExpandedStickyHeader\"", StringComparison.Ordinal);
-        var controlsStart = xaml.IndexOf("Grid.Column=\"1\"", headerStart, StringComparison.Ordinal);
+        var controlsStart = xaml.IndexOf("x:Name=\"ExpandedHeaderActions\"", headerStart, StringComparison.Ordinal);
 
         Assert.NotEqual(-1, headerStart);
         Assert.True(controlsStart > headerStart);

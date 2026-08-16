@@ -994,6 +994,8 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
 
     private void RefreshTopChromeViewModels()
     {
+        var weeklyQuotaRow = CompactQuotaRows.FirstOrDefault(row => row.IsWeekly);
+
         DataBar.ApplyState(
             IsExpanded,
             CompactQuotaRows,
@@ -1004,6 +1006,8 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
 
         ExpandedHeader.ApplyState(
             CompactTitleText,
+            weeklyQuotaRow?.RemainingPercentText ?? string.Empty,
+            weeklyQuotaRow?.RingBrush ?? "#64748B",
             StatusBadgeText,
             StatusBadgeBrush,
             LastUpdatedText,

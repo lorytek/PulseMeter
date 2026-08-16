@@ -110,6 +110,7 @@ public sealed class UsageTrendSectionViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(ConfidenceText));
             OnPropertyChanged(nameof(UsedPercentText));
             OnPropertyChanged(nameof(MomentumValueText));
+            OnPropertyChanged(nameof(MomentumValueBrush));
             OnPropertyChanged(nameof(MomentumTitleText));
             OnPropertyChanged(nameof(MomentumStateText));
             OnPropertyChanged(nameof(MomentumBaselineText));
@@ -121,6 +122,7 @@ public sealed class UsageTrendSectionViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(MomentumActivityEvidenceText));
             OnPropertyChanged(nameof(MomentumActivityCoverageText));
             OnPropertyChanged(nameof(CurrentPaceText));
+            OnPropertyChanged(nameof(CurrentPaceBand));
             OnPropertyChanged(nameof(SustainablePaceText));
             OnPropertyChanged(nameof(PaceComparisonText));
             OnPropertyChanged(nameof(PaceComparisonLabel));
@@ -131,6 +133,15 @@ public sealed class UsageTrendSectionViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(BlockAdvisorState));
             OnPropertyChanged(nameof(BlockAdvisorDetail));
             OnPropertyChanged(nameof(BlockAdvisorAccessibleSummary));
+            OnPropertyChanged(nameof(BlockAdvisorSubjectText));
+            OnPropertyChanged(nameof(BlockAdvisorVerdictText));
+            OnPropertyChanged(nameof(BlockAdvisorNowText));
+            OnPropertyChanged(nameof(BlockAdvisorEndsAtText));
+            OnPropertyChanged(nameof(BlockAdvisorConstraintLabel));
+            OnPropertyChanged(nameof(BlockAdvisorConstraintTimeText));
+            OnPropertyChanged(nameof(BlockAdvisorConfidenceText));
+            OnPropertyChanged(nameof(BlockAdvisorTimelineAccessibleSummary));
+            OnPropertyChanged(nameof(BlockAdvisorTimelineProgressPercent));
             OnPropertyChanged(nameof(NextConstraintHeadline));
             OnPropertyChanged(nameof(NextConstraintDetail));
             OnPropertyChanged(nameof(NextConstraintAccessibleSummary));
@@ -196,6 +207,17 @@ public sealed class UsageTrendSectionViewModel : INotifyPropertyChanged
     public string UsedPercentText => ChartModel?.Summary.UsedPercentText ?? "—";
 
     public string MomentumValueText => ChartModel?.Summary.Momentum.ValueText ?? "—";
+
+    public string MomentumValueBrush => IsMomentumLearning
+        ? "#334155"
+        : CurrentPaceBand switch
+        {
+            UsagePaceBand.BelowSustainable => "#16A34A",
+            UsagePaceBand.AboveSustainable => "#D97706",
+            UsagePaceBand.FarAboveSustainable => "#DC2626",
+            UsagePaceBand.Unknown => "#64748B",
+            _ => "#2563EB"
+        };
 
     public string MomentumTitleText => "Usage momentum";
 
@@ -269,6 +291,8 @@ public sealed class UsageTrendSectionViewModel : INotifyPropertyChanged
 
     public string CurrentPaceText => ChartModel?.Summary.CurrentPaceText ?? "—";
 
+    public UsagePaceBand CurrentPaceBand => ChartModel?.Summary.CurrentPaceBand ?? UsagePaceBand.Unknown;
+
     public string SustainablePaceText => ChartModel?.Summary.SustainablePaceText ?? "—";
 
     public string PaceComparisonText => ChartModel?.Summary.PaceComparisonText ?? "—";
@@ -288,6 +312,24 @@ public sealed class UsageTrendSectionViewModel : INotifyPropertyChanged
     public string BlockAdvisorDetail => ChartModel?.BlockAdvisor?.Detail ?? string.Empty;
 
     public string BlockAdvisorAccessibleSummary => ChartModel?.BlockAdvisor?.AccessibleSummary ?? string.Empty;
+
+    public string BlockAdvisorSubjectText => ChartModel?.BlockAdvisor?.SubjectText ?? "A selected block";
+
+    public string BlockAdvisorVerdictText => ChartModel?.BlockAdvisor?.VerdictText ?? "needs more evidence";
+
+    public string BlockAdvisorNowText => ChartModel?.BlockAdvisor?.NowText ?? string.Empty;
+
+    public string BlockAdvisorEndsAtText => ChartModel?.BlockAdvisor?.EndsAtText ?? string.Empty;
+
+    public string BlockAdvisorConstraintLabel => ChartModel?.BlockAdvisor?.ConstraintLabel ?? "Reset";
+
+    public string BlockAdvisorConstraintTimeText => ChartModel?.BlockAdvisor?.ConstraintTimeText ?? string.Empty;
+
+    public string BlockAdvisorConfidenceText => ChartModel?.BlockAdvisor?.ConfidenceText ?? "Confidence unavailable";
+
+    public string BlockAdvisorTimelineAccessibleSummary => ChartModel?.BlockAdvisor?.TimelineAccessibleSummary ?? string.Empty;
+
+    public double BlockAdvisorTimelineProgressPercent => ChartModel?.BlockAdvisor?.TimelineProgressPercent ?? 0;
 
     public string NextConstraintHeadline => ChartModel?.NextConstraint?.Headline ?? "Next constraint · Still learning";
 
@@ -599,6 +641,7 @@ public sealed class UsageTrendSectionViewModel : INotifyPropertyChanged
 
     private static string FormatMomentumConfidence(UsageMomentumConfidence confidence) => confidence switch
     {
+        UsageMomentumConfidence.FirstLook => "First look",
         UsageMomentumConfidence.EarlyEstimate => "Early estimate",
         UsageMomentumConfidence.Established => "Established",
         _ => "Learning"

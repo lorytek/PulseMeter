@@ -20,9 +20,27 @@ public sealed class ProjectLocationViewModel : INotifyPropertyChanged
         _observedPath = observedPath ?? string.Empty;
         _candidatePath = _observedPath;
         _actionService = actionService ?? throw new ArgumentNullException(nameof(actionService));
-        OpenFolderCommand = new RelayCommand(_ => RunAction(_actionService.OpenFolder, "Folder-open request sent."), _ => CanRunAction);
+        OpenFolderCommand = new RelayCommand(
+            _ => RunAction(
+                _actionService.OpenFolder,
+                "Folder-open request sent.",
+                "File Explorer is unavailable on this device.",
+                "Could not open the folder. Try again."),
+            _ => CanRunAction);
+        OpenCodexCommand = new RelayCommand(
+            _ => RunAction(
+                _actionService.OpenCodex,
+                "Codex launch requested.",
+                "Codex is unavailable on this device.",
+                "Could not open Codex. Make sure Codex is installed and try again."),
+            _ => CanRunAction);
         OpenWindowsPowerShellCommand = new RelayCommand(
-            _ => RunAction(_actionService.OpenWindowsPowerShell, "Windows PowerShell launch requested."), _ => CanRunAction);
+            _ => RunAction(
+                _actionService.OpenWindowsPowerShell,
+                "Windows PowerShell launch requested.",
+                "Windows PowerShell is unavailable on this device.",
+                "Could not start Windows PowerShell. Try again."),
+            _ => CanRunAction);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -40,6 +58,7 @@ public sealed class ProjectLocationViewModel : INotifyPropertyChanged
     }
 
     public RelayCommand OpenFolderCommand { get; }
+    public RelayCommand OpenCodexCommand { get; }
     public RelayCommand OpenWindowsPowerShellCommand { get; }
 
     public void ApplyBrowsedFolder(string? folder)
@@ -65,7 +84,11 @@ public sealed class ProjectLocationViewModel : INotifyPropertyChanged
 
     private bool CanRunAction => !_isRunningAction && !string.IsNullOrWhiteSpace(_candidatePath);
 
-    private void RunAction(Func<string?, ProjectLocationActionResult> action, string successMessage)
+    private void RunAction(
+        Func<string?, ProjectLocationActionResult> action,
+        string successMessage,
+        string launcherUnavailableMessage,
+        string launchFailedMessage)
     {
         if (!CanRunAction)
         {
@@ -81,14 +104,14 @@ public sealed class ProjectLocationViewModel : INotifyPropertyChanged
             {
                 ProjectLocationActionResult.Succeeded => successMessage,
                 ProjectLocationActionResult.InvalidLocation => "This folder is unavailable. Choose another folder or close this dialog.",
-                ProjectLocationActionResult.LauncherUnavailable => "Windows PowerShell is unavailable on this device.",
-                ProjectLocationActionResult.LaunchFailed => "Could not start the requested Windows action. Try again.",
-                _ => "Could not start the requested Windows action. Try again."
+                ProjectLocationActionResult.LauncherUnavailable => launcherUnavailableMessage,
+                ProjectLocationActionResult.LaunchFailed => launchFailedMessage,
+                _ => launchFailedMessage
             };
         }
         catch (Exception)
         {
-            Feedback = "Could not start the requested Windows action. Try again.";
+            Feedback = launchFailedMessage;
         }
         finally
         {
@@ -100,6 +123,7 @@ public sealed class ProjectLocationViewModel : INotifyPropertyChanged
     private void OnActionStateChanged()
     {
         OpenFolderCommand.RaiseCanExecuteChanged();
+        OpenCodexCommand.RaiseCanExecuteChanged();
         OpenWindowsPowerShellCommand.RaiseCanExecuteChanged();
     }
 

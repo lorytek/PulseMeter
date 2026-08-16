@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
+using System.Text.Json;
 using PulseMeter.Platform.Windows;
 using PulseMeter.Slices.ReturnNote.Business;
+using PulseMeter.Slices.ReturnNote.Models;
 using PulseMeter.Slices.ReturnNote.UI;
 using PulseMeter.VisualHarness;
 
@@ -9,11 +11,15 @@ namespace PulseMeter.Tests;
 public sealed class ReturnNoteTests
 {
     [Fact]
-    public void Validator_NormalizesScalarsAndRejectsMalformedControlsAndBidi()
+    public void Validator_NormalizesScalars_AllowsNextStepLines_AndRejectsUnsafeCharacters()
     {
-        var valid = ReturnNoteValidator.Validate(" e\u0301🙂 ", "next");
-        Assert.True(valid.IsValid); Assert.Equal("é🙂", valid.Note!.For);
+        var valid = ReturnNoteValidator.Validate(" e\u0301🙂 ", "first\r\nsecond");
+        Assert.True(valid.IsValid);
+        Assert.Equal("é🙂", valid.Note!.For);
+        Assert.Equal("first\nsecond", valid.Note.NextStep);
+        Assert.False(ReturnNoteValidator.Validate("for\nline", "next").IsValid);
         Assert.False(ReturnNoteValidator.Validate("for\t", "next").IsValid);
+        Assert.False(ReturnNoteValidator.Validate("for", "next\tstep").IsValid);
         Assert.False(ReturnNoteValidator.Validate("for\u202E", "next").IsValid);
         Assert.False(ReturnNoteValidator.Validate("for\u061C", "next").IsValid);
         Assert.False(ReturnNoteValidator.Validate("for\u200E", "next").IsValid);
@@ -24,49 +30,200 @@ public sealed class ReturnNoteTests
     }
 
     [Fact]
-    public void ViewModel_TransitionsBetweenCompactEmptyEditViewAndClearConfirmation()
+    public void ViewModel_AddsEditsAndRemovesMultipleIndependentNotes()
     {
-        var clipboard = new RecordingClipboard(); var vm = new ReturnNoteSectionViewModel(clipboard);
-        Assert.True(vm.IsEmpty); Assert.False(vm.IsEditing);
-        vm.AddNoteCommand.Execute(null); Assert.True(vm.IsEditing); Assert.False(vm.IsEmpty);
-        vm.ForText = "release"; vm.NextStep = "run tests"; vm.SaveCommand.Execute(null);
-        Assert.True(vm.IsViewing); Assert.Equal("release", vm.SavedFor); Assert.Equal("run tests", vm.SavedNextStep);
-        vm.EditCommand.Execute(null); Assert.True(vm.IsEditing); Assert.False(vm.IsViewing); vm.CancelCommand.Execute(null); Assert.True(vm.IsViewing);
-        vm.ClearCommand.Execute(null); Assert.True(vm.IsConfirmingClear); Assert.False(vm.IsViewing); Assert.False(vm.IsEditing);
-        vm.CancelClearCommand.Execute(null); Assert.True(vm.IsViewing);
-        vm.ClearCommand.Execute(null); vm.ConfirmClearCommand.Execute(null); Assert.True(vm.IsEmpty); Assert.False(vm.HasSavedNote);
+        var viewModel = new ReturnNoteSectionViewModel(new RecordingClipboard());
+
+        AddNote(viewModel, "release", "run tests");
+        AddNote(viewModel, "docs", "update README\ncheck links");
+
+        Assert.Equal(2, viewModel.Notes.Count);
+        Assert.Equal("2 notes", viewModel.NoteCountText);
+        Assert.Equal("release", viewModel.Notes[0].For);
+        Assert.Equal("update README\ncheck links", viewModel.Notes[1].NextStep);
+
+        var first = viewModel.Notes[0];
+        viewModel.EditNoteCommand.Execute(first);
+        viewModel.NextStep = "run all tests";
+        viewModel.SaveCommand.Execute(null);
+
+        Assert.Equal("run all tests", first.NextStep);
+        Assert.Equal("update README\ncheck links", viewModel.Notes[1].NextStep);
+
+        viewModel.RemoveNoteCommand.Execute(first);
+        Assert.True(first.IsPendingRemoval);
+        viewModel.CancelRemoveCommand.Execute(first);
+        Assert.False(first.IsPendingRemoval);
+        viewModel.RemoveNoteCommand.Execute(first);
+        viewModel.ConfirmRemoveCommand.Execute(first);
+
+        Assert.Single(viewModel.Notes);
+        Assert.Equal("1 note", viewModel.NoteCountText);
+        Assert.Equal("docs", viewModel.Notes[0].For);
     }
 
     [Fact]
-    public void ViewModel_CopiesOnlySavedNextStepAndPreservesNoteOnClipboardFailure()
+    public void ViewModel_CopiesOnlySelectedNextStepAndPreservesNotesOnClipboardFailure()
     {
-        var clipboard = new RecordingClipboard(); var vm = new ReturnNoteSectionViewModel(clipboard); vm.AddNoteCommand.Execute(null); vm.ForText = "For value"; vm.NextStep = "Only next"; vm.SaveCommand.Execute(null);
-        vm.CopyNextStepCommand.Execute(null); Assert.Equal("Only next", clipboard.Text);
-        var failing = new ReturnNoteSectionViewModel(new ThrowingClipboard()); failing.AddNoteCommand.Execute(null); failing.ForText = "For value"; failing.NextStep = "Only next"; failing.SaveCommand.Execute(null); failing.CopyNextStepCommand.Execute(null);
-        Assert.Equal("Only next", failing.SavedNextStep); Assert.Equal("Couldn't copy. Try again.", failing.StatusText);
+        var clipboard = new RecordingClipboard();
+        var viewModel = new ReturnNoteSectionViewModel(clipboard);
+        AddNote(viewModel, "one", "First next");
+        AddNote(viewModel, "two", "Second next");
+
+        viewModel.CopyNextStepCommand.Execute(viewModel.Notes[1]);
+        Assert.Equal("Second next", clipboard.Text);
+
+        var failing = new ReturnNoteSectionViewModel(new ThrowingClipboard());
+        AddNote(failing, "for", "Only next");
+        failing.CopyNextStepCommand.Execute(failing.Notes[0]);
+        Assert.Single(failing.Notes);
+        Assert.Equal("Only next", failing.Notes[0].NextStep);
+        Assert.Equal("Couldn't copy. Try again.", failing.StatusText);
     }
 
     [Fact]
-    public void XamlAndHarness_ShowSavedFieldsAfterNeedsAttentionAndResetWithNewProvider()
+    public void ViewModel_DoesNotClaimSuccessWhenPersistentSaveFails()
     {
-        var root = TestWorkspace.FindRoot(); var window = File.ReadAllText(Path.Combine(root, "src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml")); var note = File.ReadAllText(Path.Combine(root, "src", "PulseMeter", "Slices", "ReturnNote", "UI", "ReturnNoteSection.xaml")); var platform = File.ReadAllText(Path.Combine(root, "src", "PulseMeter", "Bootstrap", "Composition", "PlatformRegistration.cs")); var harness = File.ReadAllText(Path.Combine(root, "tools", "PulseMeter.VisualHarness", "VisualHarnessComposition.cs"));
+        var viewModel = new ReturnNoteSectionViewModel(new RecordingClipboard(), new FailingStateStore());
+
+        viewModel.AddNoteCommand.Execute(null);
+        viewModel.ForText = "release";
+        viewModel.NextStep = "run tests";
+        viewModel.SaveCommand.Execute(null);
+
+        Assert.Empty(viewModel.Notes);
+        Assert.True(viewModel.IsEditing);
+        Assert.Equal("Couldn't save the note. Try again.", viewModel.StatusText);
+    }
+
+    [Fact]
+    public void StateStore_ProtectsPayloadAndRoundTripsSeveralNotes()
+    {
+        var directory = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PulseMeter.ReturnNotes", Guid.NewGuid().ToString("N"))).FullName;
+        var path = Path.Combine(directory, "return-notes.v1.dat");
+        var store = new ReturnNoteStateStore(path);
+        var notes = new[]
+        {
+            new ReturnNote("private project label", "private next action"),
+            new ReturnNote("release", "publish package")
+        };
+
+        Assert.True(store.Save(notes));
+        var persisted = File.ReadAllText(path);
+        Assert.DoesNotContain("private project label", persisted, StringComparison.Ordinal);
+        Assert.DoesNotContain("private next action", persisted, StringComparison.Ordinal);
+
+        var loaded = new ReturnNoteStateStore(path).Load();
+        Assert.Equal(ReturnNoteLoadStatus.Loaded, loaded.Status);
+        Assert.Equal(notes, loaded.Notes);
+
+        Directory.Delete(directory, true);
+    }
+
+    [Fact]
+    public void StateStore_RejectsUnknownOrCorruptEnvelopes()
+    {
+        var directory = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PulseMeter.ReturnNotes", Guid.NewGuid().ToString("N"))).FullName;
+        var path = Path.Combine(directory, "return-notes.v1.dat");
+        File.WriteAllText(path, JsonSerializer.Serialize(new ReturnNoteStateStore.ReturnNoteEnvelope(99, "not-base64")));
+
+        Assert.Equal(ReturnNoteLoadStatus.Corrupt, new ReturnNoteStateStore(path).Load().Status);
+
+        File.WriteAllText(path, "{broken");
+        Assert.Equal(ReturnNoteLoadStatus.Corrupt, new ReturnNoteStateStore(path).Load().Status);
+
+        Directory.Delete(directory, true);
+    }
+
+    [Fact]
+    public void Xaml_UsesRoundedInputsMultilineEditorAndPerNoteActions()
+    {
+        var root = TestWorkspace.FindRoot();
+        var window = File.ReadAllText(Path.Combine(root, "src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml"));
+        var note = File.ReadAllText(Path.Combine(root, "src", "PulseMeter", "Slices", "ReturnNote", "UI", "ReturnNoteSection.xaml"));
+        var styles = File.ReadAllText(Path.Combine(root, "src", "PulseMeter", "Shared", "Styles", "PulseMeterControls.xaml"));
+
         Assert.True(window.IndexOf("<needsAttention:NeedsAttentionSection", StringComparison.Ordinal) < window.IndexOf("<returnNote:ReturnNoteSection", StringComparison.Ordinal));
-        Assert.Contains("Text=\"{Binding SavedFor}\"", note); Assert.Contains("Text=\"{Binding SavedNextStep}\"", note); Assert.Contains("Content=\"_Project or task\"", note); Assert.Contains("Target=\"{Binding ElementName=ForTextBox}\"", note); Assert.Contains("AutomationProperties.Name=\"Add note\"", note); Assert.Contains("Do not enter secrets or customer data.", note); Assert.Contains("Copy uses the Windows clipboard, which may retain or sync text.", note); Assert.Contains("clipboard history or sync may retain it", note); Assert.DoesNotContain("ResumeCard", platform); Assert.DoesNotContain("ResumeCard", harness);
-        var workspace = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PulseMeter.ReturnNote", Guid.NewGuid().ToString("N"))).FullName; Directory.CreateDirectory(Path.Combine(workspace, ".git")); File.WriteAllText(Path.Combine(workspace, "PulseMeter.slnx"), "<Solution />");
+        Assert.Contains("Text=\"RETURN NOTES\"", note);
+        Assert.Contains("Text=\"SAVED LOCALLY\"", note);
+        Assert.Contains("Style=\"{DynamicResource LightTextBoxStyle}\"", note);
+        Assert.Contains("Style=\"{DynamicResource LightMultilineTextBoxStyle}\"", note);
+        Assert.Contains("ItemsSource=\"{Binding Notes}\"", note);
+        Assert.Contains("DataContext.EditNoteCommand", note);
+        Assert.Contains("DataContext.CopyNextStepCommand", note);
+        Assert.Contains("DataContext.RemoveNoteCommand", note);
+        Assert.Contains("Clipboard history or sync may retain it.", note);
+        Assert.Contains("Protected for this Windows user and stored locally.", note);
+        Assert.Contains("x:Key=\"LightMultilineTextBoxStyle\"", styles);
+    }
+
+    [Fact]
+    public void Harness_PersistsSeveralNotesAcrossProviderRestarts()
+    {
+        var root = TestWorkspace.FindRoot();
+        var platform = File.ReadAllText(Path.Combine(root, "src", "PulseMeter", "Bootstrap", "Composition", "PlatformRegistration.cs"));
+        var harness = File.ReadAllText(Path.Combine(root, "tools", "PulseMeter.VisualHarness", "VisualHarnessComposition.cs"));
+        Assert.DoesNotContain("ResumeCard", platform);
+        Assert.DoesNotContain("ResumeCard", harness);
+
+        var workspace = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PulseMeter.ReturnNote", Guid.NewGuid().ToString("N"))).FullName;
+        Directory.CreateDirectory(Path.Combine(workspace, ".git"));
+        File.WriteAllText(Path.Combine(workspace, "PulseMeter.slnx"), "<Solution />");
         var paths = VisualHarnessWorkspace.ValidateRoot(workspace);
+
         using (var provider = VisualHarnessComposition.BuildServiceProvider(paths, () => { }))
         {
-            var saved = provider.GetRequiredService<ReturnNoteSectionViewModel>();
-            saved.AddNoteCommand.Execute(null); saved.ForText = "PulseMeter"; saved.NextStep = "Run tests"; saved.SaveCommand.Execute(null);
-            Assert.True(saved.IsViewing);
+            var notes = provider.GetRequiredService<ReturnNoteSectionViewModel>();
+            AddNote(notes, "PulseMeter", "Run tests");
+            AddNote(notes, "Release", "Publish package");
+            Assert.Equal(2, notes.Notes.Count);
         }
+
         using (var provider = VisualHarnessComposition.BuildServiceProvider(paths, () => { }))
         {
-            Assert.True(provider.GetRequiredService<ReturnNoteSectionViewModel>().IsEmpty);
+            var notes = provider.GetRequiredService<ReturnNoteSectionViewModel>();
+            Assert.Equal(2, notes.Notes.Count);
+            Assert.Equal("PulseMeter", notes.Notes[0].For);
+            Assert.Equal("Publish package", notes.Notes[1].NextStep);
+
+            notes.RemoveNoteCommand.Execute(notes.Notes[0]);
+            notes.ConfirmRemoveCommand.Execute(notes.Notes[0]);
         }
-        Assert.False(File.Exists(Path.Combine(paths.StateRoot, "resume-card.v1.dat")));
+
+        using (var provider = VisualHarnessComposition.BuildServiceProvider(paths, () => { }))
+        {
+            var notes = provider.GetRequiredService<ReturnNoteSectionViewModel>();
+            Assert.Single(notes.Notes);
+            Assert.Equal("Release", notes.Notes[0].For);
+        }
+
+        Assert.True(File.Exists(paths.ReturnNotesPath));
         Directory.Delete(workspace, true);
     }
-    private sealed class RecordingClipboard : IClipboardService { public string? Text; public void SetText(string text) => Text = text; }
-    private sealed class ThrowingClipboard : IClipboardService { public void SetText(string text) => throw new InvalidOperationException(); }
+
+    private static void AddNote(ReturnNoteSectionViewModel viewModel, string forText, string nextStep)
+    {
+        viewModel.AddNoteCommand.Execute(null);
+        viewModel.ForText = forText;
+        viewModel.NextStep = nextStep;
+        viewModel.SaveCommand.Execute(null);
+    }
+
+    private sealed class RecordingClipboard : IClipboardService
+    {
+        public string? Text { get; private set; }
+        public void SetText(string text) => Text = text;
+    }
+
+    private sealed class ThrowingClipboard : IClipboardService
+    {
+        public void SetText(string text) => throw new InvalidOperationException();
+    }
+
+    private sealed class FailingStateStore : IReturnNoteStateStore
+    {
+        public ReturnNoteLoadResult Load() => new(ReturnNoteLoadStatus.Missing);
+
+        public bool Save(IReadOnlyList<ReturnNote> notes) => false;
+    }
 }

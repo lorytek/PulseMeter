@@ -72,8 +72,10 @@ public sealed class VisualHarnessProjectLocationActionService : IProjectLocation
     private readonly ProjectLocationVisualScenario _scenario;
     public VisualHarnessProjectLocationActionService(ProjectLocationVisualScenario scenario) => _scenario = scenario;
     public int OpenFolderCount { get; private set; }
+    public int OpenCodexCount { get; private set; }
     public int OpenPowerShellCount { get; private set; }
     public ProjectLocationActionResult OpenFolder(string? observedPath) { OpenFolderCount++; return Result; }
+    public ProjectLocationActionResult OpenCodex(string? observedPath) { OpenCodexCount++; return Result; }
     public ProjectLocationActionResult OpenWindowsPowerShell(string? observedPath) { OpenPowerShellCount++; return Result; }
     private ProjectLocationActionResult Result => _scenario switch
     {

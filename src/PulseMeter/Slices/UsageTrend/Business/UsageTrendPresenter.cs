@@ -25,6 +25,7 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
     private const int EstablishedBaselineDays = 3;
     private const int EarlyMinimumSpanHours = 18;
     private const int EstablishedMinimumSpanHours = 42;
+    private const int MinimumProgressiveCurrentMinutes = 15;
     private const double BaselineHalfLifeDays = 7;
     private const double UnfavorableVarianceThresholdPoints = 1;
 
@@ -124,6 +125,7 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
         var blockAdvisor = BuildBlockAdvisor(
             trend.WindowDurationMins,
             forecast,
+            summary.Momentum,
             now,
             trend.ResetsAtUtc,
             selectedBlockDurationMinutes);
@@ -352,6 +354,7 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
     private static UsageTrendBlockAdvisor BuildBlockAdvisor(
         int? windowDurationMins,
         LimitRunwayForecast? forecast,
+        UsageMomentumSummary momentum,
         DateTimeOffset now,
         DateTimeOffset resetAt,
         int? selectedDurationMinutes)
@@ -364,7 +367,18 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
             : durations[0];
         var selectedEndsAt = now.AddMinutes(selectedMinutes);
         var durationText = FormatBlockDurationLabel(selectedMinutes);
-        var confidenceText = forecast is null
+        var usesEstablishedBaseline = momentum.Confidence == UsageMomentumConfidence.Established
+            && momentum.BaselineHourCount >= EstablishedBaselineHours
+            && momentum.BaselineDayCount >= EstablishedBaselineDays
+            && forecast is
+            {
+                IsMock: false,
+                Confidence: LimitRunwayForecastConfidence.Low,
+                State: LimitRunwayForecastState.OnTrack or LimitRunwayForecastState.Stable
+            };
+        var confidenceText = usesEstablishedBaseline
+            ? "Based on an established activity-qualified baseline."
+            : forecast is null
             ? "No forecast confidence is available."
             : BuildAdvisorConfidenceText(forecast);
 
@@ -383,9 +397,15 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
             status = UsageTrendBlockAdvisorStatus.MayBeInterrupted;
             detail = $"This block reaches the reset at {FormatLocalDateTime(resetAt)}, so capacity changes during it. Tests the current pace, not task cost.";
         }
+        else if (usesEstablishedBaseline && forecast!.State == LimitRunwayForecastState.Stable)
+        {
+            state = "Likely fits";
+            status = UsageTrendBlockAdvisorStatus.LikelyFits;
+            detail = $"Recent quota movement is quiet; the established activity-qualified baseline indicates this {durationText} block should fit before reset. Tests the current pace, not task cost.";
+        }
         else if (forecast is null
             || forecast.State is LimitRunwayForecastState.Learning or LimitRunwayForecastState.Stable
-            || (forecast.Confidence == LimitRunwayForecastConfidence.Low && !forecast.IsMock))
+            || (forecast.Confidence == LimitRunwayForecastConfidence.Low && !forecast.IsMock && !usesEstablishedBaseline))
         {
             state = "Still learning";
             status = UsageTrendBlockAdvisorStatus.StillLearning;
@@ -446,12 +466,62 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
                     $"Checks whether a {label} block fits the selected limit at the current pace, not task cost.");
             })
             .ToArray();
+        var subjectText = FormatBlockDurationSubject(selectedMinutes);
+        var verdictText = status switch
+        {
+            UsageTrendBlockAdvisorStatus.LikelyFits => "likely fits",
+            UsageTrendBlockAdvisorStatus.MayBeInterrupted => "may be interrupted",
+            UsageTrendBlockAdvisorStatus.UnlikelyToFit => "is unlikely to fit",
+            UsageTrendBlockAdvisorStatus.WaitForReset => "should wait for reset",
+            _ => "needs more evidence"
+        };
+        var (constraintLabel, constraintAt) = ResolveBlockTimelineConstraint(forecast, resetAt);
+        var conciseConfidence = usesEstablishedBaseline
+            ? "Established baseline"
+            : forecast?.Confidence switch
+        {
+            LimitRunwayForecastConfidence.Low => "Low confidence",
+            LimitRunwayForecastConfidence.Medium => "Medium confidence",
+            LimitRunwayForecastConfidence.High => "High confidence",
+            _ => "Confidence unavailable"
+        };
+        var selectedTimelinePosition = Array.IndexOf(durations, selectedMinutes) + 1;
+        var timelineProgressPercent = 100d * selectedTimelinePosition / durations.Length;
         return new UsageTrendBlockAdvisor(
             state,
             detail,
             $"Plan your next block: {durationText}. {state}. {detail}",
             options,
-            status);
+            status)
+        {
+            SubjectText = subjectText,
+            VerdictText = verdictText,
+            NowText = FormatLocalDateTime(now),
+            EndsAtText = $"{selectedEndsAt.ToLocalTime():h:mm tt} · +{durationText}",
+            ConstraintLabel = constraintLabel,
+            ConstraintTimeText = FormatLocalDateTime(constraintAt),
+            ConfidenceText = conciseConfidence,
+            TimelineAccessibleSummary = $"Now {FormatLocalDateTime(now)}. The selected {durationText} block ends {FormatLocalDateTime(selectedEndsAt)}. {constraintLabel} {FormatLocalDateTime(constraintAt)}.",
+            // The line represents the selected choice within the four planning
+            // options, not elapsed wall-clock time to the quota constraint.
+            TimelineProgressPercent = timelineProgressPercent
+        };
+    }
+
+    private static (string Label, DateTimeOffset At) ResolveBlockTimelineConstraint(
+        LimitRunwayForecast? forecast,
+        DateTimeOffset resetAt)
+    {
+        if (forecast?.State != LimitRunwayForecastState.OnTrack)
+        {
+            var earliest = forecast?.EarliestExhaustsAtUtc ?? forecast?.ExhaustsAtUtc;
+            if (earliest is DateTimeOffset value && value < resetAt)
+            {
+                return ("Earliest expected limit", value);
+            }
+        }
+
+        return ("Reset", resetAt);
     }
 
     private static string BuildAdvisorConfidenceText(LimitRunwayForecast forecast) =>
@@ -461,6 +531,17 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
             LimitRunwayForecastConfidence.Medium => "Medium-confidence forecast.",
             _ => "High-confidence forecast."
         };
+
+    private static string FormatBlockDurationSubject(int minutes) => minutes switch
+    {
+        15 => "A 15-minute block",
+        30 => "A 30-minute block",
+        60 => "A 1-hour block",
+        120 => "A 2-hour block",
+        240 => "A 4-hour block",
+        480 => "An 8-hour block",
+        _ => $"A {FormatBlockDurationLabel(minutes)} block"
+    };
 
     private static string FormatBlockDurationLabel(int minutes) => minutes switch
     {
@@ -796,22 +877,20 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
         if (isExhausted)
         {
             headline = "Limit reached";
-            forecastLead = "Waiting for the limit to reset";
-            forecastWhen = FormatLocalDateTime(resetAt);
+            forecastLead = "Reset in";
+            forecastWhen = FormatDurationCompact(resetAt - now);
         }
         else if (pointExhaustion is DateTimeOffset exhaustsAt && exhaustsAt > now && exhaustsAt < resetAt)
         {
             headline = $"About {FormatDurationCompact(exhaustsAt - now)} left at this pace";
-            forecastLead = forecast?.Confidence is LimitRunwayForecastConfidence.Medium or LimitRunwayForecastConfidence.High
-                ? "Estimated to reach the limit"
-                : "May reach the limit";
-            forecastWhen = FormatLocalDateTime(exhaustsAt);
+            forecastLead = $"Limit in about {FormatDurationCompact(exhaustsAt - now)}";
+            forecastWhen = $"• reset in {FormatDurationCompact(resetAt - now)}";
         }
         else if (forecastWindowStart is DateTimeOffset earliest && forecastWindowEnd is DateTimeOffset latest)
         {
             headline = $"About {FormatDurationRange(earliest - now, latest - now)} left at this pace";
-            forecastLead = "Could reach the limit between";
-            forecastWhen = FormatDateTimeRange(earliest, latest);
+            forecastLead = $"Limit in about {FormatDurationRange(earliest - now, latest - now)}";
+            forecastWhen = $"• reset in {FormatDurationCompact(resetAt - now)}";
         }
         else if (pacePerHour is null or <= 0)
         {
@@ -824,22 +903,12 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
         else
         {
             headline = "On pace to last until reset";
-            forecastLead = "Projected to remain below the limit until";
-            forecastWhen = FormatLocalDateTime(resetAt);
+            forecastLead = "Expected to last until reset";
+            forecastWhen = $"• reset in {FormatDurationCompact(resetAt - now)}";
         }
 
         var currentPaceText = FormatPace(pacePerHour);
         var sustainablePaceText = FormatPace(sustainablePacePerHour);
-        var momentum = BuildUsageMomentum(
-            actual,
-            windowDurationMins,
-            forecast?.ObservationDuration,
-            forecast?.SampleCount,
-            measurementGaps,
-            baselineHourlyRates,
-            currentHourActivityEvidence,
-            activityCoverage,
-            localActivityUtcHours);
         var paceRatio = pacePerHour is double currentPace
             && currentPace > 0
             && sustainablePacePerHour is double sustainablePace
@@ -847,31 +916,23 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
                 ? currentPace / sustainablePace
                 : double.NaN;
         var hasPaceRatio = double.IsFinite(paceRatio);
-        var projectedRemaining = forecast?.ProjectedRemainingAtResetPercent;
-        double? paceProjectedRemaining = pacePerHour is double currentPaceAtReset && currentPaceAtReset >= 0
-            ? 100 - (last.UsedPercent + (currentPaceAtReset * Math.Max(0, (resetAt - last.Timestamp).TotalHours)))
-            : null;
-        if (projectedRemaining is not double remaining || !double.IsFinite(remaining))
-        {
-            projectedRemaining = paceProjectedRemaining;
-        }
-        else if (remaining >= 0
-            && pointExhaustion is DateTimeOffset exhaustsBeforeReset
-            && exhaustsBeforeReset < resetAt
-            && paceProjectedRemaining is double paceRemaining
-            && paceRemaining < 0)
-        {
-            projectedRemaining = paceRemaining;
-        }
-
-        var comparisonText = projectedRemaining is double resetRemaining && double.IsFinite(resetRemaining)
-            ? resetRemaining >= 0
-                ? $"{resetRemaining:0}%"
-                : $"-{Math.Abs(resetRemaining):0}%"
-            : "—";
-        var comparisonLabel = projectedRemaining is double outcome && double.IsFinite(outcome)
-            ? outcome >= 0 ? "remaining at reset" : "will reach limit before reset"
-            : "outcome at reset";
+        var currentPaceBand = ResolvePaceBand(paceRatio);
+        var momentum = ClarifyMomentumForSustainablePace(
+            BuildUsageMomentum(
+                actual,
+                windowDurationMins,
+                forecast?.ObservationDuration,
+                forecast?.SampleCount,
+                measurementGaps,
+                baselineHourlyRates,
+                currentHourActivityEvidence,
+                activityCoverage,
+                localActivityUtcHours),
+            currentPaceBand);
+        var comparisonText = hasPaceRatio ? $"{paceRatio:0.#}×" : "—";
+        var comparisonLabel = hasPaceRatio
+            ? paceRatio > 1.05 ? "above sustainable pace" : "of sustainable pace"
+            : "comparison unavailable";
 
         string recommendation;
         if (isExhausted)
@@ -882,12 +943,12 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
             && paceRatio > 1.05
             && forecast is { Confidence: LimitRunwayForecastConfidence.Low, IsMock: false })
         {
-            recommendation = "Current pace is above sustainable; treat this as an early signal";
+            recommendation = "Early signal: at this pace, the limit may arrive before reset";
         }
         else if (hasPaceRatio && paceRatio > 1.05)
         {
             var reduction = Math.Clamp(Math.Round((1 - (1 / paceRatio)) * 20) * 5, 5, 95);
-            recommendation = $"Reduce pace by about {reduction:0}% to last until reset";
+            recommendation = $"At this pace, the limit may arrive before reset. Reduce pace by about {reduction:0}% to last until reset";
         }
         else if (hasPaceRatio)
         {
@@ -906,11 +967,62 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
             $"{Math.Clamp(last.UsedPercent, 0, 100):0}%",
             momentum,
             currentPaceText,
+            currentPaceBand,
             sustainablePaceText,
             comparisonText,
             comparisonLabel,
             recommendation,
             CanOpenPacingPlan: !isExhausted);
+    }
+
+    internal static UsagePaceBand ResolvePaceBand(double paceRatio)
+    {
+        if (!double.IsFinite(paceRatio) || paceRatio <= 0)
+        {
+            return UsagePaceBand.Unknown;
+        }
+
+        if (paceRatio < 0.95)
+        {
+            return UsagePaceBand.BelowSustainable;
+        }
+
+        if (paceRatio <= 1.05)
+        {
+            return UsagePaceBand.AtSustainable;
+        }
+
+        return paceRatio <= 1.5
+            ? UsagePaceBand.AboveSustainable
+            : UsagePaceBand.FarAboveSustainable;
+    }
+
+    internal static UsageMomentumSummary ClarifyMomentumForSustainablePace(
+        UsageMomentumSummary momentum,
+        UsagePaceBand paceBand)
+    {
+        if (momentum.IsLearning
+            || !string.Equals(momentum.ValueText, "About the same", StringComparison.Ordinal))
+        {
+            return momentum;
+        }
+
+        var stateText = paceBand switch
+        {
+            UsagePaceBand.BelowSustainable => "and below sustainable pace",
+            UsagePaceBand.AtSustainable => "and near sustainable pace",
+            UsagePaceBand.AboveSustainable or UsagePaceBand.FarAboveSustainable => "but above sustainable pace",
+            _ => "vs your recent active-hour pace"
+        };
+
+        return momentum with
+        {
+            ValueText = "Typical for you",
+            StateText = stateText,
+            AccessibleSummary = string.IsNullOrWhiteSpace(momentum.AccessibleSummary)
+                ? $"Usage momentum is typical for you, {stateText}."
+                : $"{momentum.AccessibleSummary} Current usage is typical for you, {stateText}."
+        };
     }
 
     internal static UsageMomentumSummary BuildUsageMomentum(
@@ -1024,7 +1136,7 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
         LocalActivityCoverage activityCoverage)
     {
         var latest = actual[^1].Timestamp;
-        var currentRate = UsageRateBetween(actual, measurementGaps, latest.AddHours(-1), latest);
+        var currentMeasurement = ResolveCurrentUsageRate(actual, measurementGaps, latest);
         var baselineCutoff = latest.AddHours(-1);
         var retained = retainedBaselineRates?
             .Where(rate => double.IsFinite(rate.PercentPerHour) && rate.PercentPerHour is >= 0 and <= 100)
@@ -1046,17 +1158,10 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
             : rates.Max(rate => rate.ObservedAtUtc) - rates.Min(rate => rate.ObservedAtUtc) + TimeSpan.FromHours(1);
         var confidence = ResolveMomentumConfidence(rates.Length, dayCount, evidenceSpan);
 
-        if (confidence == UsageMomentumConfidence.Learning)
+        if (rates.Length == 0)
         {
             return WithActivityDetails(
                 LearningDurableBaseline(rates.Length, dayCount, evidenceSpan, evidenceSamples),
-                activityCoverage);
-        }
-
-        if (currentRate is not double current)
-        {
-            return WithActivityDetails(
-                WaitingForCurrentMomentum(evidenceSamples, rates.Length, dayCount, confidence),
                 activityCoverage);
         }
 
@@ -1067,18 +1172,28 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
                 activityCoverage);
         }
 
+        if (currentMeasurement is not CurrentUsageRate currentMeasurementValue)
+        {
+            return WithActivityDetails(
+                WaitingForCurrentMomentum(evidenceSamples, rates.Length, dayCount, confidence),
+                activityCoverage);
+        }
+
         var weighted = BuildRecencyWeights(rates, latest);
         var median = WeightedQuantile(weighted, 0.5);
         var lower = WeightedQuantile(weighted, 0.25);
         var upper = WeightedQuantile(weighted, 0.75);
         var confidenceLabel = FormatMomentumConfidence(confidence);
-        var baselineText = $"recent median {median:0.#}%/h · usual {lower:0.#}–{upper:0.#}%/h";
-        return WithActivityDetails(CreateDurableMomentum(current, median, lower, upper, baselineText) with
+        var measurementPrefix = currentMeasurementValue.IsFullHour
+            ? string.Empty
+            : $"{FormatBaselineDuration(currentMeasurementValue.MeasuredDuration)} live · ";
+        var baselineText = $"{measurementPrefix}recent median {median:0.#}%/h · usual {lower:0.#}–{upper:0.#}%/h";
+        return WithActivityDetails(CreateDurableMomentum(currentMeasurementValue.PercentPerHour, median, lower, upper, baselineText) with
         {
             Confidence = confidence,
             BaselineHourCount = rates.Length,
             BaselineDayCount = dayCount,
-            AccessibleSummary = $"Usage momentum compared with a {confidenceLabel.ToLowerInvariant()} baseline of {rates.Length} measured hours across {FormatDayCount(dayCount)}. Recent median {median:0.#} percent per hour; usual range {lower:0.#} to {upper:0.#} percent per hour."
+            AccessibleSummary = $"Usage momentum compared with a {confidenceLabel.ToLowerInvariant()} baseline of {rates.Length} active hours across {FormatDayCount(dayCount)}. Current pace uses {FormatBaselineDuration(currentMeasurementValue.MeasuredDuration)} of measured activity. Recent median {median:0.#} percent per hour; usual range {lower:0.#} to {upper:0.#} percent per hour."
         }, activityCoverage);
     }
 
@@ -1128,8 +1243,8 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
             : $"{Math.Max(0, evidenceSamples)} samples";
         var comparableText = FormatComparablePriorHours(comparablePriorHours);
         return new UsageMomentumSummary(
-            "Baseline ready",
-            "Need a measured current hour",
+            "Measuring activity",
+            $"First look after {MinimumProgressiveCurrentMinutes} measured minutes",
             $"{FormatMomentumConfidence(confidence)} · {comparableText} across {FormatDayCount(dayCount)}",
             0)
         {
@@ -1138,7 +1253,7 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
             Confidence = confidence,
             BaselineHourCount = comparablePriorHours,
             BaselineDayCount = dayCount,
-            AccessibleSummary = $"{FormatMomentumConfidence(confidence)} baseline ready. A measured current hour is needed before momentum can be calculated. {comparableText} are available across {FormatDayCount(dayCount)} from {samplesText}."
+            AccessibleSummary = $"{FormatMomentumConfidence(confidence)} baseline ready. At least {MinimumProgressiveCurrentMinutes} measured activity minutes are needed before momentum can be calculated. {comparableText} are available across {FormatDayCount(dayCount)} from {samplesText}."
         };
     }
 
@@ -1158,8 +1273,8 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
                 Math.Clamp(dayCount / (double)EarlyBaselineDays, 0, 1),
                 Math.Clamp(evidenceSpan.TotalHours / EarlyMinimumSpanHours, 0, 1)));
         return new UsageMomentumSummary(
-            $"{progress * 100:0}% ready",
-            $"Need {EarlyBaselineHours} measured hours on {EarlyBaselineDays} days",
+            "Waiting",
+            "Need the first completed active hour",
             $"{comparableText} across {FormatDayCount(dayCount)} · {samplesText}",
             0)
         {
@@ -1167,7 +1282,7 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
             BaselineProgress = progress,
             BaselineHourCount = comparablePriorHours,
             BaselineDayCount = dayCount,
-            AccessibleSummary = $"Learning baseline. {EarlyBaselineHours} measured hours on {EarlyBaselineDays} days with enough separation are needed. {comparableText} are currently available across {FormatDayCount(dayCount)} from {samplesText}."
+            AccessibleSummary = $"Learning baseline. One completed activity-qualified hour is needed for the first look. {comparableText} are currently available across {FormatDayCount(dayCount)} from {samplesText}."
         };
     }
 
@@ -1199,12 +1314,15 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
             ? UsageMomentumConfidence.Established
             : hourCount >= EarlyBaselineHours && dayCount >= EarlyBaselineDays && evidenceSpan >= TimeSpan.FromHours(EarlyMinimumSpanHours)
                 ? UsageMomentumConfidence.EarlyEstimate
-                : UsageMomentumConfidence.Learning;
+                : hourCount >= 1
+                    ? UsageMomentumConfidence.FirstLook
+                    : UsageMomentumConfidence.Learning;
 
     private static string FormatDayCount(int count) => count == 1 ? "1 day" : $"{Math.Max(0, count)} days";
 
     private static string FormatMomentumConfidence(UsageMomentumConfidence confidence) => confidence switch
     {
+        UsageMomentumConfidence.FirstLook => "First look",
         UsageMomentumConfidence.EarlyEstimate => "Early estimate",
         UsageMomentumConfidence.Established => "Established",
         _ => "Learning"
@@ -1242,6 +1360,11 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
 
     private readonly record struct WeightedValue(double Value, double Weight);
 
+    private readonly record struct CurrentUsageRate(
+        double PercentPerHour,
+        TimeSpan MeasuredDuration,
+        bool IsFullHour);
+
     private static UsageMomentumSummary CreateMomentum(double currentRate, double medianRate, string baselineText)
     {
         var difference = currentRate - medianRate;
@@ -1253,19 +1376,19 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
         string stateText;
         if (Math.Abs(difference) <= steadyThreshold)
         {
-            valueText = "→ 0%/h";
-            stateText = "pace steady";
+            valueText = "About the same";
+            stateText = "as recent baseline";
             gaugeValue = 0;
         }
         else if (difference > 0)
         {
-            valueText = $"↗ +{difference:0.#}%/h";
-            stateText = "usage accelerating";
+            valueText = $"{difference:0.#}%/h faster";
+            stateText = "than recent baseline";
         }
         else
         {
-            valueText = $"↘ -{Math.Abs(difference):0.#}%/h";
-            stateText = "usage slowing";
+            valueText = $"{Math.Abs(difference):0.#}%/h slower";
+            stateText = "than recent baseline";
         }
 
         return new UsageMomentumSummary(valueText, stateText, baselineText, gaugeValue)
@@ -1330,19 +1453,19 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
         string stateText;
         if (Math.Abs(difference) <= steadyThreshold)
         {
-            valueText = "→ 0%/h";
-            stateText = "within recent range";
+            valueText = "About the same";
+            stateText = "as recent active-hour baseline";
             gaugeValue = 0;
         }
         else if (difference > 0)
         {
-            valueText = $"↗ +{difference:0.#}%/h";
-            stateText = "above recent baseline";
+            valueText = $"{difference:0.#}%/h faster";
+            stateText = "than recent active-hour baseline";
         }
         else
         {
-            valueText = $"↘ -{Math.Abs(difference):0.#}%/h";
-            stateText = "below recent baseline";
+            valueText = $"{Math.Abs(difference):0.#}%/h slower";
+            stateText = "than recent active-hour baseline";
         }
 
         return new UsageMomentumSummary(valueText, stateText, baselineText, gaugeValue)
@@ -1399,6 +1522,37 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
         }
 
         return Math.Max(0, endPoint.UsedPercent - startPoint.UsedPercent) / hours;
+    }
+
+    private static CurrentUsageRate? ResolveCurrentUsageRate(
+        IReadOnlyList<UsageTrendPoint> actual,
+        IReadOnlyList<UsageTrendGap> measurementGaps,
+        DateTimeOffset latest)
+    {
+        if (UsageRateBetween(actual, measurementGaps, latest.AddHours(-1), latest) is double fullHourRate)
+        {
+            return new CurrentUsageRate(fullHourRate, TimeSpan.FromHours(1), IsFullHour: true);
+        }
+
+        var earliestAllowed = latest.AddHours(-1);
+        var minimumDuration = TimeSpan.FromMinutes(MinimumProgressiveCurrentMinutes);
+        var startPoint = actual
+            .Where(point => point.Timestamp >= earliestAllowed && point.Timestamp < latest)
+            .Where(point => latest - point.Timestamp >= minimumDuration)
+            .FirstOrDefault(point => !OverlapsMeasurementGap(measurementGaps, point.Timestamp, latest));
+        if (startPoint is null)
+        {
+            return null;
+        }
+
+        var duration = latest - startPoint.Timestamp;
+        var delta = actual[^1].UsedPercent - startPoint.UsedPercent;
+        if (duration <= TimeSpan.Zero || delta < 0 || !double.IsFinite(delta))
+        {
+            return null;
+        }
+
+        return new CurrentUsageRate(delta / duration.TotalHours, duration, IsFullHour: false);
     }
 
     private static bool OverlapsMeasurementGap(
@@ -1461,9 +1615,10 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
                 var days = momentum.BaselineDayCount == 1 ? "1 day" : $"{momentum.BaselineDayCount} days";
                 return momentum.Confidence switch
                 {
-                    UsageMomentumConfidence.Established => $"Established baseline • {momentum.BaselineHourCount} measured hours across {days}",
-                    UsageMomentumConfidence.EarlyEstimate => $"Early estimate • {momentum.BaselineHourCount} measured hours across {days}",
-                    _ => $"Learning weekly baseline • {momentum.BaselineHourCount}/{EarlyBaselineHours} hours across {momentum.BaselineDayCount}/{EarlyBaselineDays} days"
+                    UsageMomentumConfidence.Established => $"Established • {momentum.BaselineHourCount} active hours • {days}",
+                    UsageMomentumConfidence.EarlyEstimate => $"Early estimate • {momentum.BaselineHourCount} active hours • {days}",
+                    UsageMomentumConfidence.FirstLook => $"First look • {momentum.BaselineHourCount} active hours • {days}",
+                    _ => "Waiting for the first activity-qualified hour"
                 };
             }
 

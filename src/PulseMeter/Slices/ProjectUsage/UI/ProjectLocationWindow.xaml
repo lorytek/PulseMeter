@@ -43,16 +43,23 @@
         </StackPanel>
         <TextBlock Grid.Row="4" Margin="0,14,0,0" Text="{Binding Feedback}" Foreground="#4B5563"
                    TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
-        <TextBlock Grid.Row="5" Margin="0,12,0,0" TextWrapping="Wrap" Foreground="#4B5563"
-                   Text="Starts Windows PowerShell with this folder as its initial working directory. PulseMeter supplies no commands; your normal PowerShell profile may run." />
+        <TextBlock Grid.Row="5" Margin="0,12,0,0" TextWrapping="Wrap" Foreground="#4B5563">
+            <Run Text="Open in Codex starts a new task with this folder as its workspace. " />
+            <Run Text="Windows PowerShell starts in this folder; PulseMeter supplies no commands, and your normal PowerShell profile may run." />
+        </TextBlock>
         <Grid Grid.Row="6" Margin="0,16,0,0">
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
             <Button Grid.Row="0" Grid.Column="1" Padding="14,6" Content="Open folder" Command="{Binding OpenFolderCommand}"
                     AutomationProperties.Name="Open project folder" />
-            <Button Grid.Row="0" Grid.Column="2" Margin="8,0,0,0" Padding="14,6" Content="Open Windows PowerShell here"
+            <Button Grid.Row="0" Grid.Column="2" Margin="8,0,0,0" Padding="14,6" Content="Open in Codex"
+                    Background="#EAF2FF" BorderBrush="#93C5FD" Foreground="#2563EB" FontWeight="SemiBold"
+                    Command="{Binding OpenCodexCommand}"
+                    ToolTip="Start a new Codex task using this folder as the workspace"
+                    AutomationProperties.Name="Open project folder in Codex" />
+            <Button Grid.Row="0" Grid.Column="3" Margin="8,0,0,0" Padding="14,6" Content="Open PowerShell"
                     Command="{Binding OpenWindowsPowerShellCommand}" AutomationProperties.Name="Open Windows PowerShell in project folder" />
-            <Button Grid.Row="1" Grid.Column="2" Margin="8,8,0,0" Padding="14,6" Content="Close" Click="Close_Click" IsCancel="True"
+            <Button Grid.Row="1" Grid.Column="3" Margin="8,8,0,0" Padding="14,6" Content="Close" Click="Close_Click" IsCancel="True"
                     AutomationProperties.Name="Close project location" />
         </Grid>
     </Grid>

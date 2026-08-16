@@ -2,6 +2,7 @@ using System.Drawing;
 using System.IO;
 using System.ComponentModel;
 using System.Windows.Forms;
+using PulseMeter.Slices.ExpandedHeader.UI;
 using PulseMeter.Slices.PulseMeterWindow.Business;
 using PulseMeter.Slices.PulseMeterWindow;
 using PulseMeter.Slices.SupportSnapshot.UI;
@@ -26,6 +27,7 @@ public sealed class TrayIconService : ITrayIconService
     private readonly ISupportSnapshotPresenter? _supportSnapshotPresenter;
     private readonly ICodexDesktopProcessSnapshotPresenter? _desktopProcessSnapshotPresenter;
     private readonly PropertyChangedEventHandler _viewModelPropertyChangedHandler;
+    private readonly PropertyChangedEventHandler _expandedHeaderPropertyChangedHandler;
     private readonly TrayConfidenceTransitionTracker _confidenceTransitions = new();
     private bool _disposed;
 
@@ -140,6 +142,14 @@ public sealed class TrayIconService : ITrayIconService
 
             _pulseMeterWindow.Invoke(() => SyncMenuCheckmarks(e.PropertyName));
         };
+        _expandedHeaderPropertyChangedHandler = (_, e) =>
+        {
+            if (string.IsNullOrEmpty(e.PropertyName)
+                || e.PropertyName == nameof(ExpandedHeaderViewModel.WeeklyUsageText))
+            {
+                _pulseMeterWindow.Invoke(UpdateConfidenceBeacon);
+            }
+        };
         _contextMenu.Items.Add(_alwaysOnTopItem);
 
         _quickAccessHotkeyItem = new ToolStripMenuItem("System-wide quick access shortcut (Ctrl+Alt+Shift+P)")
@@ -166,6 +176,7 @@ public sealed class TrayIconService : ITrayIconService
         TrayConfidenceIconCache? confidenceIcons = null;
         NotifyIcon? notifyIcon = null;
         var propertyChangedSubscribed = false;
+        var expandedHeaderPropertyChangedSubscribed = false;
         try
         {
             appIcon = LoadAppIcon();
@@ -181,11 +192,17 @@ public sealed class TrayIconService : ITrayIconService
             _notifyIcon.DoubleClick += (_, _) => ShowPulseMeter(expand: true);
             _viewModel.PropertyChanged += _viewModelPropertyChangedHandler;
             propertyChangedSubscribed = true;
+            _viewModel.ExpandedHeader.PropertyChanged += _expandedHeaderPropertyChangedHandler;
+            expandedHeaderPropertyChangedSubscribed = true;
             UpdateConfidenceBeacon();
             _notifyIcon.Visible = true;
         }
         catch
         {
+            if (expandedHeaderPropertyChangedSubscribed)
+            {
+                _viewModel.ExpandedHeader.PropertyChanged -= _expandedHeaderPropertyChangedHandler;
+            }
             if (propertyChangedSubscribed)
             {
                 _viewModel.PropertyChanged -= _viewModelPropertyChangedHandler;
@@ -248,6 +265,7 @@ public sealed class TrayIconService : ITrayIconService
 
         _disposed = true;
         _viewModel.PropertyChanged -= _viewModelPropertyChangedHandler;
+        _viewModel.ExpandedHeader.PropertyChanged -= _expandedHeaderPropertyChangedHandler;
         _notifyIcon.Visible = false;
         _notifyIcon.Dispose();
         _contextMenu.Dispose();
@@ -262,21 +280,33 @@ public sealed class TrayIconService : ITrayIconService
             return;
         }
 
-        var state = _viewModel.TrayConfidenceState;
-        if (!_confidenceTransitions.ShouldApply(state))
+        var presentation = TrayIconPresentation.Create(
+            _viewModel.TrayConfidenceState,
+            GetWeeklyRemainingPercent());
+        if (!_confidenceTransitions.ShouldApply(presentation))
         {
             return;
         }
-        _notifyIcon.Text = TrayConfidenceBeacon.Tooltip(state);
+        _notifyIcon.Text = TrayConfidenceBeacon.Tooltip(presentation);
         try
         {
-            _notifyIcon.Icon = _confidenceIcons.Get(state);
+            _notifyIcon.Icon = _confidenceIcons.Get(presentation);
         }
         catch (Exception)
         {
             // Keep the last-good/base icon. The fixed tooltip is still the accessible state signal.
         }
-        _confidenceTransitions.MarkApplied(state);
+        _confidenceTransitions.MarkApplied(presentation);
+    }
+
+    private double? GetWeeklyRemainingPercent()
+    {
+        var weekly = _viewModel.CompactQuotaRows.FirstOrDefault(row => row.IsWeekly);
+        return weekly is not null
+               && weekly.RemainingPercentText.Contains('%')
+               && double.IsFinite(weekly.RemainingPercentValue)
+            ? weekly.RemainingPercentValue
+            : null;
     }
 
     public void ShowNotification(string title, string message)

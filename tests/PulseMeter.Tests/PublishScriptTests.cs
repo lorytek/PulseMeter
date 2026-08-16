@@ -14,6 +14,7 @@ public sealed class PublishScriptTests
         Assert.Contains("$launcherTarget = $localHostExe", script);
         Assert.Contains("$shortcut.TargetPath = $launcherTarget", script);
         Assert.Contains("$shortcut.Arguments = $launcherArguments", script);
+        Assert.Contains("$shortcut.IconLocation = \"$launcherTarget,0\"", script);
         Assert.Contains("Both published PulseMeter launchers were blocked. Existing shortcuts were not changed.", script);
         Assert.DoesNotContain("launch-pulsemeter.vbs", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("wscript.exe", script, StringComparison.OrdinalIgnoreCase);
@@ -76,6 +77,17 @@ public sealed class PublishScriptTests
         Assert.Contains("if (Test-Path -LiteralPath $taskbarShortcutPath)", script);
         Assert.Contains("Save-PulseMeterShortcut $taskbarShortcutPath", script);
         Assert.Contains("PulseMeter is not pinned to the taskbar", script);
+    }
+
+    [Fact]
+    public void PublishLocal_RefreshesTheWindowsShellIconAfterUpdatingShortcuts()
+    {
+        var script = File.ReadAllText(FindWorkspaceFile("scripts", "publish-local.ps1"));
+
+        Assert.Contains("System32\\ie4uinit.exe", script);
+        Assert.Contains("Start-Process -FilePath $iconRefreshTool -ArgumentList \"-show\"", script);
+        Assert.DoesNotContain("-WindowStyle Hidden -Wait", script);
+        Assert.Contains("Refresh-ShellIcons", script);
     }
 
     [Fact]

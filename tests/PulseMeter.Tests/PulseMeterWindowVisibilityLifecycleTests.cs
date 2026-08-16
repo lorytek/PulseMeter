@@ -2,6 +2,7 @@ using System.Runtime.ExceptionServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Threading;
 using PulseMeter.Slices.NavigationRail.Models;
@@ -13,6 +14,24 @@ namespace PulseMeter.Tests;
 [Collection(UsageTrendWpfCollection.Name)]
 public sealed class PulseMeterWindowVisibilityLifecycleTests
 {
+    [Fact]
+    public void InteractiveElementDetection_FollowsTextRunToContainingButton()
+    {
+        RunOnStaThread(() =>
+        {
+            var run = new Run("Add note");
+            var text = new TextBlock();
+            text.Inlines.Add(run);
+            var button = new Button { Content = text };
+            var host = new Window { Content = button };
+            host.Show();
+            host.UpdateLayout();
+
+            Assert.True(PulseMeterWindow.IsInteractiveElement(run));
+            host.Close();
+        });
+    }
+
     [Fact]
     public void NormalClose_HidesSingletonWindow_AndTrayShowCanRestoreIt()
     {

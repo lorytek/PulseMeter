@@ -180,13 +180,20 @@
                                    FontSize="13" />
                         <TextBlock Margin="5,0,0,0"
                                    Text="{Binding ForecastWhenText}"
-                                   Foreground="#D97706"
+                                   Foreground="#16A34A"
                                    FontSize="13"
                                    FontWeight="SemiBold" />
-                        <TextBlock Margin="16,0,0,0"
-                                   Text="{Binding ConfidenceText}"
-                                   Foreground="#2563EB"
-                                   FontSize="12" />
+                        <Border Margin="14,-2,0,-2"
+                                Padding="8,3"
+                                Background="#EFF6FF"
+                                BorderBrush="#DBEAFE"
+                                BorderThickness="1"
+                                CornerRadius="8">
+                            <TextBlock Text="{Binding ConfidenceText}"
+                                       Foreground="#1D4ED8"
+                                       FontSize="11"
+                                       FontWeight="SemiBold" />
+                        </Border>
                     </WrapPanel>
                 </StackPanel>
 
@@ -219,16 +226,15 @@
                                     Orientation="Horizontal"
                                     HorizontalAlignment="Center">
                             <TextBlock Text="{Binding MomentumValueText}"
+                                       Foreground="{Binding MomentumValueBrush}"
                                        FontWeight="SemiBold"
                                        TextAlignment="Center"
                                        VerticalAlignment="Center">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground" Value="#2563EB" />
-                                        <Setter Property="FontSize" Value="24" />
+                                        <Setter Property="FontSize" Value="17.5" />
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsMomentumLearning}" Value="True">
-                                                <Setter Property="Foreground" Value="#334155" />
                                                 <Setter Property="FontSize" Value="15.5" />
                                             </DataTrigger>
                                         </Style.Triggers>
@@ -249,7 +255,7 @@
                                     ToolTipService.InitialShowDelay="250"
                                     ToolTipService.ShowDuration="15000"
                                     AutomationProperties.Name="Preview completed momentum gauge"
-                                    AutomationProperties.HelpText="Focus or hover to see an example of the momentum gauge after enough baseline data is collected. Press Escape to dismiss it."
+                                    AutomationProperties.HelpText="Focus or hover to see an example of the momentum gauge after the first activity-qualified baseline hour. Press Escape to dismiss it."
                                     GotKeyboardFocus="MomentumPreviewInfo_GotKeyboardFocus"
                                     LostKeyboardFocus="MomentumPreviewInfo_LostKeyboardFocus"
                                     PreviewKeyDown="MomentumPreviewInfo_PreviewKeyDown">
@@ -288,12 +294,12 @@
                                                 BorderThickness="1"
                                                 CornerRadius="10">
                                             <StackPanel>
-                                                <TextBlock Text="Example when ready"
+                                                <TextBlock Text="Example after the first active hour"
                                                            Foreground="#0F172A"
                                                            FontSize="12"
                                                            FontWeight="SemiBold" />
                                                 <TextBlock Margin="0,2,0,2"
-                                                           Text="Once the baseline is complete, this becomes a live momentum reading."
+                                                           Text="After one completed active hour and 15 measured live minutes, this becomes a first-look momentum reading."
                                                            Foreground="#64748B"
                                                            FontSize="10.5"
                                                            LineHeight="14"
@@ -313,20 +319,15 @@
                                                            FontWeight="SemiBold"
                                                            TextAlignment="Center" />
                                                 <TextBlock Margin="0,1,0,0"
-                                                           Text="&#x2197; +0.6%/h"
+                                                           Text="0.6%/h faster"
                                                            Foreground="#2563EB"
-                                                           FontSize="18"
+                                                           FontSize="16"
                                                            FontWeight="SemiBold"
                                                            TextAlignment="Center" />
-                                                <TextBlock Text="usage accelerating"
-                                                           Foreground="#D97706"
+                                                <TextBlock Text="than recent active-hour baseline"
+                                                           Foreground="#64748B"
                                                            FontSize="10.5"
                                                            FontWeight="SemiBold"
-                                                           TextAlignment="Center" />
-                                                <TextBlock Margin="0,1,0,0"
-                                                           Text="compared with your baseline"
-                                                           Foreground="#94A3B8"
-                                                           FontSize="10"
                                                            TextAlignment="Center" />
                                             </StackPanel>
                                         </Border>
@@ -348,17 +349,6 @@
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
                                     <Setter Property="Foreground" Value="#64748B" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding MomentumStateText}" Value="usage accelerating">
-                                            <Setter Property="Foreground" Value="#D97706" />
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding MomentumStateText}" Value="usage slowing">
-                                            <Setter Property="Foreground" Value="#16A34A" />
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding IsMomentumLearning}" Value="True">
-                                            <Setter Property="Foreground" Value="#64748B" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
                                 </Style>
                             </TextBlock.Style>
                         </TextBlock>
@@ -414,6 +404,12 @@
                                         <TextBlock Margin="0,7,0,0"
                                                    Text="{Binding MomentumMeaningText}"
                                                    Foreground="#64748B"
+                                                   FontSize="10.5"
+                                                   LineHeight="14"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,6,0,0"
+                                                   Text="Confidence grows: First look at 1 hour; Early at 8 hours over 2 days; Established at 24 hours over 3 days."
+                                                   Foreground="#475569"
                                                    FontSize="10.5"
                                                    LineHeight="14"
                                                    TextWrapping="Wrap" />
@@ -480,9 +476,25 @@
 
                     <StackPanel Grid.Column="2" Margin="18,0,14,0" VerticalAlignment="Center">
                         <TextBlock Text="{Binding CurrentPaceText}"
-                                   Foreground="#2563EB"
                                    FontSize="24"
-                                   FontWeight="SemiBold" />
+                                   FontWeight="SemiBold">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="#2563EB" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding CurrentPaceBand}" Value="BelowSustainable">
+                                            <Setter Property="Foreground" Value="#16A34A" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding CurrentPaceBand}" Value="AboveSustainable">
+                                            <Setter Property="Foreground" Value="#D97706" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding CurrentPaceBand}" Value="FarAboveSustainable">
+                                            <Setter Property="Foreground" Value="#DC2626" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                         <TextBlock Margin="0,2,0,0"
                                    Text="current pace"
                                    Foreground="#64748B"
@@ -510,14 +522,18 @@
                                    FontWeight="SemiBold">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
-                                    <Setter Property="Foreground" Value="#16A34A" />
+                                    <Setter Property="Foreground" Value="#2563EB" />
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding PaceComparisonLabel}"
-                                                     Value="will reach limit before reset">
+                                        <DataTrigger Binding="{Binding CurrentPaceBand}" Value="BelowSustainable">
+                                            <Setter Property="Foreground" Value="#16A34A" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding CurrentPaceBand}" Value="AboveSustainable">
+                                            <Setter Property="Foreground" Value="#D97706" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding CurrentPaceBand}" Value="FarAboveSustainable">
                                             <Setter Property="Foreground" Value="#DC2626" />
                                         </DataTrigger>
-                                        <DataTrigger Binding="{Binding PaceComparisonLabel}"
-                                                     Value="outcome at reset">
+                                        <DataTrigger Binding="{Binding CurrentPaceBand}" Value="Unknown">
                                             <Setter Property="Foreground" Value="#64748B" />
                                         </DataTrigger>
                                     </Style.Triggers>
@@ -532,12 +548,65 @@
                     </StackPanel>
                 </Grid>
 
+                <Border Margin="16,11,16,0"
+                        Padding="10,7"
+                        BorderThickness="1"
+                        CornerRadius="8">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Background" Value="#F0FDF4" />
+                            <Setter Property="BorderBrush" Value="#BBF7D0" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding PaceComparisonLabel}" Value="above sustainable pace">
+                                    <Setter Property="Background" Value="#FFF7ED" />
+                                    <Setter Property="BorderBrush" Value="#FED7AA" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding PaceComparisonLabel}" Value="comparison unavailable">
+                                    <Setter Property="Background" Value="#F8FAFC" />
+                                    <Setter Property="BorderBrush" Value="#E2E8F0" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <TextBlock Text="{Binding RecommendationText}"
+                               Foreground="#475569"
+                               FontSize="11.5"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap" />
+                </Border>
+
                 <Border Height="1"
                         Margin="16,14,16,0"
                         Background="#E2E8F0" />
 
+                <WrapPanel Margin="16,9,16,0"
+                           HorizontalAlignment="Left"
+                           VerticalAlignment="Center"
+                           AutomationProperties.Name="Usage chart legend">
+                    <StackPanel Margin="0,0,14,0" Orientation="Horizontal">
+                        <Line Width="18" Height="8" Y1="4" Y2="4" X2="18" Stroke="#2563EB" StrokeThickness="2.4" />
+                        <TextBlock Margin="5,0,0,0" Text="Actual usage" Foreground="#475569" FontSize="10.5" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,14,0" Orientation="Horizontal">
+                        <Line Width="18" Height="8" Y1="4" Y2="4" X2="18" Stroke="#2563EB" StrokeThickness="1.8" StrokeDashArray="1,2" />
+                        <TextBlock Margin="5,0,0,0" Text="Current forecast" Foreground="#475569" FontSize="10.5" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,14,0" Orientation="Horizontal">
+                        <Line Width="18" Height="8" Y1="4" Y2="4" X2="18" Stroke="#16A34A" StrokeThickness="1.6" StrokeDashArray="4,3" />
+                        <TextBlock Margin="5,0,0,0" Text="Sustainable pace" Foreground="#475569" FontSize="10.5" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,14,0" Orientation="Horizontal">
+                        <Line Width="18" Height="8" Y1="4" Y2="4" X2="18" Stroke="#EA580C" StrokeThickness="1.4" StrokeDashArray="4,3" />
+                        <TextBlock Margin="5,0,0,0" Text="Expected limit" Foreground="#475569" FontSize="10.5" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <Line Width="18" Height="8" Y1="4" Y2="4" X2="18" Stroke="#16A34A" StrokeThickness="1.2" StrokeDashArray="4,3" />
+                        <TextBlock Margin="5,0,0,0" Text="Reset" Foreground="#475569" FontSize="10.5" />
+                    </StackPanel>
+                </WrapPanel>
+
                 <local:UsageTrendChart Height="380"
-                                       Margin="8,8,8,8"
+                                       Margin="8,4,8,8"
                                        HorizontalAlignment="Stretch"
                                        VerticalAlignment="Stretch"
                                        Model="{Binding ChartModel}"
