@@ -47,6 +47,53 @@ public sealed class TrayConfidenceBeaconTests
         }
     }
 
+    [Theory]
+    [InlineData(72.4, 72)]
+    [InlineData(72.5, 73)]
+    [InlineData(-8, 0)]
+    [InlineData(140, 100)]
+    public void Presentation_LiveUsageRoundsAndBoundsTheDisplayedNumber(
+        double remainingPercent,
+        int expected)
+    {
+        var presentation = TrayIconPresentation.Create(
+            TrayConfidenceState.Live,
+            remainingPercent);
+
+        Assert.Equal(expected, presentation.RemainingPercent);
+        Assert.Equal($"PulseMeter — Weekly {expected}% left", TrayConfidenceBeacon.Tooltip(presentation));
+        Assert.InRange(TrayConfidenceBeacon.Tooltip(presentation).Length, 1, 63);
+    }
+
+    [Fact]
+    public void Presentation_HidesUsageOutsideFreshLiveState()
+    {
+        Assert.Null(TrayIconPresentation.Create(TrayConfidenceState.Live, null).RemainingPercent);
+        Assert.Null(TrayIconPresentation.Create(TrayConfidenceState.Live, double.NaN).RemainingPercent);
+        Assert.Null(TrayIconPresentation.Create(TrayConfidenceState.Live, double.PositiveInfinity).RemainingPercent);
+        Assert.Null(TrayIconPresentation.Create(TrayConfidenceState.Stale, 72).RemainingPercent);
+        Assert.Null(TrayIconPresentation.Create(TrayConfidenceState.Syncing, 72).RemainingPercent);
+        Assert.Equal(
+            "PulseMeter — Stale",
+            TrayConfidenceBeacon.Tooltip(TrayIconPresentation.Create(TrayConfidenceState.Stale, 72)));
+    }
+
+    [Theory]
+    [InlineData(72, 22, 163, 74)]
+    [InlineData(49, 31, 115, 255)]
+    [InlineData(24, 217, 119, 6)]
+    [InlineData(9, 220, 38, 38)]
+    public void UsageBadgeColor_UsesReadableRemainingQuotaBands(
+        int remainingPercent,
+        int red,
+        int green,
+        int blue)
+    {
+        Assert.Equal(
+            Color.FromArgb(red, green, blue).ToArgb(),
+            TrayConfidenceBeacon.UsageBadgeColor(remainingPercent).ToArgb());
+    }
+
     [Fact]
     public void IconCache_DeduplicatesVariantsAndDisposesOnce()
     {
@@ -55,7 +102,11 @@ public sealed class TrayConfidenceBeaconTests
         var live = cache.Get(TrayConfidenceState.Live);
         Assert.Same(live, cache.Get(TrayConfidenceState.Live));
         Assert.NotSame(live, cache.Get(TrayConfidenceState.Stale));
-        Assert.Equal(2, cache.CachedIconCount);
+        var badge72 = cache.Get(TrayIconPresentation.Create(TrayConfidenceState.Live, 72));
+        Assert.Same(badge72, cache.Get(TrayIconPresentation.Create(TrayConfidenceState.Live, 72.4)));
+        Assert.NotSame(badge72, cache.Get(TrayIconPresentation.Create(TrayConfidenceState.Live, 71)));
+        Assert.NotSame(live, badge72);
+        Assert.Equal(4, cache.CachedIconCount);
         cache.Dispose();
         cache.Dispose();
         Assert.Equal(0, cache.CachedIconCount);

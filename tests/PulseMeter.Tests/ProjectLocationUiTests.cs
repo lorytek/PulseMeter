@@ -48,6 +48,10 @@ public sealed class ProjectLocationUiTests
         Assert.Equal([@"D:\Override"], service.OpenFolderPaths);
         Assert.Equal("Folder-open request sent.", viewModel.Feedback);
 
+        viewModel.OpenCodexCommand.Execute(null);
+        Assert.Equal([@"D:\Override"], service.OpenCodexPaths);
+        Assert.Equal("Codex launch requested.", viewModel.Feedback);
+
         viewModel.OpenWindowsPowerShellCommand.Execute(null);
         Assert.Equal("Windows PowerShell launch requested.", viewModel.Feedback);
 
@@ -59,7 +63,7 @@ public sealed class ProjectLocationUiTests
     [Theory]
     [InlineData(ProjectLocationActionResult.InvalidLocation, "This folder is unavailable.")]
     [InlineData(ProjectLocationActionResult.LauncherUnavailable, "Windows PowerShell is unavailable")]
-    [InlineData(ProjectLocationActionResult.LaunchFailed, "Could not start the requested Windows action.")]
+    [InlineData(ProjectLocationActionResult.LaunchFailed, "Could not start Windows PowerShell.")]
     public void LocationViewModel_UsesBoundedActionFeedback(ProjectLocationActionResult result, string expected)
     {
         var service = new RecordingActionService { Result = result };
@@ -68,6 +72,18 @@ public sealed class ProjectLocationUiTests
         viewModel.OpenWindowsPowerShellCommand.Execute(null);
 
         Assert.Contains(expected, viewModel.Feedback);
+        Assert.DoesNotContain(@"C:\Observed", viewModel.Feedback, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void LocationViewModel_UsesCodexSpecificFailureFeedbackWithoutExposingThePath()
+    {
+        var service = new RecordingActionService { Result = ProjectLocationActionResult.LaunchFailed };
+        var viewModel = new ProjectLocationViewModel("PulseMeter", @"C:\Observed", service);
+
+        viewModel.OpenCodexCommand.Execute(null);
+
+        Assert.Equal("Could not open Codex. Make sure Codex is installed and try again.", viewModel.Feedback);
         Assert.DoesNotContain(@"C:\Observed", viewModel.Feedback, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -165,13 +181,31 @@ public sealed class ProjectLocationUiTests
         Assert.Contains("PulseMeter attributed activity to this path. It may not be the repository root or the worktree you intend.", xaml);
         Assert.Contains("Chosen for this window only", File.ReadAllText(Path.Combine(root, "src", "PulseMeter", "Slices", "ProjectUsage", "UI", "ProjectLocationViewModel.cs")));
         Assert.Contains("Content=\"Open folder\"", xaml);
-        Assert.Contains("Content=\"Open Windows PowerShell here\"", xaml);
-        Assert.Contains("PulseMeter supplies no commands; your normal PowerShell profile may run.", xaml);
+        Assert.Contains("Content=\"Open in Codex\"", xaml);
+        Assert.Contains("Command=\"{Binding OpenCodexCommand}\"", xaml);
+        Assert.Contains("AutomationProperties.Name=\"Open project folder in Codex\"", xaml);
+        Assert.Contains("Open in Codex starts a new task with this folder as its workspace.", xaml);
+        Assert.Contains("Content=\"Open PowerShell\"", xaml);
+        Assert.Contains("PulseMeter supplies no commands, and your normal PowerShell profile may run.", xaml);
         Assert.Contains("IsCancel=\"True\"", xaml);
         Assert.DoesNotContain("verified", xaml, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("worktree ready", xaml, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(2, xaml.Split("MaxHeight=\"112\"", StringSplitOptions.None).Length - 1);
         Assert.Equal(2, xaml.Split("VerticalScrollBarVisibility=\"Auto\"", StringSplitOptions.None).Length - 1);
+    }
+
+    [Fact]
+    public void ProjectUsageSection_ShowsStyledOpenSelectedProjectAction()
+    {
+        var root = TestWorkspace.FindRoot();
+        var xaml = File.ReadAllText(Path.Combine(root, "src", "PulseMeter", "Slices", "ProjectUsage", "UI", "ProjectUsageSection.xaml"));
+
+        Assert.Contains("x:Key=\"OpenSelectedProjectButtonStyle\"", xaml);
+        Assert.Contains("<Setter Property=\"Background\" Value=\"#1F73FF\" />", xaml);
+        Assert.Contains("Text=\"Open selected project\"", xaml);
+        Assert.Contains("AutomationProperties.Name=\"Open selected project\"", xaml);
+        Assert.Contains("<Trigger Property=\"IsEnabled\" Value=\"False\">", xaml);
+        Assert.DoesNotContain("Project location…", xaml);
     }
 
     [Fact]
@@ -254,9 +288,11 @@ public sealed class ProjectLocationUiTests
     private sealed class RecordingActionService : IProjectLocationActionService
     {
         public List<string?> OpenFolderPaths { get; } = [];
+        public List<string?> OpenCodexPaths { get; } = [];
         public ProjectLocationActionResult Result { get; set; } = ProjectLocationActionResult.Succeeded;
         public Action? OnOpenFolder { get; set; }
         public ProjectLocationActionResult OpenFolder(string? observedPath) { OpenFolderPaths.Add(observedPath); OnOpenFolder?.Invoke(); return Result; }
+        public ProjectLocationActionResult OpenCodex(string? observedPath) { OpenCodexPaths.Add(observedPath); return Result; }
         public ProjectLocationActionResult OpenWindowsPowerShell(string? observedPath) => Result;
     }
 

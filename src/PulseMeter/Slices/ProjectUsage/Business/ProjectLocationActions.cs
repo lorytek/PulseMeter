@@ -5,6 +5,8 @@ public interface IProjectLocationActionService
 {
     ProjectLocationActionResult OpenFolder(string? observedPath);
 
+    ProjectLocationActionResult OpenCodex(string? observedPath);
+
     ProjectLocationActionResult OpenWindowsPowerShell(string? observedPath);
 }
 

@@ -51,6 +51,7 @@ public sealed class UsageTrendChart : FrameworkElement
     private static readonly Brush AmberBandBrush = Freeze(new SolidColorBrush(Color.FromArgb(28, 251, 146, 60)));
     private static readonly Brush ForecastWindowBrush = Freeze(new SolidColorBrush(Color.FromArgb(125, 234, 88, 12)));
     private static readonly Brush HoverFillBrush = Freeze(new SolidColorBrush(Color.FromArgb(45, 37, 99, 235)));
+    private static readonly Brush SeriesLabelBackground = Freeze(new SolidColorBrush(Color.FromRgb(255, 255, 255)));
     private static readonly Pen GridPen = Freeze(new Pen(GridBrush, 1));
     private static readonly Pen TimeGridPen = CreateDashedPen(MinorTimeGridBrush, 1, DashStyles.Dot);
     private static readonly Pen MidnightGridPen = Freeze(new Pen(GridBrush, 1));
@@ -485,9 +486,9 @@ public sealed class UsageTrendChart : FrameworkElement
 
             var windowLabel = $"Possible {FormatPointTime(rawStart)} – {FormatPointTime(rawEnd)}";
             var labelCenter = (left + right) / 2;
-            if (right - left >= MeasureText(windowLabel, CompactAxisFontSize).Width + 14)
+            if (right - left >= MeasureText(windowLabel, CompactAxisFontSize).Width + 28)
             {
-                DrawCenteredText(
+                DrawCenteredLabelBadge(
                     context,
                     windowLabel,
                     labelCenter,
@@ -532,13 +533,6 @@ public sealed class UsageTrendChart : FrameworkElement
     {
         var y = AlignToPixel(ToY(viewport, 100), false);
         context.DrawLine(BudgetPen, new Point(viewport.Left, y), new Point(viewport.Right, y));
-        const string label = "Limit 100%";
-        DrawText(
-            context,
-            label,
-            new Point(viewport.Left + 4, GetTopLabelY(label, CompactAxisFontSize, viewport)),
-            CompactAxisFontSize,
-            AxisBrush);
     }
 
     private void DrawUnmeasuredHistory(DrawingContext context, Viewport viewport, UsageTrendPoint? firstRecorded)
@@ -857,9 +851,24 @@ public sealed class UsageTrendChart : FrameworkElement
     {
         var position = new Point(ToX(viewport, point.Timestamp), ToY(viewport, point.UsedPercent));
         var size = MeasureText(label, DirectLabelFontSize);
-        var x = Math.Clamp(position.X + 8, viewport.Left + 4, Math.Max(viewport.Left + 4, viewport.Right - size.Width));
-        var y = Math.Clamp(position.Y + offsetY, viewport.Top + 4, viewport.Bottom - size.Height - 3);
-        DrawText(context, label, new Point(x, y), DirectLabelFontSize, brush);
+        const double horizontalPadding = 6;
+        const double verticalPadding = 2;
+        var badgeWidth = size.Width + (horizontalPadding * 2);
+        var badgeHeight = size.Height + (verticalPadding * 2);
+        var x = Math.Clamp(position.X + 8, viewport.Left + 4, Math.Max(viewport.Left + 4, viewport.Right - badgeWidth));
+        var y = Math.Clamp(position.Y + offsetY, viewport.Top + 4, viewport.Bottom - badgeHeight - 3);
+        context.DrawRoundedRectangle(
+            SeriesLabelBackground,
+            null,
+            new Rect(x, y, badgeWidth, badgeHeight),
+            3,
+            3);
+        DrawText(
+            context,
+            label,
+            new Point(x + horizontalPadding, y + verticalPadding),
+            DirectLabelFontSize,
+            brush);
     }
 
     private void DrawResetMarker(DrawingContext context, Viewport viewport, UsageTrendChartModel model)
@@ -932,14 +941,29 @@ public sealed class UsageTrendChart : FrameworkElement
 
         var label = FormatLatestUsageLabel(point.Timestamp, evaluatedAt, point.UsedPercent);
         var labelSize = MeasureText(label, DirectLabelFontSize);
+        const double horizontalPadding = 6;
+        const double verticalPadding = 2;
+        var badgeWidth = labelSize.Width + (horizontalPadding * 2);
+        var badgeHeight = labelSize.Height + (verticalPadding * 2);
         var labelX = Math.Clamp(
             position.X + 8,
             viewport.Left + 4,
-            Math.Max(viewport.Left + 4, viewport.Right - labelSize.Width));
+            Math.Max(viewport.Left + 4, viewport.Right - badgeWidth));
         var labelY = point.UsedPercent >= 90
-            ? Math.Min(viewport.Bottom - labelSize.Height - 3, position.Y + 8)
-            : Math.Max(viewport.Top + 4, position.Y - labelSize.Height - 8);
-        DrawText(context, label, new Point(labelX, labelY), DirectLabelFontSize, BlueBrush);
+            ? Math.Min(viewport.Bottom - badgeHeight - 3, position.Y + 8)
+            : Math.Max(viewport.Top + 4, position.Y - badgeHeight - 8);
+        context.DrawRoundedRectangle(
+            SeriesLabelBackground,
+            null,
+            new Rect(labelX, labelY, badgeWidth, badgeHeight),
+            3,
+            3);
+        DrawText(
+            context,
+            label,
+            new Point(labelX + horizontalPadding, labelY + verticalPadding),
+            DirectLabelFontSize,
+            BlueBrush);
     }
 
     private void DrawHoveredPoint(DrawingContext context, Viewport viewport, UsageTrendPoint point)
@@ -1330,7 +1354,7 @@ public sealed class UsageTrendChart : FrameworkElement
     {
         var age = evaluatedAt - timestamp;
         var prefix = age >= TimeSpan.FromMinutes(-1) && age <= TimeSpan.FromMinutes(5)
-            ? "Now"
+            ? "Used"
             : "Latest";
         return $"{prefix} · {ClampPercent(usedPercent):0}%";
     }
@@ -1633,6 +1657,33 @@ public sealed class UsageTrendChart : FrameworkElement
             viewport.Left,
             Math.Max(viewport.Left, viewport.Right - size.Width));
         DrawText(context, text, new Point(x, y), fontSize, brush);
+    }
+
+    private void DrawCenteredLabelBadge(
+        DrawingContext context,
+        string text,
+        double centerX,
+        double y,
+        double fontSize,
+        Brush brush,
+        Viewport viewport)
+    {
+        const double horizontalPadding = 6;
+        const double verticalPadding = 2;
+        var size = MeasureText(text, fontSize);
+        var badgeWidth = size.Width + (horizontalPadding * 2);
+        var badgeHeight = size.Height + (verticalPadding * 2);
+        var x = Math.Clamp(
+            centerX - (badgeWidth / 2),
+            viewport.Left,
+            Math.Max(viewport.Left, viewport.Right - badgeWidth));
+        context.DrawRoundedRectangle(
+            SeriesLabelBackground,
+            null,
+            new Rect(x, y - verticalPadding, badgeWidth, badgeHeight),
+            3,
+            3);
+        DrawText(context, text, new Point(x + horizontalPadding, y), fontSize, brush);
     }
 
     private FormattedText CreateFormattedText(string text, double fontSize, Brush brush) =>

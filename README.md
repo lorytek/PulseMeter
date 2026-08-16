@@ -11,7 +11,7 @@ PulseMeter is not affiliated with OpenAI.
 
 ## Download the App
 
-[Download PulseMeter 0.6.1 for Windows](https://github.com/lorytek/PulseMeter/releases/latest/download/PulseMeter-0.6.1-win-x64-portable.zip), extract the ZIP, and run `PulseMeter.exe`.
+[Download PulseMeter 0.6.2 for Windows](https://github.com/lorytek/PulseMeter/releases/latest/download/PulseMeter-0.6.2-win-x64-portable.zip), extract the ZIP, and run `PulseMeter.exe`.
 
 - A matching `.sha256` checksum file is attached to each GitHub release.
 - Windows 10 or Windows 11, 64-bit.
@@ -19,19 +19,20 @@ PulseMeter is not affiliated with OpenAI.
 
 Only run release zips you downloaded from a PulseMeter release page you trust. The `Source code (zip)` and `Source code (tar.gz)` links on GitHub Releases are automatic GitHub source archives for developers, not the portable Windows app.
 
-## New in 0.6.1
+## New in 0.6.2
 
-- Added activity-qualified Usage Momentum, so inactive zero-use hours no longer dilute the learned baseline while Coding Runway remains wall-clock based.
-- Added a memory-only Return Note for keeping one next step visible while switching tasks.
-- Added optional quick access, clearer tray sync-state indicators, first-hide guidance, and stronger keyboard navigation across the dashboard.
-- Added privacy-safe PulseMeter support and Desktop process snapshots for diagnosing local reader and process-state problems without uploading logs.
-- Added Project location actions with explicit folder confirmation before opening Explorer or Windows PowerShell.
-- Suppressed stale cached usage warnings, hardened baseline migration/reset persistence, and expanded local publishing, lifecycle, privacy, and accessibility coverage.
+- Return Notes now support multiple persistent handoff notes protected for the current Windows user, with clearer add, edit, copy, and remove controls.
+- Coding Runway and Block Planner now explain early activity-qualified estimates more clearly, use the established baseline after quiet restarts, and improve pace colors, timelines, labels, and chart readability.
+- The running taskbar button and notification-area icon can show the live weekly percentage with consistent green, blue, orange, and red status bands.
+- Project location actions can open the confirmed folder in Codex, Explorer, or Windows PowerShell, with safer path and launcher validation.
+- The expanded header keeps weekly usage visible while scrolling, navigation and compact controls are more consistent, and the momentum gauge now updates smoothly.
+- Local publishing, startup failure guidance, privacy boundaries, accessibility, persistence, and visual regression coverage were strengthened.
 
 ## Version History
 
 | Version | Highlights |
 | --- | --- |
+| [0.6.2](CHANGELOG.md#062) | Persistent Return Notes, clearer Coding Runway and Block Planner decisions, live taskbar usage badges, and Open in Codex project actions. |
 | [0.6.1](CHANGELOG.md#061) | Activity-qualified momentum, Return Note, quick access, support snapshots, project location actions, and tray confidence state. |
 | [0.6.0](CHANGELOG.md#060) | Block Planner, recovery watching, state-aware Usage Momentum, and more resilient Coding Runway history and forecasting. |
 | [0.5.0](https://github.com/lorytek/PulseMeter/releases/tag/v0.5.0) | Graph-first Coding Runway for 5-hour and 7-day limits, statistical pace modelling, and persistent usage samples. |
@@ -85,7 +86,7 @@ Want to help share PulseMeter? See [DISCOVERABILITY.md](DISCOVERABILITY.md).
 
 ## Quick Start
 
-1. Download `PulseMeter-0.6.1-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
+1. Download `PulseMeter-0.6.2-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
 2. Extract the zip to a normal folder, for example `Documents\PulseMeter`.
 3. Run `PulseMeter.exe`.
 4. If Windows shows an unknown-publisher or SmartScreen warning, choose `More info`, then `Run anyway`.
@@ -119,12 +120,12 @@ That warning is expected for this build. It is still a trust decision: only run 
 - Needs Attention automatic alert signals for local usage and rate-limit risk.
 - Runway Forecast estimates when the selected rate-limit pool may run out before reset.
 - Activity-qualified Usage Momentum that learns from locally observed Codex activity or meaningful quota movement.
-- A memory-only Return Note for the next step you want to resume during the current PulseMeter run.
+- Multiple persistent Return Notes for next steps you want to resume across PulseMeter restarts.
 - Privacy-safe local support and Desktop process snapshots available from the tray.
-- Confirmed Project location actions for opening the observed folder or starting Windows PowerShell there.
+- Confirmed Project location actions for opening the observed folder in Codex or Explorer, or starting Windows PowerShell there.
 - Idle Drain Detector flags usage movement while Windows reports you were idle.
 - Live, stale, unavailable, or mock sync status.
-- A tray icon with confidence state, show, hide, quick access, refresh, diagnostics, mock mode, and exit controls.
+- Taskbar and notification-area icons with live weekly percentage and confidence state, plus show, hide, quick access, refresh, diagnostics, mock mode, and exit controls.
 
 Project usage, Burn Analysis, automatic alert signals, Limit Runway, and Idle Drain Detector are local estimates and diagnostics, not billing-exact claims.
 
@@ -154,6 +155,7 @@ If Codex CLI is not found, is not signed in, or `codex app-server` is unavailabl
 - Automatic alert signals use local usage and rate-limit numbers; they do not read prompt text or Codex message content.
 - Idle Drain alerts do not read prompt text or Codex message content.
 - Local app settings and a bounded Runway Forecast observation history are stored under `%LOCALAPPDATA%\PulseMeter`. The history contains usage percentages, reset and observation times, and rate-limit labels only; it does not contain prompt or message content.
+- User-created Return Notes persist locally across restarts. Their payload is protected for the current Windows user and is not uploaded; the app advises against entering secrets or customer data.
 
 See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md) for more detail.
 

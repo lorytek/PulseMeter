@@ -76,6 +76,71 @@ public sealed class TrayIconServiceTests
     }
 
     [Fact]
+    public void LiveWeeklyUsage_UpdatesTheSingleTrayIconNumberAndFallsBackWhenStale()
+    {
+        Exception? threadFailure = null;
+        var thread = new Thread(() =>
+        {
+            TrayIconService? tray = null;
+            try
+            {
+                var window = new ImmediatePulseMeterWindow();
+                var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
+                var factoryCalls = 0;
+                tray = new TrayIconService(
+                    window,
+                    viewModel,
+                    () => { },
+                    new CountingQuickAccessController(),
+                    new CountingSupportSnapshotPresenter(),
+                    (_, _) =>
+                    {
+                        factoryCalls++;
+                        return (Icon)SystemIcons.Application.Clone();
+                    });
+
+                Assert.Equal(1, factoryCalls);
+                viewModel.ApplySnapshot(LiveWeeklySnapshot(usedPercent: 28));
+                Assert.Equal("PulseMeter — Weekly 72% left", TrayText(tray));
+                Assert.Equal(3, factoryCalls);
+
+                viewModel.ApplySnapshot(LiveWeeklySnapshot(usedPercent: 28.4));
+                Assert.Equal("PulseMeter — Weekly 72% left", TrayText(tray));
+                Assert.Equal(3, factoryCalls);
+
+                viewModel.ApplySnapshot(LiveWeeklySnapshot(usedPercent: 29));
+                Assert.Equal("PulseMeter — Weekly 71% left", TrayText(tray));
+                Assert.Equal(4, factoryCalls);
+
+                viewModel.ApplySnapshot(LiveWeeklySnapshot(usedPercent: 29, SyncStatus.Stale));
+                Assert.Equal("PulseMeter — Stale", TrayText(tray));
+                Assert.Equal(5, factoryCalls);
+
+                tray.Dispose();
+                viewModel.ApplySnapshot(LiveWeeklySnapshot(usedPercent: 30));
+                Assert.Equal(5, factoryCalls);
+            }
+            catch (Exception exception)
+            {
+                threadFailure = exception;
+            }
+            finally
+            {
+                tray?.Dispose();
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.InvokeShutdown();
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+
+        Assert.True(thread.Join(TestTimeouts.UiThread), "The tray percentage icon test did not finish.");
+        if (threadFailure is not null)
+        {
+            ExceptionDispatchInfo.Capture(threadFailure).Throw();
+        }
+    }
+
+    [Fact]
     public void MenuCheckmarksFollowViewModelChangesAndMenuClicksUpdateTheViewModel()
     {
         Exception? threadFailure = null;
@@ -315,6 +380,26 @@ public sealed class TrayIconServiceTests
         var notify = Assert.IsAssignableFrom<object>(notifyField?.GetValue(tray));
         return Assert.IsType<string>(notify.GetType().GetProperty("Text")?.GetValue(notify));
     }
+
+    private static UsageSnapshot LiveWeeklySnapshot(
+        double usedPercent,
+        SyncStatus syncStatus = SyncStatus.Live) =>
+        new()
+        {
+            SyncStatus = syncStatus,
+            LastUpdatedUtc = DateTimeOffset.UtcNow,
+            Buckets =
+            [
+                new RateLimitBucket
+                {
+                    LimitId = "codex",
+                    LimitName = "General",
+                    WindowDurationMins = 10_080,
+                    WindowLabel = "7d",
+                    UsedPercent = usedPercent
+                }
+            ]
+        };
 
     private sealed class CountingQuickAccessController : IQuickAccessWindowController
     {

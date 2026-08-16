@@ -45,6 +45,7 @@ public sealed class VisualHarnessTests : IDisposable
         Assert.Equal(Path.Combine(paths.StateRoot, "window-state.json"), paths.WindowStatePath);
         Assert.Equal(Path.Combine(paths.StateRoot, "reset-credits.json"), paths.ResetCreditStatePath);
         Assert.Equal(Path.Combine(paths.StateRoot, "runway-observations.json"), paths.RunwayObservationsPath);
+        Assert.Equal(Path.Combine(paths.StateRoot, "return-notes.v1.dat"), paths.ReturnNotesPath);
         Assert.False(Directory.Exists(paths.StateRoot));
     }
 

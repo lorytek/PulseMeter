@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows;
 
 using PulseMeter.Platform.Diagnostics;
@@ -8,14 +9,28 @@ namespace PulseMeter.Bootstrap.Startup;
 
 public partial class App : System.Windows.Application
 {
+    private const string PulseMeterAppUserModelId = "PulseMeter.Desktop";
+
     private PulseMeterApplication? _application;
     private readonly CancellationTokenSource _startupCancellation = new();
     private PulseMeterSingleInstanceCoordinator? _singleInstance;
     private int _shutdownRequested;
     private int _activationPending;
 
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true, PreserveSig = true)]
+    private static extern int SetCurrentProcessExplicitAppUserModelID(string appId);
+
     protected override async void OnStartup(StartupEventArgs e)
     {
+        try
+        {
+            Marshal.ThrowExceptionForHR(SetCurrentProcessExplicitAppUserModelID(PulseMeterAppUserModelId));
+        }
+        catch (Exception exception)
+        {
+            PrivacySafeDiagnostics.WriteFailure("taskbar identity initialization failed", exception);
+        }
+
         base.OnStartup(e);
 
         _singleInstance = PulseMeterSingleInstanceCoordinator.Acquire();

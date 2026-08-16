@@ -8,20 +8,25 @@ public static class ReturnNoteValidator
 {
     public static ReturnNoteValidationResult Validate(string? forText, string? nextStep)
     {
-        var normalizedFor = Normalize(forText, 1, 80, "For");
+        var normalizedFor = Normalize(forText, 1, 80, "Project or task", allowLineBreaks: false);
         if (normalizedFor.Error is not null) return ReturnNoteValidationResult.Invalid(normalizedFor.Error);
-        var normalizedNext = Normalize(nextStep, 1, 240, "Next step");
+        var normalizedNext = Normalize(nextStep, 1, 240, "Next step", allowLineBreaks: true);
         return normalizedNext.Error is null
             ? new ReturnNoteValidationResult(true, new ReturnNoteModel(normalizedFor.Value!, normalizedNext.Value!), string.Empty)
             : ReturnNoteValidationResult.Invalid(normalizedNext.Error);
     }
 
-    private static (string? Value, string? Error) Normalize(string? value, int minimumScalars, int maximumScalars, string field)
+    private static (string? Value, string? Error) Normalize(
+        string? value,
+        int minimumScalars,
+        int maximumScalars,
+        string field,
+        bool allowLineBreaks)
     {
-        var input = value ?? string.Empty;
+        var input = (value ?? string.Empty).ReplaceLineEndings("\n");
         foreach (var rune in input.EnumerateRunes())
         {
-            if (rune.Value == 0xFFFD || IsUnsafeControl(rune.Value)) return (null, $"{field} contains unsupported characters.");
+            if (rune.Value == 0xFFFD || IsUnsafeControl(rune.Value, allowLineBreaks)) return (null, $"{field} contains unsupported characters.");
         }
         try
         {
@@ -38,8 +43,10 @@ public static class ReturnNoteValidator
             : (normalized, null);
     }
 
-    private static bool IsUnsafeControl(int value) =>
-        value is >= 0x0000 and <= 0x001F
+    private static bool IsUnsafeControl(int value, bool allowLineBreaks) =>
+        (!allowLineBreaks && value == '\n')
+        || value is >= 0x0000 and <= 0x0009
+        || value is >= 0x000B and <= 0x001F
         || value is >= 0x007F and <= 0x009F
         || value is 0x061C or 0x200E or 0x200F
         || value is >= 0x202A and <= 0x202E

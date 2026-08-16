@@ -109,6 +109,14 @@
         </Setter>
     </Style>
 
+    <Style x:Key="LightPrimaryButtonStyle"
+           TargetType="Button"
+           BasedOn="{StaticResource LightButtonStyle}">
+        <Setter Property="Background" Value="#1F73FF" />
+        <Setter Property="BorderBrush" Value="#1F73FF" />
+        <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+
     <Style x:Key="LightIconButtonStyle"
            TargetType="Button"
            BasedOn="{StaticResource LightButtonStyle}">
@@ -190,6 +198,7 @@
     <Style x:Key="LightTextBoxStyle" TargetType="TextBox">
         <Setter Property="Height" Value="36" />
         <Setter Property="Padding" Value="10,0" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Background" Value="#FFFFFF" />
         <Setter Property="BorderBrush" Value="#E5E7EB" />
         <Setter Property="BorderThickness" Value="1" />
@@ -207,7 +216,7 @@
                             CornerRadius="6">
                         <ScrollViewer x:Name="PART_ContentHost"
                                       Margin="{TemplateBinding Padding}"
-                                      VerticalAlignment="Center" />
+                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsKeyboardFocused" Value="True">
@@ -222,6 +231,18 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <Style x:Key="LightMultilineTextBoxStyle"
+           TargetType="TextBox"
+           BasedOn="{StaticResource LightTextBoxStyle}">
+        <Setter Property="Height" Value="Auto" />
+        <Setter Property="MinHeight" Value="84" />
+        <Setter Property="Padding" Value="11,9" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="AcceptsReturn" Value="True" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
     </Style>
 
     <Style x:Key="LightComboBoxStyle" TargetType="ComboBox">

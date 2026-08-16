@@ -34,6 +34,21 @@ public sealed class WindowsProjectLocationActionServiceTests
     }
 
     [Fact]
+    public void OpenCodex_UsesDocumentedDeepLinkWithThePathEncodedAsOneQueryValue()
+    {
+        var starter = new RecordingProcessStarter();
+        var service = new WindowsProjectLocationActionService(new FakeFileSystem(), starter);
+
+        var result = service.OpenCodex(ProjectPath);
+
+        Assert.Equal(ProjectLocationActionResult.Succeeded, result);
+        Assert.Empty(starter.StartInfos);
+        Assert.Equal([$"codex://new?path={Uri.EscapeDataString(ProjectPath)}"], starter.OpenUriRequests);
+        Assert.Contains("%26", starter.OpenUriRequests[0], StringComparison.Ordinal);
+        Assert.DoesNotContain("& spaces", starter.OpenUriRequests[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void OpenWindowsPowerShell_UsesDedicatedNewConsoleWithExactWorkingDirectory()
     {
         var fileSystem = new FakeFileSystem();
@@ -66,8 +81,10 @@ public sealed class WindowsProjectLocationActionServiceTests
         var service = new WindowsProjectLocationActionService(new FakeFileSystem(), starter);
 
         Assert.Equal(ProjectLocationActionResult.InvalidLocation, service.OpenFolder(observedPath));
+        Assert.Equal(ProjectLocationActionResult.InvalidLocation, service.OpenCodex(observedPath));
         Assert.Equal(ProjectLocationActionResult.InvalidLocation, service.OpenWindowsPowerShell(observedPath));
         Assert.Empty(starter.StartInfos);
+        Assert.Empty(starter.OpenUriRequests);
     }
 
     [Fact]
@@ -115,6 +132,7 @@ public sealed class WindowsProjectLocationActionServiceTests
 
         fileSystem.MissingDirectories.Remove(ProjectPath);
         fileSystem.ReparseDirectories.Add(@"C:\Projects");
+        Assert.Equal(ProjectLocationActionResult.InvalidLocation, service.OpenCodex(ProjectPath));
         Assert.Equal(ProjectLocationActionResult.InvalidLocation, service.OpenWindowsPowerShell(ProjectPath));
         Assert.Single(starter.StartInfos);
     }
@@ -137,9 +155,11 @@ public sealed class WindowsProjectLocationActionServiceTests
             var service = new WindowsProjectLocationActionService(fileSystem, starter);
 
             Assert.Equal(ProjectLocationActionResult.Succeeded, service.OpenFolder(ProjectPath));
+            Assert.Equal(ProjectLocationActionResult.Succeeded, service.OpenCodex(ProjectPath));
             Assert.Equal(ProjectLocationActionResult.Succeeded, service.OpenWindowsPowerShell(ProjectPath));
 
             Assert.Equal(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe"), starter.StartInfos[0].FileName);
+            Assert.Equal([$"codex://new?path={Uri.EscapeDataString(ProjectPath)}"], starter.OpenUriRequests);
             var request = Assert.Single(starter.NewConsoleStartRequests);
             Assert.Equal(ProjectPath, request.ValidatedWorkingDirectory);
         }
@@ -164,6 +184,12 @@ public sealed class WindowsProjectLocationActionServiceTests
 
         var throwingStarterService = new WindowsProjectLocationActionService(new FakeFileSystem(), new RecordingProcessStarter { StartException = new InvalidOperationException("test only") });
         Assert.Equal(ProjectLocationActionResult.LaunchFailed, throwingStarterService.OpenFolder(ProjectPath));
+
+        var failedCodexService = new WindowsProjectLocationActionService(new FakeFileSystem(), new RecordingProcessStarter { OpenUriResult = false });
+        Assert.Equal(ProjectLocationActionResult.LaunchFailed, failedCodexService.OpenCodex(ProjectPath));
+
+        var throwingCodexService = new WindowsProjectLocationActionService(new FakeFileSystem(), new RecordingProcessStarter { OpenUriException = new InvalidOperationException("test only") });
+        Assert.Equal(ProjectLocationActionResult.LaunchFailed, throwingCodexService.OpenCodex(ProjectPath));
 
         var failedNewConsoleService = new WindowsProjectLocationActionService(new FakeFileSystem(), new RecordingProcessStarter { NewConsoleResult = false });
         Assert.Equal(ProjectLocationActionResult.LaunchFailed, failedNewConsoleService.OpenWindowsPowerShell(ProjectPath));
@@ -348,6 +374,8 @@ public sealed class WindowsProjectLocationActionServiceTests
 
         public List<NewConsoleStartRequest> NewConsoleStartRequests { get; } = [];
 
+        public List<string> OpenUriRequests { get; } = [];
+
         public bool ReturnNull { get; set; }
 
         public Exception? StartException { get; set; }
@@ -355,6 +383,10 @@ public sealed class WindowsProjectLocationActionServiceTests
         public bool NewConsoleResult { get; set; } = true;
 
         public Exception? NewConsoleException { get; set; }
+
+        public bool OpenUriResult { get; set; } = true;
+
+        public Exception? OpenUriException { get; set; }
 
         public RecordingStartedProcess? LastStartedProcess { get; private set; }
 
@@ -373,6 +405,17 @@ public sealed class WindowsProjectLocationActionServiceTests
 
             LastStartedProcess = new RecordingStartedProcess();
             return LastStartedProcess;
+        }
+
+        public bool TryOpenUri(string uri)
+        {
+            OpenUriRequests.Add(uri);
+            if (OpenUriException is not null)
+            {
+                throw OpenUriException;
+            }
+
+            return OpenUriResult;
         }
 
         public bool TryStartWindowsPowerShellInNewConsole(string validatedWorkingDirectory)

@@ -5,6 +5,7 @@ using PulseMeter.Platform.Windows;
 using PulseMeter.Platform.Threading;
 using PulseMeter.Platform.Timing;
 using PulseMeter.Slices.PulseMeterWindow;
+using PulseMeter.Slices.ReturnNote.Business;
 using PulseMeter.Slices.SupportSnapshot.Business;
 
 namespace PulseMeter.Bootstrap.Composition;
@@ -16,6 +17,7 @@ internal static class PlatformRegistration
         services.AddSingleton<IPulseMeterAppSettingsStore, PulseMeterAppSettingsStore>();
         services.AddSingleton<IResetCreditStateStore, ResetCreditStateStore>();
         services.AddSingleton<IPulseMeterWindowStateStore, PulseMeterWindowStateStore>();
+        services.AddSingleton<IReturnNoteStateStore, ReturnNoteStateStore>();
         services.AddSingleton<IForegroundWindowService, ForegroundWindowService>();
         services.AddSingleton<IUserIdleTimeProvider, UserIdleTimeProvider>();
         services.AddSingleton<IClipboardService, ClipboardService>();

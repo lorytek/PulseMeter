@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.2
+
+- Made Return Notes persistent across restarts, added multiple-note management, and protected note payloads for the current Windows user.
+- Improved Coding Runway and Block Planner clarity with progressive activity-qualified estimates, sustainable-pace color bands, established-baseline fallback after quiet restarts, and corrected timeline and chart-label behavior.
+- Added live weekly percentage badges to the running Windows taskbar button and notification-area icon, with safe fallback states when usage is stale or unavailable.
+- Added Open in Codex to confirmed project-location actions and strengthened Windows path, process-launch, and picker boundaries.
+- Improved the expanded header, selected-project action, block-duration control, keyboard navigation, momentum animation, and first-time explanatory copy.
+- Hardened local publishing and shortcut icon refresh, startup failure reporting, Return Note validation, persistence recovery, privacy copy, accessibility, and visual regression coverage.
+
 ## 0.6.1
 
 - Added activity-qualified Usage Momentum using privacy-safe local activity-hour markers or meaningful quota movement while keeping Coding Runway wall-clock based.

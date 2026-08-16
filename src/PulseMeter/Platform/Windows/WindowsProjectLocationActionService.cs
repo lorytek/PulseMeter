@@ -11,6 +11,8 @@ internal interface IProjectLocationProcessStarter
 {
     IProjectLocationStartedProcess? Start(ProcessStartInfo startInfo);
 
+    bool TryOpenUri(string uri);
+
     bool TryStartWindowsPowerShellInNewConsole(string validatedWorkingDirectory);
 }
 
@@ -65,6 +67,26 @@ public sealed class WindowsProjectLocationActionService : IProjectLocationAction
         startInfo.ArgumentList.Add(validatedPath);
 
         return TryStart(startInfo);
+    }
+
+    public ProjectLocationActionResult OpenCodex(string? observedPath)
+    {
+        if (!TryValidate(observedPath, out var validatedPath))
+        {
+            return ProjectLocationActionResult.InvalidLocation;
+        }
+
+        var deepLink = $"codex://new?path={Uri.EscapeDataString(validatedPath)}";
+        try
+        {
+            return _processStarter.TryOpenUri(deepLink)
+                ? ProjectLocationActionResult.Succeeded
+                : ProjectLocationActionResult.LaunchFailed;
+        }
+        catch (Exception)
+        {
+            return ProjectLocationActionResult.LaunchFailed;
+        }
     }
 
     public ProjectLocationActionResult OpenWindowsPowerShell(string? observedPath)
@@ -308,6 +330,16 @@ internal sealed class WindowsProjectLocationProcessStarter : IProjectLocationPro
     {
         var process = Process.Start(startInfo);
         return process is null ? null : new StartedProcess(process);
+    }
+
+    public bool TryOpenUri(string uri)
+    {
+        using var process = Process.Start(new ProcessStartInfo
+        {
+            FileName = uri,
+            UseShellExecute = true
+        });
+        return true;
     }
 
     public bool TryStartWindowsPowerShellInNewConsole(string validatedWorkingDirectory)

@@ -22,6 +22,8 @@ public sealed class VisualHarnessPaths
 
     public string RunwayObservationsPath => Path.Combine(StateRoot, "runway-observations.json");
 
+    public string ReturnNotesPath => Path.Combine(StateRoot, "return-notes.v1.dat");
+
 }
 
 public static class VisualHarnessWorkspace

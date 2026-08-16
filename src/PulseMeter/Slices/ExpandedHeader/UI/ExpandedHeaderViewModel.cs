@@ -7,6 +7,8 @@ namespace PulseMeter.Slices.ExpandedHeader.UI;
 public sealed class ExpandedHeaderViewModel : INotifyPropertyChanged
 {
     private string _compactTitleText = string.Empty;
+    private string _weeklyUsageText = string.Empty;
+    private string _weeklyUsageBrush = "#64748B";
     private string _statusBadgeText = string.Empty;
     private string _statusBadgeBrush = "#64748B";
     private string _lastUpdatedText = string.Empty;
@@ -23,6 +25,24 @@ public sealed class ExpandedHeaderViewModel : INotifyPropertyChanged
         get => _compactTitleText;
         private set => SetField(ref _compactTitleText, value);
     }
+
+    public string WeeklyUsageText
+    {
+        get => _weeklyUsageText;
+        private set => SetField(ref _weeklyUsageText, value);
+    }
+
+    public string WeeklyUsageBrush
+    {
+        get => _weeklyUsageBrush;
+        private set => SetField(ref _weeklyUsageBrush, value);
+    }
+
+    public bool HasWeeklyUsage => !string.IsNullOrWhiteSpace(WeeklyUsageText);
+
+    public string WeeklyUsageAccessibleLabel => HasWeeklyUsage
+        ? $"Weekly quota, {WeeklyUsageText}"
+        : "Weekly quota unavailable";
 
     public string StatusBadgeText
     {
@@ -80,6 +100,8 @@ public sealed class ExpandedHeaderViewModel : INotifyPropertyChanged
 
     public void ApplyState(
         string compactTitleText,
+        string weeklyUsageText,
+        string weeklyUsageBrush,
         string statusBadgeText,
         string statusBadgeBrush,
         string lastUpdatedText,
@@ -90,6 +112,8 @@ public sealed class ExpandedHeaderViewModel : INotifyPropertyChanged
         ICommand syncNowCommand)
     {
         CompactTitleText = compactTitleText;
+        WeeklyUsageText = weeklyUsageText;
+        WeeklyUsageBrush = weeklyUsageBrush;
         StatusBadgeText = statusBadgeText;
         StatusBadgeBrush = statusBadgeBrush;
         LastUpdatedText = lastUpdatedText;
@@ -98,6 +122,8 @@ public sealed class ExpandedHeaderViewModel : INotifyPropertyChanged
         SyncButtonText = syncButtonText;
         IsRefreshing = isRefreshing;
         SyncNowCommand = syncNowCommand;
+        OnPropertyChanged(nameof(HasWeeklyUsage));
+        OnPropertyChanged(nameof(WeeklyUsageAccessibleLabel));
         OnPropertyChanged(nameof(StatusSummaryText));
         OnPropertyChanged(nameof(SyncButtonTooltip));
         OnPropertyChanged(nameof(SyncButtonAccessibleLabel));

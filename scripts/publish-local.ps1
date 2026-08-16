@@ -21,8 +21,15 @@ function Save-PulseMeterShortcut([string]$path) {
     $shortcut.TargetPath = $launcherTarget
     $shortcut.Arguments = $launcherArguments
     $shortcut.WorkingDirectory = $launcherWorkingDirectory
-    $shortcut.IconLocation = $icon
+    $shortcut.IconLocation = "$launcherTarget,0"
     $shortcut.Save()
+}
+
+function Refresh-ShellIcons {
+    $iconRefreshTool = Join-Path $env:SystemRoot "System32\ie4uinit.exe"
+    if (Test-Path -LiteralPath $iconRefreshTool) {
+        Start-Process -FilePath $iconRefreshTool -ArgumentList "-show" -WindowStyle Hidden
+    }
 }
 
 function Stop-WorkspacePulseMeterInstances {
@@ -177,6 +184,8 @@ if (Test-Path -LiteralPath $taskbarShortcutPath) {
 else {
     Write-Host "PulseMeter is not pinned to the taskbar; no taskbar shortcut was created."
 }
+
+Refresh-ShellIcons
 
 $staleShortcutName = [string]::Concat("Codex ", "Usage ", [char]72, [char]85, [char]68, ".lnk")
 $staleShortcutPaths = @(

@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Media3D;
 using System.Windows.Threading;
 using PulseMeter.Slices.PulseMeterWindow;
 using PulseMeter.Slices.PulseMeterWindow.Business;
@@ -37,6 +38,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
     private const double WorkAreaPadding = 24;
 
     private PulseMeterWindowViewModel? _boundViewModel;
+    private readonly TaskbarUsageIconController _taskbarUsageIconController;
     private bool _isApplyingViewModelSize;
     private bool _isApplyingWindowPlacement;
     private bool _isProgrammaticSectionScroll;
@@ -56,6 +58,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
     public PulseMeterWindow()
     {
         InitializeComponent();
+        _taskbarUsageIconController = new TaskbarUsageIconController(this);
         WindowSurface.AddHandler(
             MouseLeftButtonDownEvent,
             new MouseButtonEventHandler(Surface_MouseLeftButtonDown),
@@ -549,7 +552,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         return Math.Max(0, viewportHeight - lastSectionHeight - contentBottomMargin);
     }
 
-    private static bool IsInteractiveElement(DependencyObject? source)
+    internal static bool IsInteractiveElement(DependencyObject? source)
     {
         while (source is not null)
         {
@@ -558,10 +561,26 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
                 return true;
             }
 
-            source = VisualTreeHelper.GetParent(source);
+            source = GetInputParent(source);
         }
 
         return false;
+    }
+
+    private static DependencyObject? GetInputParent(DependencyObject source)
+    {
+        if (source is Visual or Visual3D)
+        {
+            return VisualTreeHelper.GetParent(source);
+        }
+
+        if (source is ContentElement contentElement)
+        {
+            return ContentOperations.GetParent(contentElement)
+                ?? (contentElement as FrameworkContentElement)?.Parent;
+        }
+
+        return null;
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
@@ -595,6 +614,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        _taskbarUsageIconController.Dispose();
         _windowClosedHandler?.Invoke();
         _windowSource?.RemoveHook(WndProc);
         _windowSource = null;
@@ -733,6 +753,7 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         {
             _boundViewModel.PropertyChanged += OnViewModelPropertyChanged;
         }
+        _taskbarUsageIconController.Bind(_boundViewModel);
 
         if (_windowSource is not null)
         {

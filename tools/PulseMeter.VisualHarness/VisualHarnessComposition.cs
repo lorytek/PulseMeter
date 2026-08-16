@@ -8,6 +8,7 @@ using PulseMeter.Slices.ProjectUsage.Business;
 using PulseMeter.Slices.PulseMeterWindow;
 using PulseMeter.Slices.PulseMeterWindow.Business;
 using PulseMeter.Slices.ResetCredits.Business;
+using PulseMeter.Slices.ReturnNote.Business;
 using PulseMeter.Slices.SupportSnapshot.Business;
 using PulseMeter.Slices.SupportSnapshot.UI;
 using PulseMeter.Slices.SupportSnapshot.Models;
@@ -44,6 +45,8 @@ public static class VisualHarnessComposition
             _ => new PulseMeterWindowStateStore(paths.WindowStatePath));
         services.AddSingleton<IResetCreditStateStore>(
             _ => new ResetCreditStateStore(paths.ResetCreditStatePath));
+        services.AddSingleton<IReturnNoteStateStore>(
+            _ => new ReturnNoteStateStore(paths.ReturnNotesPath));
 
         services.AddSingleton<VisualHarnessForegroundWindowService>();
         services.AddSingleton<IForegroundWindowService>(
