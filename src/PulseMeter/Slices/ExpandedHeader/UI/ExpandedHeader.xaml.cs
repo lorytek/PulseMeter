@@ -12,6 +12,8 @@ public partial class ExpandedHeader : System.Windows.Controls.UserControl
 
     public event RoutedEventHandler? ToggleExpandedRequested;
 
+    public event RoutedEventHandler? MinimizeRequested;
+
     public event RoutedEventHandler? HideRequested;
 
     public bool FocusExpandCollapseButton()
@@ -33,5 +35,10 @@ public partial class ExpandedHeader : System.Windows.Controls.UserControl
     private void HideButton_Click(object sender, RoutedEventArgs e)
     {
         HideRequested?.Invoke(this, e);
+    }
+
+    private void MinimizeButton_Click(object sender, RoutedEventArgs e)
+    {
+        MinimizeRequested?.Invoke(this, e);
     }
 }

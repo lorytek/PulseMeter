@@ -11,7 +11,7 @@ PulseMeter is not affiliated with OpenAI.
 
 ## Download the App
 
-[Download PulseMeter 0.6.2 for Windows](https://github.com/lorytek/PulseMeter/releases/latest/download/PulseMeter-0.6.2-win-x64-portable.zip), extract the ZIP, and run `PulseMeter.exe`.
+[Download PulseMeter 0.6.3 for Windows](https://github.com/lorytek/PulseMeter/releases/latest/download/PulseMeter-0.6.3-win-x64-portable.zip), extract the ZIP, and run `PulseMeter.exe`.
 
 - A matching `.sha256` checksum file is attached to each GitHub release.
 - Windows 10 or Windows 11, 64-bit.
@@ -19,19 +19,19 @@ PulseMeter is not affiliated with OpenAI.
 
 Only run release zips you downloaded from a PulseMeter release page you trust. The `Source code (zip)` and `Source code (tar.gz)` links on GitHub Releases are automatic GitHub source archives for developers, not the portable Windows app.
 
-## New in 0.6.2
+## New in 0.6.3
 
-- Return Notes now support multiple persistent handoff notes protected for the current Windows user, with clearer add, edit, copy, and remove controls.
-- Coding Runway and Block Planner now explain early activity-qualified estimates more clearly, use the established baseline after quiet restarts, and improve pace colors, timelines, labels, and chart readability.
-- The running taskbar button and notification-area icon can show the live weekly percentage with consistent green, blue, orange, and red status bands.
-- Project location actions can open the confirmed folder in Codex, Explorer, or Windows PowerShell, with safer path and launcher validation.
-- The expanded header keeps weekly usage visible while scrolling, navigation and compact controls are more consistent, and the momentum gauge now updates smoothly.
-- Local publishing, startup failure guidance, privacy boundaries, accessibility, persistence, and visual regression coverage were strengthened.
+- Coding Runway now separates current runway confidence from the activity-qualified baseline, uses the modeled timing range for medium-confidence forecasts, and labels momentum differences as percentage points per hour.
+- The chart legend now matches the rendered recorded usage, unmeasured gaps, forecast, sustainable pace, limit, and reset markers.
+- Compact and expanded headers now offer a dedicated minimize action, and automatic foreground behavior respects a window the user intentionally minimized.
+- The Windows taskbar keeps its live weekly usage badge while the notification-area icon remains the stable PulseMeter app icon; the exact weekly percentage remains available in its tooltip.
+- Accessibility and regression coverage were expanded for the new forecast wording, header behavior, taskbar/tray presentation, and chart legend.
 
 ## Version History
 
 | Version | Highlights |
 | --- | --- |
+| [0.6.3](CHANGELOG.md#063) | Honest runway confidence and ranges, clearer momentum units and chart legend, dedicated minimize behavior, and stable tray identity. |
 | [0.6.2](CHANGELOG.md#062) | Persistent Return Notes, clearer Coding Runway and Block Planner decisions, live taskbar usage badges, and Open in Codex project actions. |
 | [0.6.1](CHANGELOG.md#061) | Activity-qualified momentum, Return Note, quick access, support snapshots, project location actions, and tray confidence state. |
 | [0.6.0](CHANGELOG.md#060) | Block Planner, recovery watching, state-aware Usage Momentum, and more resilient Coding Runway history and forecasting. |
@@ -86,7 +86,7 @@ Want to help share PulseMeter? See [DISCOVERABILITY.md](DISCOVERABILITY.md).
 
 ## Quick Start
 
-1. Download `PulseMeter-0.6.2-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
+1. Download `PulseMeter-0.6.3-win-x64-portable.zip` from [GitHub Releases](https://github.com/lorytek/PulseMeter/releases/latest).
 2. Extract the zip to a normal folder, for example `Documents\PulseMeter`.
 3. Run `PulseMeter.exe`.
 4. If Windows shows an unknown-publisher or SmartScreen warning, choose `More info`, then `Run anyway`.

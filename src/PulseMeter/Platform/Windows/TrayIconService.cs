@@ -15,7 +15,6 @@ public sealed class TrayIconService : ITrayIconService
     private readonly PulseMeterWindowViewModel _viewModel;
     private readonly Action _shutdown;
     private readonly Icon _appIcon;
-    private readonly TrayConfidenceIconCache _confidenceIcons;
     private readonly NotifyIcon _notifyIcon;
     private readonly ContextMenuStrip _contextMenu;
     private readonly ToolStripMenuItem _mockModeItem;
@@ -37,7 +36,6 @@ public sealed class TrayIconService : ITrayIconService
         Action shutdown,
         IQuickAccessWindowController? quickAccessWindowController = null,
         ISupportSnapshotPresenter? supportSnapshotPresenter = null,
-        Func<Icon, TrayConfidenceState, Icon>? confidenceIconFactory = null,
         ICodexDesktopProcessSnapshotPresenter? desktopProcessSnapshotPresenter = null)
     {
         _pulseMeterWindow = pulseMeterWindow;
@@ -173,21 +171,18 @@ public sealed class TrayIconService : ITrayIconService
         _contextMenu.Items.Add("Exit", null, (_, _) => Exit());
 
         Icon? appIcon = null;
-        TrayConfidenceIconCache? confidenceIcons = null;
         NotifyIcon? notifyIcon = null;
         var propertyChangedSubscribed = false;
         var expandedHeaderPropertyChangedSubscribed = false;
         try
         {
             appIcon = LoadAppIcon();
-            confidenceIcons = new TrayConfidenceIconCache(appIcon, confidenceIconFactory);
             notifyIcon = new NotifyIcon();
             notifyIcon.ContextMenuStrip = _contextMenu;
             notifyIcon.Icon = appIcon;
             notifyIcon.Text = TrayConfidenceBeacon.Tooltip(TrayConfidenceState.Starting);
 
             _appIcon = appIcon;
-            _confidenceIcons = confidenceIcons;
             _notifyIcon = notifyIcon;
             _notifyIcon.DoubleClick += (_, _) => ShowPulseMeter(expand: true);
             _viewModel.PropertyChanged += _viewModelPropertyChangedHandler;
@@ -208,7 +203,6 @@ public sealed class TrayIconService : ITrayIconService
                 _viewModel.PropertyChanged -= _viewModelPropertyChangedHandler;
             }
             notifyIcon?.Dispose();
-            confidenceIcons?.Dispose();
             appIcon?.Dispose();
             _contextMenu.Dispose();
             throw;
@@ -269,7 +263,6 @@ public sealed class TrayIconService : ITrayIconService
         _notifyIcon.Visible = false;
         _notifyIcon.Dispose();
         _contextMenu.Dispose();
-        _confidenceIcons.Dispose();
         _appIcon.Dispose();
     }
 
@@ -288,14 +281,8 @@ public sealed class TrayIconService : ITrayIconService
             return;
         }
         _notifyIcon.Text = TrayConfidenceBeacon.Tooltip(presentation);
-        try
-        {
-            _notifyIcon.Icon = _confidenceIcons.Get(presentation);
-        }
-        catch (Exception)
-        {
-            // Keep the last-good/base icon. The fixed tooltip is still the accessible state signal.
-        }
+        // Keep the notification-area identity stable; usage remains available in the tooltip.
+        _notifyIcon.Icon = _appIcon;
         _confidenceTransitions.MarkApplied(presentation);
     }
 

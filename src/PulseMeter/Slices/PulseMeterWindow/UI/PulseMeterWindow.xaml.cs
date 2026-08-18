@@ -52,6 +52,8 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
 
     IntPtr IPulseMeterWindow.Handle => _windowSource?.Handle ?? IntPtr.Zero;
 
+    public bool IsMinimizedByUser { get; private set; }
+
     [DllImport("user32.dll")]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
@@ -237,6 +239,12 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
         }
 
         Hide();
+    }
+
+    private void MinimizeButton_Click(object sender, RoutedEventArgs e)
+    {
+        IsMinimizedByUser = true;
+        WindowState = WindowState.Minimized;
     }
 
     private void NavigationRail_SectionRequested(object? sender, NavigationSectionRequestedEventArgs e)
@@ -735,6 +743,11 @@ public partial class PulseMeterWindow : System.Windows.Window, IPulseMeterWindow
 
     private void Window_StateChanged(object? sender, EventArgs e)
     {
+        if (WindowState != WindowState.Minimized)
+        {
+            IsMinimizedByUser = false;
+        }
+
         if (WindowState == WindowState.Maximized)
         {
             RestoreMaximizedWindowToViewModelSize();

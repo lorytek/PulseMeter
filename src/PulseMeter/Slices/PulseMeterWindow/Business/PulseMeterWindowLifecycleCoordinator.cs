@@ -482,7 +482,9 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
                 _viewModel.Collapse();
             }
 
-            if (!_pulseMeterWindow.IsVisible || _pulseMeterWindow.WindowState == System.Windows.WindowState.Minimized)
+            if (!_pulseMeterWindow.IsVisible
+                || (_pulseMeterWindow.WindowState == System.Windows.WindowState.Minimized
+                    && !_pulseMeterWindow.IsMinimizedByUser))
             {
                 _pulseMeterWindow.ShowWithoutActivation();
             }
@@ -490,7 +492,9 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
             return;
         }
 
-        if (_viewModel.AutoHideWhenFocusLeaves && _pulseMeterWindow.IsVisible)
+        if (_viewModel.AutoHideWhenFocusLeaves
+            && _pulseMeterWindow.IsVisible
+            && !_pulseMeterWindow.IsMinimizedByUser)
         {
             _pulseMeterWindow.Hide();
         }
