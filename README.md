@@ -58,31 +58,43 @@ Want to help share PulseMeter? See [DISCOVERABILITY.md](DISCOVERABILITY.md).
 
 ## Screenshots
 
-![PulseMeter Needs Attention view showing the highest-priority live signals and direct review actions](assets/pulsemeter-needs-attention.png)
+[![PulseMeter overview with Needs Attention, persistent Return Notes, rate limits, and feature navigation](assets/pulsemeter-overview.png)](assets/pulsemeter-overview.png)
 
-****
+PulseMeter keeps the most important usage signals, next steps, planning tools, and local diagnostics in one compact Windows dashboard.
 
-![PulseMeter overview showing Needs Attention, rate limits, weekly pace, and Coding Runway navigation](assets/pulsemeter-rate-limits-account-dashboard.png)
+### Limits and planning
 
-****
+| Needs Attention | Return Notes |
+| --- | --- |
+| [![Needs Attention showing runway, budget, reset-credit, daily usage, project, and idle-drain signals](assets/pulsemeter-needs-attention.png)](assets/pulsemeter-needs-attention.png)<br>Prioritized local signals with direct review actions. | [![Persistent Return Notes with a saved project handoff and next step](assets/pulsemeter-return-notes.png)](assets/pulsemeter-return-notes.png)<br>Keep multiple handoff notes ready across app restarts. |
+| Rate Limits | Weekly Pace |
+| [![Rate Limits showing five-hour and weekly usage gauges, reset times, and status](assets/pulsemeter-rate-limits.png)](assets/pulsemeter-rate-limits.png)<br>See remaining capacity, reset timing, and current status. | [![Weekly Pace showing daily allowance and current-day progress](assets/pulsemeter-weekly-pace.png)](assets/pulsemeter-weekly-pace.png)<br>Understand the daily allowance needed to stay within the weekly limit. |
+| Coding Runway | Block Planner |
+| [![Coding Runway showing activity-qualified momentum, sustainable pace, and a forecast chart](assets/pulsemeter-coding-runway.png)](assets/pulsemeter-coding-runway.png)<br>Compare current pace with a sustainable pace and estimated limit timing. | [![Block Planner showing whether a selected focus block fits before the expected limit](assets/pulsemeter-block-planner.png)](assets/pulsemeter-block-planner.png)<br>Test focused work blocks against the current forecast. |
+| Reset Credits | |
+| [![Reset Credits showing available credits, expiry dates, and progress bars](assets/pulsemeter-reset-credits.png)](assets/pulsemeter-reset-credits.png)<br>Track available reset credits and approaching expiry dates. | |
 
-![PulseMeter Coding Runway showing the selected 5-hour limit, usage momentum, pace comparison, estimated reach time, and reset](assets/pulsemeter-coding-runway.png)
+### Usage insights
 
-****
+| Account Usage | Project Usage |
+| --- | --- |
+| [![Account Usage showing today, peak day, lifetime usage, and streak](assets/pulsemeter-account-usage.png)](assets/pulsemeter-account-usage.png)<br>Review account-level usage summaries and recent activity. | [![Project Usage showing local project health, share, and recent changes](assets/pulsemeter-project-usage.png)](assets/pulsemeter-project-usage.png)<br>Compare privacy-safe local project estimates and trends. |
+| Burn Analysis | Daily Usage |
+| [![Burn Analysis ranking local projects by estimated token usage](assets/pulsemeter-burn-analysis.png)](assets/pulsemeter-burn-analysis.png)<br>See which local projects lead the estimated 30-day token burn. | [![Daily Usage comparing seven days of token activity with the 30-day median](assets/pulsemeter-daily-usage.png)](assets/pulsemeter-daily-usage.png)<br>Compare recent daily activity with the longer-term median. |
 
-![PulseMeter account and project usage estimates](assets/pulsemeter-account-project-usage.png)
+### Local tools
 
-****
+| Customize | Project Location |
+| --- | --- |
+| [![Customize menu showing controls for every dashboard section](assets/pulsemeter-customize.png)](assets/pulsemeter-customize.png)<br>Choose exactly which dashboard sections stay visible. | [![Project Location with safe actions to open a selected project folder, Codex, or Windows PowerShell](assets/pulsemeter-project-location.png)](assets/pulsemeter-project-location.png)<br>Confirm the observed path before opening it in Codex, Explorer, or PowerShell. |
+| Support Snapshot | Desktop Process Snapshot |
+| [![PulseMeter Support Snapshot showing a privacy-safe local reader and parser summary](assets/pulsemeter-support-snapshot.png)](assets/pulsemeter-support-snapshot.png)<br>Preview a redacted local diagnostic before copying it. | [![Desktop Process Snapshot showing verified helper count and memory measurement](assets/pulsemeter-desktop-process-snapshot.png)](assets/pulsemeter-desktop-process-snapshot.png)<br>Measure PulseMeter-observed Desktop helper processes without reading task content. |
 
-![PulseMeter Burn Analysis ranking local projects by estimated token usage](assets/pulsemeter-burn-analysis.png)
+### Windows integration
 
-****
-
-![PulseMeter daily token usage compared with the 30-day median](assets/pulsemeter-daily-usage.png)
-
-****
-
-![PulseMeter compact HUD showing weekly usage and reset time](assets/pulsemeter-compact-hud.png)
+| Compact HUD | Taskbar percentage |
+| --- | --- |
+| [![Compact PulseMeter HUD showing five-hour and weekly usage with reset times](assets/pulsemeter-compact-hud.png)](assets/pulsemeter-compact-hud.png)<br>Keep the essential limits visible in a small always-available HUD. | [![PulseMeter Windows taskbar icon showing the live weekly percentage](assets/pulsemeter-windows-integration.png)](assets/pulsemeter-windows-integration.png)<br>See the live weekly percentage without keeping the dashboard open. |
 
 ## Quick Start
 
