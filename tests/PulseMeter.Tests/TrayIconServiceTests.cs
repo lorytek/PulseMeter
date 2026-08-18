@@ -1,5 +1,4 @@
 using System.Collections;
-using System.Drawing;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
 using PulseMeter.Platform.Windows;
@@ -15,7 +14,7 @@ namespace PulseMeter.Tests;
 public sealed class TrayIconServiceTests
 {
     [Fact]
-    public void ConfidenceBeacon_DeduplicatesSameStateNotificationsAndKeepsShortTooltips()
+    public void ConfidenceBeacon_KeepsNormalAppIconWhileUpdatingShortTooltips()
     {
         Exception? threadFailure = null;
         var thread = new Thread(() =>
@@ -25,20 +24,14 @@ public sealed class TrayIconServiceTests
             {
                 var window = new ImmediatePulseMeterWindow();
                 var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
-                var factoryCalls = 0;
                 tray = new TrayIconService(
                     window,
                     viewModel,
                     () => { },
                     new CountingQuickAccessController(),
-                    new CountingSupportSnapshotPresenter(),
-                    (_, _) =>
-                    {
-                        factoryCalls++;
-                        return (Icon)SystemIcons.Application.Clone();
-                    });
+                    new CountingSupportSnapshotPresenter());
 
-                Assert.Equal(1, factoryCalls);
+                var appIcon = TrayIcon(tray);
                 Assert.InRange(TrayText(tray).Length, 1, 63);
 
                 var live = new UsageSnapshot
@@ -47,12 +40,12 @@ public sealed class TrayIconServiceTests
                     LastUpdatedUtc = DateTimeOffset.UtcNow
                 };
                 viewModel.ApplySnapshot(live);
-                Assert.Equal(2, factoryCalls);
+                Assert.Same(appIcon, TrayIcon(tray));
                 Assert.InRange(TrayText(tray).Length, 1, 63);
 
                 viewModel.ApplySnapshot(live);
                 viewModel.RefreshClock();
-                Assert.Equal(2, factoryCalls);
+                Assert.Same(appIcon, TrayIcon(tray));
                 Assert.InRange(TrayText(tray).Length, 1, 63);
             }
             catch (Exception exception)
@@ -76,7 +69,7 @@ public sealed class TrayIconServiceTests
     }
 
     [Fact]
-    public void LiveWeeklyUsage_UpdatesTheSingleTrayIconNumberAndFallsBackWhenStale()
+    public void LiveWeeklyUsage_UpdatesTooltipButKeepsNormalAppIcon()
     {
         Exception? threadFailure = null;
         var thread = new Thread(() =>
@@ -86,39 +79,32 @@ public sealed class TrayIconServiceTests
             {
                 var window = new ImmediatePulseMeterWindow();
                 var viewModel = new PulseMeterWindowViewModel(new StubUsageService());
-                var factoryCalls = 0;
                 tray = new TrayIconService(
                     window,
                     viewModel,
                     () => { },
                     new CountingQuickAccessController(),
-                    new CountingSupportSnapshotPresenter(),
-                    (_, _) =>
-                    {
-                        factoryCalls++;
-                        return (Icon)SystemIcons.Application.Clone();
-                    });
+                    new CountingSupportSnapshotPresenter());
 
-                Assert.Equal(1, factoryCalls);
+                var appIcon = TrayIcon(tray);
                 viewModel.ApplySnapshot(LiveWeeklySnapshot(usedPercent: 28));
                 Assert.Equal("PulseMeter — Weekly 72% left", TrayText(tray));
-                Assert.Equal(3, factoryCalls);
+                Assert.Same(appIcon, TrayIcon(tray));
 
                 viewModel.ApplySnapshot(LiveWeeklySnapshot(usedPercent: 28.4));
                 Assert.Equal("PulseMeter — Weekly 72% left", TrayText(tray));
-                Assert.Equal(3, factoryCalls);
+                Assert.Same(appIcon, TrayIcon(tray));
 
                 viewModel.ApplySnapshot(LiveWeeklySnapshot(usedPercent: 29));
                 Assert.Equal("PulseMeter — Weekly 71% left", TrayText(tray));
-                Assert.Equal(4, factoryCalls);
+                Assert.Same(appIcon, TrayIcon(tray));
 
                 viewModel.ApplySnapshot(LiveWeeklySnapshot(usedPercent: 29, SyncStatus.Stale));
                 Assert.Equal("PulseMeter — Stale", TrayText(tray));
-                Assert.Equal(5, factoryCalls);
+                Assert.Same(appIcon, TrayIcon(tray));
 
                 tray.Dispose();
                 viewModel.ApplySnapshot(LiveWeeklySnapshot(usedPercent: 30));
-                Assert.Equal(5, factoryCalls);
             }
             catch (Exception exception)
             {
@@ -162,7 +148,6 @@ public sealed class TrayIconServiceTests
                     () => shutdownCount++,
                     quickAccess,
                     supportSnapshot,
-                    (_, _) => throw new InvalidOperationException("test icon factory failure"),
                     desktopProcessSnapshot);
                 Assert.Equal("PulseMeter — Starting", TrayText(tray));
                 viewModel.ApplySnapshot(new UsageSnapshot
@@ -379,6 +364,13 @@ public sealed class TrayIconServiceTests
         var notifyField = typeof(TrayIconService).GetField("_notifyIcon", BindingFlags.Instance | BindingFlags.NonPublic);
         var notify = Assert.IsAssignableFrom<object>(notifyField?.GetValue(tray));
         return Assert.IsType<string>(notify.GetType().GetProperty("Text")?.GetValue(notify));
+    }
+
+    private static object TrayIcon(TrayIconService tray)
+    {
+        var notifyField = typeof(TrayIconService).GetField("_notifyIcon", BindingFlags.Instance | BindingFlags.NonPublic);
+        var notify = Assert.IsAssignableFrom<object>(notifyField?.GetValue(tray));
+        return Assert.IsAssignableFrom<object>(notify.GetType().GetProperty("Icon")?.GetValue(notify));
     }
 
     private static UsageSnapshot LiveWeeklySnapshot(

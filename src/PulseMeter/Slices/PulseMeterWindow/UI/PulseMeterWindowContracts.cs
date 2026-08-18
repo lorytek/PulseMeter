@@ -10,6 +10,8 @@ public interface IPulseMeterWindow
 
     bool IsActive => false;
 
+    bool IsMinimizedByUser => false;
+
     WindowState WindowState { get; set; }
 
     void Invoke(Action action);

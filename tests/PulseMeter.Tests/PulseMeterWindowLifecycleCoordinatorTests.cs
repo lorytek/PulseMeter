@@ -426,6 +426,50 @@ public sealed class PulseMeterWindowLifecycleCoordinatorTests
     }
 
     [Fact]
+    public async Task ForegroundTick_LeavesUserMinimizedWindowInTheTaskbar()
+    {
+        var usageService = new StubUsageService();
+        var viewModel = new PulseMeterWindowViewModel(usageService)
+        {
+            AutoHideWhenFocusLeaves = true
+        };
+        var window = new StubPulseMeterWindow
+        {
+            IsVisible = true,
+            IsMinimizedByUser = true,
+            WindowState = WindowState.Minimized
+        };
+        var foreground = new StubForegroundWindowService
+        {
+            State = new CodexForegroundState(IsCodexForeground: true, IsOnSameMonitor: false)
+        };
+        var timerFactory = new StubPulseMeterTimerFactory();
+        var coordinator = new PulseMeterWindowLifecycleCoordinator(
+            usageService,
+            viewModel,
+            window,
+            new StubTrayIconService(),
+            foreground,
+            new StubAppSettingsStore(),
+            new StubWindowStateStore(),
+            timerFactory,
+            new ImmediateUiDispatcher());
+
+        await coordinator.StartAsync();
+        window.WindowState = WindowState.Minimized;
+        timerFactory.Timers[2].RaiseTick();
+
+        Assert.Equal(WindowState.Minimized, window.WindowState);
+        Assert.Equal(0, window.ShowWithoutActivationCount);
+
+        foreground.State = new CodexForegroundState(IsCodexForeground: false, IsOnSameMonitor: false);
+        timerFactory.Timers[2].RaiseTick();
+
+        Assert.True(window.IsVisible);
+        Assert.Equal(WindowState.Minimized, window.WindowState);
+    }
+
+    [Fact]
     public async Task ForegroundTransitions_RestoreWithoutActivationEachTimeCodexReturns()
     {
         var usageService = new StubUsageService();
@@ -991,6 +1035,8 @@ public sealed class PulseMeterWindowLifecycleCoordinatorTests
         public IntPtr Handle { get; } = new(123);
 
         public bool IsVisible { get; set; }
+
+        public bool IsMinimizedByUser { get; set; }
 
         public WindowState WindowState { get; set; }
 

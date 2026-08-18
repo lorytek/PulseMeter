@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.3
+
+- Separated live runway confidence from activity-qualified baseline maturity so an established history no longer makes a medium-confidence short-term forecast look established.
+- Used the modeled timing range in medium-confidence Coding Runway headlines and clarified momentum deltas as percentage points per hour.
+- Reworked the chart legend to match the actual rendered lines, gaps, forecast, sustainable pace, limit, and reset markers.
+- Added dedicated minimize controls to compact and expanded headers and prevented foreground automation from reopening a user-minimized window.
+- Kept the live weekly percentage on the Windows taskbar while restoring a stable PulseMeter notification-area icon with the percentage in its tooltip.
+- Expanded presenter, layout, lifecycle, tray, and release regression coverage.
+
 ## 0.6.2
 
 - Made Return Notes persistent across restarts, added multiple-note management, and protected note payloads for the current Windows user.

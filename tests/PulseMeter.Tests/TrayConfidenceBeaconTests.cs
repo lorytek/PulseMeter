@@ -95,50 +95,6 @@ public sealed class TrayConfidenceBeaconTests
     }
 
     [Fact]
-    public void IconCache_DeduplicatesVariantsAndDisposesOnce()
-    {
-        using var appIcon = (Icon)SystemIcons.Application.Clone();
-        var cache = new TrayConfidenceIconCache(appIcon);
-        var live = cache.Get(TrayConfidenceState.Live);
-        Assert.Same(live, cache.Get(TrayConfidenceState.Live));
-        Assert.NotSame(live, cache.Get(TrayConfidenceState.Stale));
-        var badge72 = cache.Get(TrayIconPresentation.Create(TrayConfidenceState.Live, 72));
-        Assert.Same(badge72, cache.Get(TrayIconPresentation.Create(TrayConfidenceState.Live, 72.4)));
-        Assert.NotSame(badge72, cache.Get(TrayIconPresentation.Create(TrayConfidenceState.Live, 71)));
-        Assert.NotSame(live, badge72);
-        Assert.Equal(4, cache.CachedIconCount);
-        cache.Dispose();
-        cache.Dispose();
-        Assert.Equal(0, cache.CachedIconCount);
-        Assert.Throws<ObjectDisposedException>(() => cache.Get(TrayConfidenceState.Live));
-    }
-
-    [Fact]
-    public void IconCache_RejectsNullBaseAliasesAndSharedStateIcons()
-    {
-        using var appIcon = (Icon)SystemIcons.Application.Clone();
-
-        using (var nullCache = new TrayConfidenceIconCache(appIcon, (_, _) => null!))
-        {
-            Assert.Throws<InvalidOperationException>(() => nullCache.Get(TrayConfidenceState.Live));
-            Assert.Equal(0, nullCache.CachedIconCount);
-        }
-
-        using (var baseAliasCache = new TrayConfidenceIconCache(appIcon, (baseIcon, _) => baseIcon))
-        {
-            Assert.Throws<InvalidOperationException>(() => baseAliasCache.Get(TrayConfidenceState.Live));
-            Assert.Equal(0, baseAliasCache.CachedIconCount);
-        }
-
-        var sharedIcon = (Icon)SystemIcons.Application.Clone();
-        using var sharedAliasCache = new TrayConfidenceIconCache(appIcon, (_, _) => sharedIcon);
-        var live = sharedAliasCache.Get(TrayConfidenceState.Live);
-        Assert.Throws<InvalidOperationException>(() => sharedAliasCache.Get(TrayConfidenceState.Stale));
-        Assert.Same(live, sharedAliasCache.Get(TrayConfidenceState.Live));
-        Assert.Equal(1, sharedAliasCache.CachedIconCount);
-    }
-
-    [Fact]
     public void TransitionTracker_OnlyAppliesStateTransitions()
     {
         var tracker = new TrayConfidenceTransitionTracker();

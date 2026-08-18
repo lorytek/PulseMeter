@@ -69,6 +69,7 @@
                              Grid.Row="0"
                              DataContext="{Binding DataBar}"
                              ToggleExpandedRequested="ExpandCollapseButton_Click"
+                             MinimizeRequested="MinimizeButton_Click"
                              HideRequested="HideButton_Click" />
 
             <Grid Grid.Row="1"
@@ -98,6 +99,7 @@
                                                        Grid.Row="0"
                                                        DataContext="{Binding ExpandedHeader}"
                                                        ToggleExpandedRequested="ExpandCollapseButton_Click"
+                                                       MinimizeRequested="MinimizeButton_Click"
                                                        HideRequested="HideButton_Click" />
 
                         <Border x:Name="SyncIssueBanner"

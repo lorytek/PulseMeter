@@ -880,16 +880,25 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
             forecastLead = "Reset in";
             forecastWhen = FormatDurationCompact(resetAt - now);
         }
-        else if (pointExhaustion is DateTimeOffset exhaustsAt && exhaustsAt > now && exhaustsAt < resetAt)
+        else if (pointExhaustion is DateTimeOffset highConfidenceExhaustsAt
+                 && highConfidenceExhaustsAt > now
+                 && highConfidenceExhaustsAt < resetAt
+                 && forecast?.Confidence == LimitRunwayForecastConfidence.High)
         {
-            headline = $"About {FormatDurationCompact(exhaustsAt - now)} left at this pace";
-            forecastLead = $"Limit in about {FormatDurationCompact(exhaustsAt - now)}";
+            headline = $"About {FormatDurationCompact(highConfidenceExhaustsAt - now)} left at this pace";
+            forecastLead = $"Limit in about {FormatDurationCompact(highConfidenceExhaustsAt - now)}";
             forecastWhen = $"• reset in {FormatDurationCompact(resetAt - now)}";
         }
         else if (forecastWindowStart is DateTimeOffset earliest && forecastWindowEnd is DateTimeOffset latest)
         {
             headline = $"About {FormatDurationRange(earliest - now, latest - now)} left at this pace";
             forecastLead = $"Limit in about {FormatDurationRange(earliest - now, latest - now)}";
+            forecastWhen = $"• reset in {FormatDurationCompact(resetAt - now)}";
+        }
+        else if (pointExhaustion is DateTimeOffset exhaustsAt && exhaustsAt > now && exhaustsAt < resetAt)
+        {
+            headline = $"About {FormatDurationCompact(exhaustsAt - now)} left at this pace";
+            forecastLead = $"Limit in about {FormatDurationCompact(exhaustsAt - now)}";
             forecastWhen = $"• reset in {FormatDurationCompact(resetAt - now)}";
         }
         else if (pacePerHour is null or <= 0)
@@ -1382,13 +1391,13 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
         }
         else if (difference > 0)
         {
-            valueText = $"{difference:0.#}%/h faster";
-            stateText = "than recent baseline";
+            valueText = $"+{difference:0.#} points/h";
+            stateText = "vs recent baseline";
         }
         else
         {
-            valueText = $"{Math.Abs(difference):0.#}%/h slower";
-            stateText = "than recent baseline";
+            valueText = $"-{Math.Abs(difference):0.#} points/h";
+            stateText = "vs recent baseline";
         }
 
         return new UsageMomentumSummary(valueText, stateText, baselineText, gaugeValue)
@@ -1459,13 +1468,13 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
         }
         else if (difference > 0)
         {
-            valueText = $"{difference:0.#}%/h faster";
-            stateText = "than recent active-hour baseline";
+            valueText = $"+{difference:0.#} points/h";
+            stateText = "vs recent active-hour baseline";
         }
         else
         {
-            valueText = $"{Math.Abs(difference):0.#}%/h slower";
-            stateText = "than recent active-hour baseline";
+            valueText = $"-{Math.Abs(difference):0.#} points/h";
+            stateText = "vs recent active-hour baseline";
         }
 
         return new UsageMomentumSummary(valueText, stateText, baselineText, gaugeValue)
@@ -1613,13 +1622,20 @@ public sealed class UsageTrendPresenter : IUsageTrendPresenter
             if (forecast.WindowDurationMins is >= 10_080)
             {
                 var days = momentum.BaselineDayCount == 1 ? "1 day" : $"{momentum.BaselineDayCount} days";
-                return momentum.Confidence switch
+                var runwayConfidence = forecast.Confidence switch
                 {
-                    UsageMomentumConfidence.Established => $"Established • {momentum.BaselineHourCount} active hours • {days}",
-                    UsageMomentumConfidence.EarlyEstimate => $"Early estimate • {momentum.BaselineHourCount} active hours • {days}",
-                    UsageMomentumConfidence.FirstLook => $"First look • {momentum.BaselineHourCount} active hours • {days}",
+                    LimitRunwayForecastConfidence.High => "High-confidence runway",
+                    LimitRunwayForecastConfidence.Medium => "Medium-confidence runway",
+                    _ => "Low-confidence runway"
+                };
+                var baselineConfidence = momentum.Confidence switch
+                {
+                    UsageMomentumConfidence.Established => $"Established baseline • {momentum.BaselineHourCount} active hours • {days}",
+                    UsageMomentumConfidence.EarlyEstimate => $"Early baseline • {momentum.BaselineHourCount} active hours • {days}",
+                    UsageMomentumConfidence.FirstLook => $"First-look baseline • {momentum.BaselineHourCount} active hours • {days}",
                     _ => "Waiting for the first activity-qualified hour"
                 };
+                return $"{runwayConfidence} • {baselineConfidence}";
             }
 
             evidence = $"{evidence} over {FormatEvidenceDuration(duration)}";

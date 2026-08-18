@@ -27,7 +27,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="93" />
+                <ColumnDefinition Width="131" />
             </Grid.ColumnDefinitions>
 
             <Viewbox x:Name="CompactQuotaScaleBox"
@@ -187,6 +187,19 @@
                           StrokeEndLineCap="Round"
                           StrokeLineJoin="Round"
                           Data="M 1 1 L 6 7 L 11 1" />
+                </Button>
+                <Button Margin="8,0,0,0"
+                        Style="{DynamicResource CompactIconButtonStyle}"
+                        ToolTip="Minimize PulseMeter"
+                        AutomationProperties.Name="Minimize PulseMeter"
+                        Click="MinimizeButton_Click">
+                    <Path Width="12"
+                          Height="12"
+                          Stroke="#111827"
+                          StrokeThickness="1.6"
+                          StrokeStartLineCap="Round"
+                          StrokeEndLineCap="Round"
+                          Data="M 1 6 L 11 6" />
                 </Button>
                 <Button Margin="8,0,0,0"
                         Style="{DynamicResource CompactIconButtonStyle}"

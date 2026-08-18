@@ -921,7 +921,7 @@ public sealed class PulseMeterWindowLayoutTests
         var statusBlock = xaml[statusStart..controlsStart];
         var controlsBlock = xaml[controlsStart..];
 
-        Assert.Contains("<ColumnDefinition Width=\"93\" />", columnsBlock);
+        Assert.Contains("<ColumnDefinition Width=\"131\" />", columnsBlock);
         Assert.Contains("Grid.Column=\"1\"", statusBlock);
         Assert.Contains("Grid.Column=\"2\"", controlsBlock);
     }
@@ -1372,13 +1372,18 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("Binding=\"{Binding CurrentPaceBand}\" Value=\"FarAboveSustainable\"", trendXaml);
         Assert.Contains("AutomationProperties.Name=\"Preview completed momentum gauge\"", trendXaml);
         Assert.Contains("Text=\"Example after the first active hour\"", trendXaml);
-        Assert.Contains("Text=\"than recent active-hour baseline\"", trendXaml);
+        Assert.Contains("Text=\"vs recent active-hour baseline\"", trendXaml);
         Assert.Contains("Text=\"{Binding RecommendationText}\"", trendXaml);
         Assert.Contains("AutomationProperties.Name=\"Usage chart legend\"", trendXaml);
-        Assert.Contains("Text=\"Actual usage\"", trendXaml);
-        Assert.Contains("Text=\"Current forecast\"", trendXaml);
-        Assert.Contains("Text=\"Expected limit\"", trendXaml);
-        Assert.Contains("Text=\"Reset\"", trendXaml);
+        Assert.Contains("Text=\"Recorded usage\"", trendXaml);
+        Assert.Contains("Text=\"Unmeasured gap\"", trendXaml);
+        Assert.Contains("Text=\"Forecast from now\"", trendXaml);
+        Assert.Contains("Text=\"Sustainable pace\"", trendXaml);
+        Assert.Contains("Text=\"100% limit\"", trendXaml);
+        Assert.Contains("Text=\"Reset time\"", trendXaml);
+        Assert.DoesNotContain("Text=\"Expected limit\"", trendXaml);
+        Assert.Contains("X1=\"1\" Y1=\"10\" X2=\"19\" Y2=\"2\"", trendXaml);
+        Assert.Contains("X1=\"10\" X2=\"10\" Y2=\"12\"", trendXaml);
         Assert.Contains("Confidence grows: First look at 1 hour; Early at 8 hours over 2 days; Established at 24 hours over 3 days.", trendXaml);
         Assert.Contains("ToolTip=\"Reset chart view\"", trendXaml);
         Assert.Contains("Text=\"&#xE72C;\"", trendXaml);
@@ -1770,6 +1775,23 @@ public sealed class PulseMeterWindowLayoutTests
         Assert.Contains("ExpandCollapseButton_Click", xaml);
         Assert.Contains("Data=\"M 1 1 L 6 7 L 11 1\"", xaml);
         Assert.DoesNotContain("Content=\"-\"", xaml);
+    }
+
+    [Fact]
+    public void HeaderControls_OfferMinimizeSeparatelyFromCollapseAndHide()
+    {
+        var windowXaml = ReadXamlFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml");
+        var compactXaml = ReadXamlFile("src", "PulseMeter", "Slices", "DataBar", "UI", "DataBar.xaml");
+        var expandedXaml = ReadXamlFile("src", "PulseMeter", "Slices", "ExpandedHeader", "UI", "ExpandedHeader.xaml");
+        var windowCode = File.ReadAllText(FindWorkspaceFile("src", "PulseMeter", "Slices", "PulseMeterWindow", "UI", "PulseMeterWindow.xaml.cs"));
+
+        Assert.Contains("MinimizeRequested=\"MinimizeButton_Click\"", windowXaml);
+        Assert.Contains("ToolTip=\"Minimize PulseMeter\"", compactXaml);
+        Assert.Contains("AutomationProperties.Name=\"Minimize PulseMeter\"", compactXaml);
+        Assert.Contains("ToolTip=\"Minimize PulseMeter\"", expandedXaml);
+        Assert.Contains("AutomationProperties.Name=\"Minimize PulseMeter\"", expandedXaml);
+        Assert.Contains("IsMinimizedByUser = true", windowCode);
+        Assert.Contains("WindowState = WindowState.Minimized", windowCode);
     }
 
     [Fact]

@@ -136,6 +136,19 @@
                         ToolTip="{Binding ExpandCollapseTooltip}"
                         AutomationProperties.Name="{Binding ExpandCollapseTooltip}" />
                 <Button Margin="8,0,0,0"
+                        Click="MinimizeButton_Click"
+                        Style="{DynamicResource LightIconButtonStyle}"
+                        ToolTip="Minimize PulseMeter"
+                        AutomationProperties.Name="Minimize PulseMeter">
+                    <Path Width="12"
+                          Height="12"
+                          Stroke="#111827"
+                          StrokeThickness="1.6"
+                          StrokeStartLineCap="Round"
+                          StrokeEndLineCap="Round"
+                          Data="M 1 6 L 11 6" />
+                </Button>
+                <Button Margin="8,0,0,0"
                         Click="HideButton_Click"
                         Style="{DynamicResource LightIconButtonStyle}"
                         ToolTip="Hide PulseMeter"

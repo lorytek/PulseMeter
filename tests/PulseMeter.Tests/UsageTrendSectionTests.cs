@@ -533,7 +533,7 @@ public sealed class UsageTrendSectionTests
 
         var model = Assert.IsType<UsageTrendChartModel>(chart);
         Assert.Equal(
-            "Waiting for the first activity-qualified hour",
+            "Low-confidence runway • Waiting for the first activity-qualified hour",
             model.Summary.ConfidenceText);
         Assert.True(model.Summary.Momentum.IsLearning);
         Assert.Equal("Waiting", model.Summary.Momentum.ValueText);
@@ -648,7 +648,7 @@ public sealed class UsageTrendSectionTests
             baselineHourlyRates: establishedRates);
 
         Assert.Equal(UsageMomentumConfidence.EarlyEstimate, early.Confidence);
-        Assert.Equal("than recent active-hour baseline", early.StateText);
+        Assert.Equal("vs recent active-hour baseline", early.StateText);
         Assert.Equal(UsageMomentumConfidence.Established, established.Confidence);
         Assert.Equal(24, established.BaselineHourCount);
         Assert.Equal(3, established.BaselineDayCount);
@@ -676,7 +676,7 @@ public sealed class UsageTrendSectionTests
 
         Assert.False(momentum.IsLearning);
         Assert.Equal(UsageMomentumConfidence.FirstLook, momentum.Confidence);
-        Assert.Equal("than recent active-hour baseline", momentum.StateText);
+        Assert.Equal("vs recent active-hour baseline", momentum.StateText);
     }
 
     [Fact]
@@ -778,7 +778,7 @@ public sealed class UsageTrendSectionTests
 
         Assert.False(momentum.IsLearning);
         Assert.Equal(UsageMomentumConfidence.FirstLook, momentum.Confidence);
-        Assert.Equal("than recent active-hour baseline", momentum.StateText);
+        Assert.Equal("vs recent active-hour baseline", momentum.StateText);
         Assert.StartsWith("15m live · recent median", momentum.BaselineText);
         Assert.Contains("15m of measured activity", momentum.AccessibleSummary);
     }
@@ -829,8 +829,8 @@ public sealed class UsageTrendSectionTests
             activityCoverage: LocalActivityCoverage.Available);
 
         Assert.False(momentum.IsLearning);
-        Assert.Equal("2%/h slower", momentum.ValueText);
-        Assert.Equal("than recent active-hour baseline", momentum.StateText);
+        Assert.Equal("-2 points/h", momentum.ValueText);
+        Assert.Equal("vs recent active-hour baseline", momentum.StateText);
     }
 
     [Fact]
@@ -1004,8 +1004,8 @@ public sealed class UsageTrendSectionTests
 
         var momentum = UsageTrendPresenter.BuildUsageMomentum(points, 300);
 
-        Assert.Equal("1%/h faster", momentum.ValueText);
-        Assert.Equal("than recent baseline", momentum.StateText);
+        Assert.Equal("+1 points/h", momentum.ValueText);
+        Assert.Equal("vs recent baseline", momentum.StateText);
         Assert.Equal("vs 5h window median", momentum.BaselineText);
         Assert.Equal(1, momentum.GaugeValue);
         Assert.False(momentum.IsLearning);
@@ -1028,8 +1028,8 @@ public sealed class UsageTrendSectionTests
 
         var momentum = UsageTrendPresenter.BuildUsageMomentum(points, 10_080);
 
-        Assert.Equal("0.1%/h faster", momentum.ValueText);
-        Assert.Equal("than recent active-hour baseline", momentum.StateText);
+        Assert.Equal("+0.1 points/h", momentum.ValueText);
+        Assert.Equal("vs recent active-hour baseline", momentum.StateText);
         Assert.StartsWith("recent median", momentum.BaselineText);
         Assert.True(momentum.GaugeValue > 0);
         Assert.False(momentum.IsLearning);
@@ -1071,7 +1071,7 @@ public sealed class UsageTrendSectionTests
         Assert.Equal(reset, chart.ResetAt);
         Assert.Equal(now.AddMinutes(40), chart.ForecastWindowStart);
         Assert.Equal(now.AddMinutes(56), chart.ForecastWindowEnd);
-        Assert.Contains("left at this pace", chart.Summary.Headline);
+        Assert.Equal("About 40m–56m left at this pace", chart.Summary.Headline);
         Assert.Equal("Medium evidence • 5 samples over 40m", chart.Summary.ConfidenceText);
         Assert.Equal("5%/h", chart.Summary.CurrentPaceText);
         Assert.Equal(UsagePaceBand.FarAboveSustainable, chart.Summary.CurrentPaceBand);
@@ -1315,12 +1315,57 @@ public sealed class UsageTrendSectionTests
 
         var model = Assert.IsType<UsageTrendChartModel>(chart);
         Assert.Equal(UsageMomentumConfidence.Established, model.Summary.Momentum.Confidence);
+        Assert.Equal(
+            "Low-confidence runway • Established baseline • 24 active hours • 3 days",
+            model.Summary.ConfidenceText);
         var advisor = Assert.IsType<UsageTrendBlockAdvisor>(model.BlockAdvisor);
         Assert.Equal(UsageTrendBlockAdvisorStatus.LikelyFits, advisor.Status);
         Assert.Equal("likely fits", advisor.VerdictText);
         Assert.Equal("Established baseline", advisor.ConfidenceText);
         Assert.Contains("established activity-qualified baseline", advisor.Detail, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("needs more evidence", advisor.AccessibleSummary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Presenter_WeeklySummarySeparatesMediumRunwayFromEstablishedBaseline()
+    {
+        var now = new DateTimeOffset(2026, 8, 18, 10, 0, 0, TimeSpan.Zero);
+        var reset = now.AddHours(45);
+        var establishedRates = Enumerable.Range(0, 8)
+            .Select(index => new LimitHourlyUsageRate(now.AddDays(-3).AddHours(index), 1))
+            .Concat(Enumerable.Range(0, 8)
+                .Select(index => new LimitHourlyUsageRate(now.AddDays(-2).AddHours(index), 1)))
+            .Concat(Enumerable.Range(0, 8)
+                .Select(index => new LimitHourlyUsageRate(now.AddDays(-1).AddHours(index), 1)))
+            .ToArray();
+        var trend = Trend(now, reset, isMock: false, [33, 41, 49]) with
+        {
+            BucketId = "codex|10080",
+            WindowLabel = "7d",
+            WindowDurationMins = 10_080,
+            BaselineHourlyRates = establishedRates,
+            ActivityCoverage = LocalActivityCoverage.Available
+        };
+        var forecast = WeeklyForecast(now, reset, LimitRunwayForecastConfidence.Medium) with
+        {
+            UsedPercent = 49,
+            PercentPerHour = 3.1,
+            ExhaustsAtUtc = now.AddHours(16),
+            EarliestExhaustsAtUtc = now.AddHours(12),
+            LatestExhaustsAtUtc = now.AddHours(23)
+        };
+
+        var chart = Assert.IsType<UsageTrendChartModel>(new UsageTrendPresenter().BuildChart(
+            trend,
+            forecast,
+            now,
+            showProjection: true,
+            showRange: true));
+
+        Assert.Equal("About 12h–23h left at this pace", chart.Summary.Headline);
+        Assert.Equal(
+            "Medium-confidence runway • Established baseline • 24 active hours • 3 days",
+            chart.Summary.ConfidenceText);
     }
 
     [Fact]
