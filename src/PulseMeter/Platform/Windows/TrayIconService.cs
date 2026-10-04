@@ -6,6 +6,7 @@ using PulseMeter.Slices.ExpandedHeader.UI;
 using PulseMeter.Slices.PulseMeterWindow.Business;
 using PulseMeter.Slices.PulseMeterWindow;
 using PulseMeter.Slices.SupportSnapshot.UI;
+using PulseMeter.Slices.UsageCollection.Models;
 
 namespace PulseMeter.Platform.Windows;
 
@@ -18,6 +19,8 @@ public sealed class TrayIconService : ITrayIconService
     private readonly NotifyIcon _notifyIcon;
     private readonly ContextMenuStrip _contextMenu;
     private readonly ToolStripMenuItem _mockModeItem;
+    private readonly ToolStripMenuItem _codexProviderItem;
+    private readonly ToolStripMenuItem _claudeProviderItem;
     private readonly ToolStripMenuItem _autoShowItem;
     private readonly ToolStripMenuItem _autoHideItem;
     private readonly ToolStripMenuItem _alwaysOnTopItem;
@@ -53,6 +56,16 @@ public sealed class TrayIconService : ITrayIconService
         _contextMenu.Items.Add("Support snapshot…", null, (_, _) => ShowSupportSnapshot());
         _contextMenu.Items.Add("Desktop process snapshot…", null, (_, _) => ShowDesktopProcessSnapshot());
         _contextMenu.Items.Add(new ToolStripSeparator());
+
+        _codexProviderItem = CreateProviderItem(UsageProvider.Codex);
+        _claudeProviderItem = CreateProviderItem(UsageProvider.Claude);
+        if (_viewModel.CanSwitchUsageProvider)
+        {
+            var monitorMenu = new ToolStripMenuItem("Monitor");
+            monitorMenu.DropDownItems.Add(_codexProviderItem);
+            monitorMenu.DropDownItems.Add(_claudeProviderItem);
+            _contextMenu.Items.Add(monitorMenu);
+        }
 
         _mockModeItem = new ToolStripMenuItem("Mock Mode")
         {
@@ -130,6 +143,7 @@ public sealed class TrayIconService : ITrayIconService
 
             if (!string.IsNullOrEmpty(e.PropertyName)
                 && e.PropertyName != nameof(PulseMeterWindowViewModel.UseMockMode)
+                && e.PropertyName != nameof(PulseMeterWindowViewModel.UsageProvider)
                 && e.PropertyName != nameof(PulseMeterWindowViewModel.AutoShowWhenCodexFocused)
                 && e.PropertyName != nameof(PulseMeterWindowViewModel.AutoHideWhenFocusLeaves)
                 && e.PropertyName != nameof(PulseMeterWindowViewModel.IsAlwaysOnTop)
@@ -209,8 +223,25 @@ public sealed class TrayIconService : ITrayIconService
         }
     }
 
+    private ToolStripMenuItem CreateProviderItem(UsageProvider provider)
+    {
+        var item = new ToolStripMenuItem(UsageProviderNames.DisplayName(provider))
+        {
+            Checked = _viewModel.UsageProvider == provider
+        };
+        item.Click += (_, _) => _pulseMeterWindow.Invoke(() => _viewModel.UsageProvider = provider);
+        return item;
+    }
+
     private void SyncMenuCheckmarks(string? propertyName)
     {
+        if (string.IsNullOrEmpty(propertyName)
+            || propertyName == nameof(PulseMeterWindowViewModel.UsageProvider))
+        {
+            SetChecked(_codexProviderItem, _viewModel.UsageProvider == UsageProvider.Codex);
+            SetChecked(_claudeProviderItem, _viewModel.UsageProvider == UsageProvider.Claude);
+        }
+
         if (string.IsNullOrEmpty(propertyName)
             || propertyName == nameof(PulseMeterWindowViewModel.UseMockMode))
         {
@@ -263,6 +294,8 @@ public sealed class TrayIconService : ITrayIconService
         _notifyIcon.Visible = false;
         _notifyIcon.Dispose();
         _contextMenu.Dispose();
+        _codexProviderItem.Dispose();
+        _claudeProviderItem.Dispose();
         _appIcon.Dispose();
     }
 

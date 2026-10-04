@@ -475,7 +475,9 @@ public sealed class PulseMeterWindowLayoutTests
 
         Assert.Contains("internal static class UsageCollectionRegistration", coreRegistration);
         Assert.Contains("internal static IServiceCollection AddUsageCollection", coreRegistration);
-        Assert.Contains("AddSingleton<IUsageService, CodexUsageService>", coreRegistration);
+        Assert.Contains("AddSingleton<CodexUsageService>", coreRegistration);
+        Assert.Contains("AddSingleton<ClaudeUsageService>", coreRegistration);
+        Assert.Contains("AddSingleton<IUsageService>(provider => provider.GetRequiredService<UsageProviderRouter>())", coreRegistration);
         Assert.Contains("AddSingleton<SharedRolloutAnalyticsSource>", coreRegistration);
         Assert.Contains("new ProjectUsageService(provider.GetRequiredService<SharedRolloutAnalyticsSource>())", coreRegistration);
         Assert.Contains("new UsageAttributionService(provider.GetRequiredService<SharedRolloutAnalyticsSource>())", coreRegistration);
@@ -1597,7 +1599,9 @@ public sealed class PulseMeterWindowLayoutTests
 
         Assert.Contains("Microsoft.Extensions.DependencyInjection", appProject);
         Assert.Contains("ServiceCollection", compositionRoot);
-        Assert.Contains("AddSingleton<IUsageService, CodexUsageService>", coreRegistration);
+        Assert.Contains("AddSingleton<CodexUsageService>", coreRegistration);
+        Assert.Contains("AddSingleton<ClaudeUsageService>", coreRegistration);
+        Assert.Contains("AddSingleton<IUsageService>(provider => provider.GetRequiredService<UsageProviderRouter>())", coreRegistration);
         Assert.Contains("AddSingleton<IForegroundWindowService, ForegroundWindowService>", infrastructureRegistration);
         Assert.Contains("AddSingleton<ITrayIconService, TrayIconService>", shellRegistration);
         Assert.Contains("AddSingleton<IPulseMeterTimerFactory, DispatcherPulseMeterTimerFactory>", infrastructureRegistration);

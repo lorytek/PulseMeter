@@ -24,7 +24,9 @@ public sealed class PulseMeterApplicationTests
 
         var usageService = provider.GetRequiredService<IUsageService>();
 
-        Assert.IsType<CodexUsageService>(usageService);
+        Assert.IsType<UsageProviderRouter>(usageService);
+        Assert.NotNull(provider.GetRequiredService<CodexUsageService>());
+        Assert.NotNull(provider.GetRequiredService<ClaudeUsageService>());
     }
 
     [Fact]

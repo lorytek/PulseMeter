@@ -35,6 +35,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     };
 
     private readonly IUsageService _usageService;
+    private readonly IUsageProviderSwitch? _usageProviderSwitch;
     private readonly IUsageSignalsTracker _usageSignalsTracker;
     private readonly IBudgetAlertTracker _budgetAlertTracker;
     private readonly ISupportSnapshotFactsStore _supportSnapshotFactsStore;
@@ -97,6 +98,7 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         ReturnNoteSectionViewModel? returnNote = null)
     {
         _usageService = usageService;
+        _usageProviderSwitch = usageService as IUsageProviderSwitch;
         _usageSignalsTracker = usageSignalsTracker ?? new UsageSignalsTracker(new ZeroUserIdleTimeProvider());
         _budgetAlertTracker = budgetAlertTracker ?? new BudgetAlertTracker();
         _supportSnapshotFactsStore = supportSnapshotFactsStore ?? new SupportSnapshotFactsStore();
@@ -409,6 +411,30 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
 
     public string? SelectedLimitKey => _selectedLimitKey;
 
+    /// <summary>True when the usage source can switch between Codex and Claude Code.</summary>
+    public bool CanSwitchUsageProvider => _usageProviderSwitch is not null;
+
+    public UsageProvider UsageProvider
+    {
+        get => _usageProviderSwitch?.Provider ?? UsageProvider.Codex;
+        set
+        {
+            if (_usageProviderSwitch is null || _usageProviderSwitch.Provider == value)
+            {
+                return;
+            }
+
+            _usageProviderSwitch.Provider = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(UsageProviderDisplayName));
+            RefreshComputedProperties();
+            RefreshTopChromeViewModels();
+            _ = RefreshAsync();
+        }
+    }
+
+    public string UsageProviderDisplayName => UsageProviderNames.DisplayName(UsageProvider);
+
     public bool UseMockMode
     {
         get => _useMockMode;
@@ -441,7 +467,9 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     {
         get
         {
-            return RateLimits.CompactTitleText;
+            return CanSwitchUsageProvider
+                ? $"{UsageProviderDisplayName} · {RateLimits.CompactTitleText}"
+                : RateLimits.CompactTitleText;
         }
     }
 
@@ -986,6 +1014,11 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
 
     private static string DisplaySource(string source)
     {
+        if (source.Equals("Claude", StringComparison.OrdinalIgnoreCase))
+        {
+            return UsageProviderNames.DisplayName(UsageProvider.Claude);
+        }
+
         return source.Equals("AppServer", StringComparison.OrdinalIgnoreCase)
             || source.Equals("Codex", StringComparison.OrdinalIgnoreCase)
                 ? "Live source"

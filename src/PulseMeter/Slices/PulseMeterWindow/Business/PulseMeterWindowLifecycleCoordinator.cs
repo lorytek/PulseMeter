@@ -374,7 +374,8 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
             or nameof(PulseMeterWindowViewModel.IsProjectUsageVisible)
             or nameof(PulseMeterWindowViewModel.IsUsageAttributionVisible)
             or nameof(PulseMeterWindowViewModel.IsDailyUsageVisible)
-            or nameof(PulseMeterWindowViewModel.IsQuickAccessHotkeyRequested))
+            or nameof(PulseMeterWindowViewModel.IsQuickAccessHotkeyRequested)
+            or nameof(PulseMeterWindowViewModel.UsageProvider))
         {
             QueueAppSettingsSave();
         }
@@ -459,7 +460,8 @@ public sealed class PulseMeterWindowLifecycleCoordinator : IPulseMeterWindowLife
             viewModel.AutoShowWhenCodexFocused,
             viewModel.AutoHideWhenFocusLeaves,
             viewModel.HasShownTrayHideGuidance,
-            viewModel.IsQuickAccessHotkeyRequested);
+            viewModel.IsQuickAccessHotkeyRequested,
+            viewModel.UsageProvider.ToString());
     }
 
     private void UpdateForegroundVisibility()
