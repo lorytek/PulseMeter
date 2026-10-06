@@ -19,10 +19,14 @@ public enum ClaudeUsageFetchStatus
 public sealed record ClaudeUsageFetchResult(
     ClaudeUsageFetchStatus Status,
     JsonElement Payload = default,
-    string? Detail = null)
+    string? Detail = null,
+    TimeSpan? RetryAfter = null)
 {
-    public static ClaudeUsageFetchResult From(ClaudeUsageFetchStatus status, string? detail = null) =>
-        new(status, default, detail);
+    public static ClaudeUsageFetchResult From(
+        ClaudeUsageFetchStatus status,
+        string? detail = null,
+        TimeSpan? retryAfter = null) =>
+        new(status, default, detail, retryAfter);
 }
 
 public interface IClaudeUsageApiClient
@@ -277,7 +281,12 @@ public sealed class ClaudeUsageApiClient : IClaudeUsageApiClient
 
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
-                return ClaudeUsageFetchResult.From(ClaudeUsageFetchStatus.RateLimited);
+                var retryAfter = response.Headers.RetryAfter is { } header
+                    ? header.Delta ?? (header.Date is { } date ? date - _clock() : null)
+                    : null;
+                return ClaudeUsageFetchResult.From(
+                    ClaudeUsageFetchStatus.RateLimited,
+                    retryAfter: retryAfter is { } wait && wait > TimeSpan.Zero ? wait : null);
             }
 
             if (!response.IsSuccessStatusCode)

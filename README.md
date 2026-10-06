@@ -162,6 +162,7 @@ PulseMeter can also monitor Claude Code. Use the `Switch to Claude Code` button 
 - Rate limits (5-hour, weekly, and model-specific weekly limits such as Opus) come from the Claude subscription sign-in that Claude Code already stored in `%USERPROFILE%\.claude\.credentials.json` (or `CLAUDE_CONFIG_DIR`). PulseMeter only reads the access token to request usage from Anthropic; it never refreshes, writes, or uploads credentials elsewhere.
 - Account usage, Daily Usage, Project Health, Burn Analysis, and Usage Momentum are estimated from the token counts in local Claude Code session logs under `%USERPROFILE%\.claude\projects`. Message text is not kept or displayed.
 - PulseMeter looks for `.credentials.json` in `CLAUDE_CONFIG_DIR`, then `.claude` under `%USERPROFILE%`, `HOME`, and `HOMEDRIVE%HOMEPATH%`. If none has a token, the status message lists every path it checked and what it found there.
+- Anthropic rate-limits the usage endpoint, so PulseMeter asks it at most every 5 minutes (longer after a 429, following `Retry-After`) and reuses the last reading in between. Local dashboards still refresh on every sync.
 - If the sign-in is missing or expired, open Claude Code once so it refreshes, then sync again.
 - Reset credits, Desktop process snapshots, and Open in Codex remain Codex-only.
 

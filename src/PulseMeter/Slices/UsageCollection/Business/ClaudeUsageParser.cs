@@ -55,6 +55,8 @@ public static class ClaudeUsageParser
             });
         }
 
+        AddLimitsListFallback(payload, buckets, now);
+
         // Keep the general 5h/7d pair first so it becomes the default limit selection.
         return buckets
             .OrderBy(bucket => string.Equals(bucket.LimitId, GeneralLimitId, StringComparison.Ordinal) ? 0 : 1)
@@ -62,6 +64,100 @@ public static class ClaudeUsageParser
             .ThenBy(bucket => bucket.WindowDurationMins)
             .ToList();
     }
+
+    /// <summary>
+    /// Newer responses describe limits as a list of self-describing entries
+    /// (<c>kind</c> = session / weekly_all / weekly_scoped, <c>percent</c>, <c>resets_at</c>,
+    /// and for scoped limits <c>scope.model.display_name</c>). Entries only fill in windows
+    /// the older top-level fields did not already provide.
+    /// </summary>
+    private static void AddLimitsListFallback(JsonElement payload, List<RateLimitBucket> buckets, DateTimeOffset now)
+    {
+        if (!payload.TryGetProperty("limits", out var limits) || limits.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        foreach (var entry in limits.EnumerateArray())
+        {
+            if (entry.ValueKind != JsonValueKind.Object
+                || ReadString(entry, "kind") is not { } kind
+                || (ReadDouble(entry, "percent") ?? ReadDouble(entry, "utilization")) is not double percent)
+            {
+                continue;
+            }
+
+            int duration;
+            string limitId;
+            string groupLabel;
+            string? limitName = null;
+            switch (kind.ToLowerInvariant())
+            {
+                case "session":
+                    (duration, limitId, groupLabel) = (FiveHourMinutes, GeneralLimitId, "General");
+                    break;
+                case "weekly_all":
+                    (duration, limitId, groupLabel) = (SevenDayMinutes, GeneralLimitId, "General");
+                    break;
+                case "weekly_scoped":
+                    var scope = ReadScopeLabel(entry) ?? "Scoped";
+                    (duration, limitId, groupLabel) = (SevenDayMinutes, $"{GeneralLimitId}_{Slug(scope)}", scope);
+                    limitName = scope;
+                    break;
+                default:
+                    continue;
+            }
+
+            if (buckets.Any(bucket => bucket.LimitId == limitId && bucket.WindowDurationMins == duration))
+            {
+                continue;
+            }
+
+            var resetsAt = ReadDateTimeOffset(entry, "resets_at");
+            var resetsAtUnix = resetsAt?.ToUnixTimeSeconds();
+            var usedPercent = Math.Clamp(percent, 0, 100);
+            buckets.Add(new RateLimitBucket
+            {
+                LimitId = limitId,
+                LimitName = limitName,
+                UsedPercent = usedPercent,
+                WindowDurationMins = duration,
+                ResetsAtUnixSeconds = resetsAtUnix,
+                ResetsAtUtc = resetsAt,
+                RateLimitReachedType = usedPercent >= 100 ? "usage_limit_reached" : null,
+                GroupLabel = groupLabel,
+                WindowLabel = WindowDurationLabeler.LabelFor(duration, limitId, null),
+                Label = WindowDurationLabeler.LabelFor(duration, limitId, limitName),
+                ResetCountdown = CountdownFormatter.FormatResetCountdown(resetsAtUnix, now)
+            });
+        }
+    }
+
+    private static string? ReadScopeLabel(JsonElement entry)
+    {
+        if (!entry.TryGetProperty("scope", out var scope) || scope.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        if (scope.TryGetProperty("model", out var model) && model.ValueKind == JsonValueKind.Object)
+        {
+            return ReadString(model, "display_name") ?? ReadString(model, "name");
+        }
+
+        return ReadString(scope, "display_name") ?? ReadString(scope, "name");
+    }
+
+    private static string Slug(string label)
+    {
+        var slug = new string(label.ToLowerInvariant().Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray()).Trim('_');
+        return slug.Length == 0 ? "scoped" : slug;
+    }
+
+    private static string? ReadString(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
 
     private static int? TryGetWindowDuration(string name)
     {

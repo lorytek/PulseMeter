@@ -213,7 +213,8 @@ public sealed class ClaudeUsageTests
     {
         using var document = JsonDocument.Parse(UsagePayload);
         var api = new StubApiClient(new ClaudeUsageFetchResult(ClaudeUsageFetchStatus.Success, document.RootElement.Clone()));
-        var service = CreateService(api);
+        var clock = new MutableClock(Now);
+        var service = CreateService(api, clock.UtcNow);
         UsageSnapshot? published = null;
         service.SnapshotUpdated += (_, snapshot) => published = snapshot;
 
@@ -226,6 +227,7 @@ public sealed class ClaudeUsageTests
         Assert.Same(live, published);
 
         api.Result = ClaudeUsageFetchResult.From(ClaudeUsageFetchStatus.SignInExpired);
+        clock.Advance(ClaudeUsageService.MinimumFetchInterval + TimeSpan.FromSeconds(1));
         var stale = await service.GetSnapshotAsync();
 
         Assert.Equal(SyncStatus.Stale, stale.SyncStatus);
@@ -340,6 +342,134 @@ public sealed class ClaudeUsageTests
     }
 
     [Fact]
+    public void Parser_ReadsSelfDescribingLimitsListWhenTopLevelWindowsAreMissing()
+    {
+        using var document = JsonDocument.Parse("""
+            {
+              "five_hour": null,
+              "seven_day": null,
+              "limits": [
+                { "kind": "session", "percent": 12.5, "resets_at": "2026-10-04T14:30:00Z" },
+                { "kind": "weekly_all", "percent": 40, "resets_at": "2026-10-09T08:00:00Z" },
+                { "kind": "weekly_scoped", "percent": 88, "resets_at": "2026-10-09T08:00:00Z",
+                  "scope": { "model": { "display_name": "Opus 4" } } },
+                { "kind": "something_new", "percent": 1 }
+              ]
+            }
+            """);
+
+        var buckets = ClaudeUsageParser.ParseRateLimitBuckets(document.RootElement, Now);
+
+        Assert.Equal(3, buckets.Count);
+        Assert.Equal((300, 12.5), (buckets[0].WindowDurationMins!.Value, buckets[0].UsedPercent!.Value));
+        Assert.Equal((10_080, 40.0), (buckets[1].WindowDurationMins!.Value, buckets[1].UsedPercent!.Value));
+        Assert.Equal(ClaudeUsageParser.GeneralLimitId, buckets[0].LimitId);
+        Assert.Equal("claude_opus_4", buckets[2].LimitId);
+        Assert.Equal("Opus 4", buckets[2].GroupLabel);
+    }
+
+    [Fact]
+    public void Parser_DoesNotDuplicateWindowsAlreadyProvidedByTopLevelFields()
+    {
+        using var document = JsonDocument.Parse("""
+            {
+              "five_hour": { "utilization": 10, "resets_at": "2026-10-04T14:30:00Z" },
+              "limits": [ { "kind": "session", "percent": 99, "resets_at": "2026-10-04T14:30:00Z" } ]
+            }
+            """);
+
+        var buckets = ClaudeUsageParser.ParseRateLimitBuckets(document.RootElement, Now);
+
+        var only = Assert.Single(buckets);
+        Assert.Equal(10, only.UsedPercent);
+    }
+
+    [Fact]
+    public async Task Service_FetchesLimitsAtMostEveryFiveMinutesAndReusesThemBetween()
+    {
+        using var document = JsonDocument.Parse(UsagePayload);
+        var api = new StubApiClient(new ClaudeUsageFetchResult(ClaudeUsageFetchStatus.Success, document.RootElement.Clone()));
+        var clock = new MutableClock(Now);
+        var service = CreateService(api, clock.UtcNow);
+
+        var first = await service.GetSnapshotAsync();
+        clock.Advance(TimeSpan.FromSeconds(90));
+        var second = await service.GetSnapshotAsync();
+
+        Assert.Equal(1, api.CallCount);
+        Assert.Equal(SyncStatus.Live, second.SyncStatus);
+        Assert.Equal(first.Buckets.Count, second.Buckets.Count);
+        Assert.Equal(first.LastUpdatedUtc, second.LastUpdatedUtc);
+        Assert.Null(second.StatusMessage);
+
+        clock.Advance(ClaudeUsageService.MinimumFetchInterval);
+        await service.GetSnapshotAsync();
+        Assert.Equal(2, api.CallCount);
+    }
+
+    [Fact]
+    public async Task Service_HonoursRetryAfterOn429AndKeepsShowingRecentLimits()
+    {
+        using var document = JsonDocument.Parse(UsagePayload);
+        var api = new StubApiClient(new ClaudeUsageFetchResult(ClaudeUsageFetchStatus.Success, document.RootElement.Clone()));
+        var clock = new MutableClock(Now);
+        var service = CreateService(api, clock.UtcNow);
+        await service.GetSnapshotAsync();
+
+        clock.Advance(ClaudeUsageService.MinimumFetchInterval + TimeSpan.FromSeconds(1));
+        api.Result = ClaudeUsageFetchResult.From(ClaudeUsageFetchStatus.RateLimited, retryAfter: TimeSpan.FromMinutes(12));
+        var limited = await service.GetSnapshotAsync();
+
+        Assert.Equal(2, api.CallCount);
+        Assert.Equal(SyncStatus.Live, limited.SyncStatus);
+        Assert.Equal(3, limited.Buckets.Count);
+
+        clock.Advance(TimeSpan.FromMinutes(11));
+        await service.GetSnapshotAsync();
+        Assert.Equal(2, api.CallCount);
+
+        clock.Advance(TimeSpan.FromMinutes(2));
+        api.Result = new ClaudeUsageFetchResult(ClaudeUsageFetchStatus.Success, document.RootElement.Clone());
+        await service.GetSnapshotAsync();
+        Assert.Equal(3, api.CallCount);
+    }
+
+    [Fact]
+    public async Task Service_ReportsRateLimitWithWaitWhenThereAreNoCachedLimits()
+    {
+        var api = new StubApiClient(ClaudeUsageFetchResult.From(ClaudeUsageFetchStatus.RateLimited));
+        var service = CreateService(api);
+
+        var snapshot = await service.GetSnapshotAsync();
+
+        Assert.Equal(SyncStatus.Unavailable, snapshot.SyncStatus);
+        Assert.Contains("rate limiting", snapshot.StatusMessage);
+        Assert.Contains("5 min", snapshot.StatusMessage);
+    }
+
+    [Fact]
+    public async Task ApiClient_ReadsRetryAfterHeaderOn429()
+    {
+        var home = CreateTempDirectory();
+        try
+        {
+            await File.WriteAllTextAsync(
+                Path.Combine(home, ".credentials.json"),
+                """{ "claudeAiOauth": { "accessToken": "token-value", "expiresAt": 4102444800000 } }""");
+            var handler = new StubHandler(HttpStatusCode.TooManyRequests, "{}", retryAfterSeconds: 120);
+
+            var result = await new ClaudeUsageApiClient(home, handler, () => Now).FetchAsync();
+
+            Assert.Equal(ClaudeUsageFetchStatus.RateLimited, result.Status);
+            Assert.Equal(TimeSpan.FromSeconds(120), result.RetryAfter);
+        }
+        finally
+        {
+            Directory.Delete(home, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Service_IsUnavailableWhenNeverSignedIn()
     {
         var service = CreateService(new StubApiClient(ClaudeUsageFetchResult.From(ClaudeUsageFetchStatus.NotSignedIn)));
@@ -385,14 +515,23 @@ public sealed class ClaudeUsageTests
         Assert.Equal(expected, UsageProviderNames.Parse(value));
     }
 
-    private static ClaudeUsageService CreateService(IClaudeUsageApiClient api) =>
+    private static ClaudeUsageService CreateService(IClaudeUsageApiClient api, Func<DateTimeOffset>? clock = null) =>
         new(
             new MockCodexUsageService(),
             api,
             new StubLocalSource(),
             new ProjectUsageService(CreateTempDirectory()),
             new UsageAttributionService(CreateTempDirectory()),
-            () => Now);
+            clock ?? (() => Now));
+
+    private sealed class MutableClock(DateTimeOffset start)
+    {
+        private DateTimeOffset _now = start;
+
+        public DateTimeOffset UtcNow() => _now;
+
+        public void Advance(TimeSpan by) => _now += by;
+    }
 
     private static string AssistantLine(
         string timestamp,
@@ -431,7 +570,7 @@ public sealed class ClaudeUsageTests
         return path;
     }
 
-    private sealed class StubHandler(HttpStatusCode statusCode, string body) : HttpMessageHandler
+    private sealed class StubHandler(HttpStatusCode statusCode, string body, int? retryAfterSeconds = null) : HttpMessageHandler
     {
         public int CallCount { get; private set; }
 
@@ -444,10 +583,16 @@ public sealed class ClaudeUsageTests
             CallCount++;
             LastAuthorization = request.Headers.Authorization?.ToString();
             LastBetaHeader = request.Headers.TryGetValues("anthropic-beta", out var values) ? values.Single() : null;
-            return Task.FromResult(new HttpResponseMessage(statusCode)
+            var response = new HttpResponseMessage(statusCode)
             {
                 Content = new StringContent(body)
-            });
+            };
+            if (retryAfterSeconds is int seconds)
+            {
+                response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(seconds));
+            }
+
+            return Task.FromResult(response);
         }
     }
 
@@ -455,8 +600,13 @@ public sealed class ClaudeUsageTests
     {
         public ClaudeUsageFetchResult Result { get; set; } = result;
 
-        public Task<ClaudeUsageFetchResult> FetchAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(Result);
+        public int CallCount { get; private set; }
+
+        public Task<ClaudeUsageFetchResult> FetchAsync(CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            return Task.FromResult(Result);
+        }
     }
 
     private sealed class StubLocalSource : IClaudeLocalUsageSource

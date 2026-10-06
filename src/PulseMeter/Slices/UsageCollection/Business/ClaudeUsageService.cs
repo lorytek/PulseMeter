@@ -11,6 +11,19 @@ public sealed class ClaudeUsageService : IUsageService
 {
     private static readonly TimeSpan LiveRequestTimeout = TimeSpan.FromSeconds(10);
 
+    // The usage endpoint rate-limits aggressively, so limits are fetched at most this often
+    // and reused in between. After a 429 the wait follows Retry-After, else 5/10/20/40/60 min.
+    internal static readonly TimeSpan MinimumFetchInterval = TimeSpan.FromMinutes(5);
+    internal static readonly TimeSpan CachedLimitsMaxAge = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan[] RateLimitBackoff =
+    [
+        TimeSpan.FromMinutes(5),
+        TimeSpan.FromMinutes(10),
+        TimeSpan.FromMinutes(20),
+        TimeSpan.FromMinutes(40),
+        TimeSpan.FromMinutes(60)
+    ];
+
     private readonly IMockUsageService _mockUsageService;
     private readonly IClaudeUsageApiClient _apiClient;
     private readonly IClaudeLocalUsageSource _localUsageSource;
@@ -19,6 +32,10 @@ public sealed class ClaudeUsageService : IUsageService
     private readonly Func<DateTimeOffset> _clock;
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private UsageSnapshot? _lastGoodLiveSnapshot;
+    private System.Text.Json.JsonElement _lastLimitsPayload;
+    private DateTimeOffset? _lastLimitsAtUtc;
+    private DateTimeOffset _nextFetchAllowedUtc = DateTimeOffset.MinValue;
+    private int _rateLimitStreak;
 
     public ClaudeUsageService(
         IMockUsageService mockUsageService,
@@ -70,16 +87,24 @@ public sealed class ClaudeUsageService : IUsageService
     private async Task<UsageSnapshot> GetLiveSnapshotAsync(CancellationToken cancellationToken)
     {
         var now = _clock();
-        var limitsTask = FetchLimitsAsync(cancellationToken);
+        var limitsTask = FetchLimitsThrottledAsync(now, cancellationToken);
         var localTask = ReadLocalUsageAsync(now, cancellationToken);
         await Task.WhenAll(limitsTask, localTask).ConfigureAwait(false);
 
         var limits = await limitsTask.ConfigureAwait(false);
         var local = await localTask.ConfigureAwait(false);
-        var isLive = limits.Status == ClaudeUsageFetchStatus.Success;
+
+        // While throttled (or briefly rate limited) keep showing the limits fetched a moment ago.
+        var reusedCachedLimits = limits.Status == ClaudeUsageFetchStatus.RateLimited
+            && _lastLimitsAtUtc is DateTimeOffset cachedAt
+            && now - cachedAt <= CachedLimitsMaxAge;
+        var isLive = limits.Status == ClaudeUsageFetchStatus.Success || reusedCachedLimits;
+        var limitsAtUtc = limits.Status == ClaudeUsageFetchStatus.Success ? now : _lastLimitsAtUtc;
 
         IReadOnlyList<RateLimitBucket> buckets = isLive
-            ? ClaudeUsageParser.ParseRateLimitBuckets(limits.Payload, now)
+            ? ClaudeUsageParser.ParseRateLimitBuckets(
+                limits.Status == ClaudeUsageFetchStatus.Success ? limits.Payload : _lastLimitsPayload,
+                now)
             : _lastGoodLiveSnapshot?.Buckets ?? Array.Empty<RateLimitBucket>();
         var syncStatus = isLive
             ? SyncStatus.Live
@@ -113,9 +138,13 @@ public sealed class ClaudeUsageService : IUsageService
             ActivityEvidence = local?.ActivityEvidence ?? ActivityEvidenceSnapshot.Unavailable,
             RecentActiveThread = local?.RecentSession,
             SyncStatus = syncStatus,
-            LastUpdatedUtc = isLive ? now : _lastGoodLiveSnapshot?.LastUpdatedUtc ?? now,
+            LastUpdatedUtc = isLive ? limitsAtUtc ?? now : _lastGoodLiveSnapshot?.LastUpdatedUtc ?? now,
             Source = ClaudeUsageParser.Source,
-            StatusMessage = BuildStatusMessage(limits.Status, syncStatus, local is not null, limits.Detail)
+            StatusMessage = BuildStatusMessage(
+                reusedCachedLimits ? ClaudeUsageFetchStatus.Success : limits.Status,
+                syncStatus,
+                local is not null,
+                limits.Detail)
         };
 
         if (isLive)
@@ -124,6 +153,44 @@ public sealed class ClaudeUsageService : IUsageService
         }
 
         return snapshot;
+    }
+
+    private async Task<ClaudeUsageFetchResult> FetchLimitsThrottledAsync(
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (now < _nextFetchAllowedUtc)
+        {
+            var wait = _nextFetchAllowedUtc - now;
+            return ClaudeUsageFetchResult.From(
+                ClaudeUsageFetchStatus.RateLimited,
+                $"next request in about {Math.Max(1, (int)Math.Ceiling(wait.TotalMinutes))} min",
+                wait);
+        }
+
+        var result = await FetchLimitsAsync(cancellationToken).ConfigureAwait(false);
+        switch (result.Status)
+        {
+            case ClaudeUsageFetchStatus.Success:
+                _rateLimitStreak = 0;
+                _lastLimitsPayload = result.Payload;
+                _lastLimitsAtUtc = now;
+                _nextFetchAllowedUtc = now + MinimumFetchInterval;
+                break;
+            case ClaudeUsageFetchStatus.RateLimited:
+                var backoff = result.RetryAfter is { } serverWait && serverWait > TimeSpan.Zero
+                    ? TimeSpan.FromTicks(Math.Min(serverWait.Ticks, TimeSpan.FromMinutes(60).Ticks))
+                    : RateLimitBackoff[Math.Min(_rateLimitStreak, RateLimitBackoff.Length - 1)];
+                _rateLimitStreak++;
+                _nextFetchAllowedUtc = now + backoff;
+                result = result with
+                {
+                    Detail = $"next request in about {Math.Max(1, (int)Math.Ceiling(backoff.TotalMinutes))} min"
+                };
+                break;
+        }
+
+        return result;
     }
 
     private async Task<ClaudeUsageFetchResult> FetchLimitsAsync(CancellationToken cancellationToken)
@@ -198,8 +265,9 @@ public sealed class ClaudeUsageService : IUsageService
                 : $"Claude Code sign-in was not found. Checked: {detail}. Run `claude` and sign in with your Claude subscription, then sync again.",
             ClaudeUsageFetchStatus.SignInExpired =>
                 "The Claude Code sign-in has expired. Open Claude Code once to refresh it, then sync again.",
-            ClaudeUsageFetchStatus.RateLimited =>
-                "Claude usage was requested too often. PulseMeter will try again on the next sync.",
+            ClaudeUsageFetchStatus.RateLimited => string.IsNullOrWhiteSpace(detail)
+                ? "Anthropic is rate limiting usage requests. PulseMeter will try again later."
+                : $"Anthropic is rate limiting usage requests; {detail}.",
             _ => "Claude usage limits are unavailable right now. Try syncing again."
         };
 
