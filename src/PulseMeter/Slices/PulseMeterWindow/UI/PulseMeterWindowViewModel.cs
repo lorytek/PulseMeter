@@ -134,6 +134,9 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
         }
 
         SyncNowCommand = new AsyncRelayCommand(() => RefreshAsync(), () => !IsRefreshing);
+        SwitchUsageProviderCommand = new RelayCommand(
+            _ => UsageProvider = AlternateUsageProvider,
+            _ => CanSwitchUsageProvider);
         RefreshTopChromeViewModels();
         RefreshResetCredits(DateTimeOffset.UtcNow, updateFromSnapshot: false);
     }
@@ -189,6 +192,8 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     public ObservableCollection<ResetCreditListItem> ResetCredits => ResetCreditsSection.ResetCredits;
 
     public AsyncRelayCommand SyncNowCommand { get; }
+
+    public RelayCommand SwitchUsageProviderCommand { get; }
 
     public bool AutoHideWhenFocusLeaves
     {
@@ -427,6 +432,8 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
             _usageProviderSwitch.Provider = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(UsageProviderDisplayName));
+            OnPropertyChanged(nameof(SwitchUsageProviderText));
+            OnPropertyChanged(nameof(SwitchUsageProviderTooltip));
             RefreshComputedProperties();
             RefreshTopChromeViewModels();
             _ = RefreshAsync();
@@ -434,6 +441,14 @@ public sealed class PulseMeterWindowViewModel : INotifyPropertyChanged
     }
 
     public string UsageProviderDisplayName => UsageProviderNames.DisplayName(UsageProvider);
+
+    private UsageProvider AlternateUsageProvider =>
+        UsageProvider == UsageProvider.Codex ? UsageProvider.Claude : UsageProvider.Codex;
+
+    public string SwitchUsageProviderText => $"Switch to {UsageProviderNames.DisplayName(AlternateUsageProvider)}";
+
+    public string SwitchUsageProviderTooltip =>
+        $"Monitoring {UsageProviderDisplayName}. Switch to {UsageProviderNames.DisplayName(AlternateUsageProvider)}";
 
     public bool UseMockMode
     {
