@@ -16,9 +16,13 @@ public enum ClaudeUsageFetchStatus
     Failed
 }
 
-public sealed record ClaudeUsageFetchResult(ClaudeUsageFetchStatus Status, JsonElement Payload = default)
+public sealed record ClaudeUsageFetchResult(
+    ClaudeUsageFetchStatus Status,
+    JsonElement Payload = default,
+    string? Detail = null)
 {
-    public static ClaudeUsageFetchResult From(ClaudeUsageFetchStatus status) => new(status);
+    public static ClaudeUsageFetchResult From(ClaudeUsageFetchStatus status, string? detail = null) =>
+        new(status, default, detail);
 }
 
 public interface IClaudeUsageApiClient
@@ -31,17 +35,187 @@ public interface IClaudeUsageApiClient
 /// </summary>
 public static class ClaudeHomeLocator
 {
-    public static string Resolve()
+    /// <summary>
+    /// Every folder Claude Code may keep its sign-in in, most specific first:
+    /// <c>CLAUDE_CONFIG_DIR</c>, then <c>.claude</c> under the Windows profile, the
+    /// <c>HOME</c> folder, and the <c>HOMEDRIVE</c>/<c>HOMEPATH</c> profile.
+    /// </summary>
+    public static IReadOnlyList<string> CandidateHomes(Func<string, string?>? getEnvironmentVariable = null)
     {
-        var configured = Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR");
-        if (!string.IsNullOrWhiteSpace(configured))
+        var env = getEnvironmentVariable ?? Environment.GetEnvironmentVariable;
+        var homes = new List<string>();
+
+        void Add(string? path)
         {
-            return configured.Trim();
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return;
+            }
+
+            var normalized = path.Trim().Trim('"');
+            if (!homes.Contains(normalized, StringComparer.OrdinalIgnoreCase))
+            {
+                homes.Add(normalized);
+            }
         }
 
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".claude");
+        Add(env("CLAUDE_CONFIG_DIR"));
+        AddProfile(env("USERPROFILE"));
+        AddProfile(env("HOME"));
+        var homeDrive = env("HOMEDRIVE");
+        var homePath = env("HOMEPATH");
+        if (!string.IsNullOrWhiteSpace(homeDrive) && !string.IsNullOrWhiteSpace(homePath))
+        {
+            AddProfile(homeDrive + homePath);
+        }
+
+        if (getEnvironmentVariable is null)
+        {
+            AddProfile(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+        }
+
+        return homes;
+
+        void AddProfile(string? profile)
+        {
+            if (!string.IsNullOrWhiteSpace(profile))
+            {
+                Add(Path.Combine(profile.Trim().Trim('"'), ".claude"));
+            }
+        }
+    }
+}
+
+public enum ClaudeCredentialFileState
+{
+    Missing,
+    Unreadable,
+    NoAccessToken,
+    Found
+}
+
+public sealed record ClaudeCredentialProbe(string Path, ClaudeCredentialFileState State);
+
+public sealed record ClaudeAccessToken(string Value, DateTimeOffset? ExpiresAtUtc);
+
+public sealed record ClaudeCredentialLookup(
+    ClaudeAccessToken? Token,
+    IReadOnlyList<ClaudeCredentialProbe> Probes)
+{
+    /// <summary>One line naming each path that was checked and what was found there.</summary>
+    public string Describe()
+    {
+        return string.Join("; ", Probes.Select(probe => $"{probe.Path} ({probe.State switch
+        {
+            ClaudeCredentialFileState.Missing => "file not found",
+            ClaudeCredentialFileState.Unreadable => "could not be read",
+            ClaudeCredentialFileState.NoAccessToken => "no access token inside",
+            _ => "ok"
+        }})"));
+    }
+}
+
+/// <summary>
+/// Finds the Claude Code access token. It checks each candidate folder in turn and
+/// accepts the wrapped (<c>claudeAiOauth</c>) and the flat token layouts. Only the
+/// access token is read.
+/// </summary>
+public static class ClaudeCredentialLocator
+{
+    public const string FileName = ".credentials.json";
+
+    public static ClaudeCredentialLookup Find(IEnumerable<string> homes)
+    {
+        var probes = new List<ClaudeCredentialProbe>();
+        foreach (var home in homes)
+        {
+            var path = Path.Combine(home, FileName);
+            if (!File.Exists(path))
+            {
+                probes.Add(new ClaudeCredentialProbe(path, ClaudeCredentialFileState.Missing));
+                continue;
+            }
+
+            try
+            {
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var document = JsonDocument.Parse(stream);
+                var token = ParseAccessToken(document.RootElement);
+                if (token is not null)
+                {
+                    probes.Add(new ClaudeCredentialProbe(path, ClaudeCredentialFileState.Found));
+                    return new ClaudeCredentialLookup(token, probes);
+                }
+
+                probes.Add(new ClaudeCredentialProbe(path, ClaudeCredentialFileState.NoAccessToken));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+            {
+                PrivacySafeDiagnostics.WriteFailure("claude credentials could not be read", ex);
+                probes.Add(new ClaudeCredentialProbe(path, ClaudeCredentialFileState.Unreadable));
+            }
+        }
+
+        return new ClaudeCredentialLookup(null, probes);
+    }
+
+    public static ClaudeAccessToken? ParseAccessToken(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        // Wrapped layouts first, then the token object being the document itself.
+        foreach (var wrapper in new[] { "claudeAiOauth", "oauth", "claude_ai_oauth" })
+        {
+            if (root.TryGetProperty(wrapper, out var inner)
+                && inner.ValueKind == JsonValueKind.Object
+                && ReadToken(inner) is { } wrapped)
+            {
+                return wrapped;
+            }
+        }
+
+        return ReadToken(root);
+    }
+
+    private static ClaudeAccessToken? ReadToken(JsonElement element)
+    {
+        string? value = null;
+        foreach (var name in new[] { "accessToken", "access_token" })
+        {
+            if (element.TryGetProperty(name, out var property)
+                && property.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(property.GetString()))
+            {
+                value = property.GetString();
+                break;
+            }
+        }
+
+        if (value is null)
+        {
+            return null;
+        }
+
+        DateTimeOffset? expiresAt = null;
+        foreach (var name in new[] { "expiresAt", "expires_at" })
+        {
+            if (element.TryGetProperty(name, out var expires)
+                && expires.ValueKind == JsonValueKind.Number
+                && expires.TryGetInt64(out var raw)
+                && raw > 0)
+            {
+                // Claude Code stores milliseconds; tolerate seconds too.
+                expiresAt = raw > 10_000_000_000
+                    ? DateTimeOffset.FromUnixTimeMilliseconds(raw)
+                    : DateTimeOffset.FromUnixTimeSeconds(raw);
+                break;
+            }
+        }
+
+        return new ClaudeAccessToken(value, expiresAt);
     }
 }
 
@@ -58,7 +232,7 @@ public sealed class ClaudeUsageApiClient : IClaudeUsageApiClient
     private static readonly string ClientVersion =
         typeof(ClaudeUsageApiClient).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
-    private readonly string _credentialsPath;
+    private readonly IReadOnlyList<string> _homes;
     private readonly HttpMessageHandler? _handler;
     private readonly Func<DateTimeOffset> _clock;
 
@@ -67,27 +241,18 @@ public sealed class ClaudeUsageApiClient : IClaudeUsageApiClient
         HttpMessageHandler? handler = null,
         Func<DateTimeOffset>? clock = null)
     {
-        _credentialsPath = Path.Combine(claudeHome ?? ClaudeHomeLocator.Resolve(), ".credentials.json");
+        _homes = claudeHome is null ? ClaudeHomeLocator.CandidateHomes() : [claudeHome];
         _handler = handler;
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
     }
 
     public async Task<ClaudeUsageFetchResult> FetchAsync(CancellationToken cancellationToken = default)
     {
-        ClaudeAccessToken? token;
-        try
-        {
-            token = await LoadAccessTokenAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        {
-            PrivacySafeDiagnostics.WriteFailure("claude credentials could not be read", ex);
-            return ClaudeUsageFetchResult.From(ClaudeUsageFetchStatus.NotSignedIn);
-        }
-
+        var lookup = await Task.Run(() => ClaudeCredentialLocator.Find(_homes), cancellationToken).ConfigureAwait(false);
+        var token = lookup.Token;
         if (token is null)
         {
-            return ClaudeUsageFetchResult.From(ClaudeUsageFetchStatus.NotSignedIn);
+            return ClaudeUsageFetchResult.From(ClaudeUsageFetchStatus.NotSignedIn, lookup.Describe());
         }
 
         if (token.ExpiresAtUtc is DateTimeOffset expiresAt && expiresAt <= _clock())
@@ -133,46 +298,6 @@ public sealed class ClaudeUsageApiClient : IClaudeUsageApiClient
         }
     }
 
-    private async Task<ClaudeAccessToken?> LoadAccessTokenAsync(CancellationToken cancellationToken)
-    {
-        if (!File.Exists(_credentialsPath))
-        {
-            return null;
-        }
-
-        await using var stream = new FileStream(
-            _credentialsPath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.ReadWrite | FileShare.Delete);
-        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
-        return ParseAccessToken(document.RootElement);
-    }
-
-    internal static ClaudeAccessToken? ParseAccessToken(JsonElement root)
-    {
-        if (root.ValueKind != JsonValueKind.Object
-            || !root.TryGetProperty("claudeAiOauth", out var oauth)
-            || oauth.ValueKind != JsonValueKind.Object
-            || !oauth.TryGetProperty("accessToken", out var accessToken)
-            || accessToken.ValueKind != JsonValueKind.String
-            || string.IsNullOrWhiteSpace(accessToken.GetString()))
-        {
-            return null;
-        }
-
-        DateTimeOffset? expiresAt = null;
-        if (oauth.TryGetProperty("expiresAt", out var expires)
-            && expires.ValueKind == JsonValueKind.Number
-            && expires.TryGetInt64(out var expiresMs)
-            && expiresMs > 0)
-        {
-            expiresAt = DateTimeOffset.FromUnixTimeMilliseconds(expiresMs);
-        }
-
-        return new ClaudeAccessToken(accessToken.GetString()!, expiresAt);
-    }
-
     private HttpClient CreateHttpClient()
     {
         var client = _handler is null
@@ -181,6 +306,4 @@ public sealed class ClaudeUsageApiClient : IClaudeUsageApiClient
         client.Timeout = RequestTimeout;
         return client;
     }
-
-    internal sealed record ClaudeAccessToken(string Value, DateTimeOffset? ExpiresAtUtc);
 }

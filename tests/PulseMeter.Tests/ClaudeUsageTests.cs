@@ -126,13 +126,13 @@ public sealed class ClaudeUsageTests
             { "claudeAiOauth": { "accessToken": "token-value", "expiresAt": 1791000000000 } }
             """);
 
-        var token = ClaudeUsageApiClient.ParseAccessToken(document.RootElement);
+        var token = ClaudeCredentialLocator.ParseAccessToken(document.RootElement);
 
         Assert.NotNull(token);
         Assert.Equal("token-value", token.Value);
         Assert.Equal(DateTimeOffset.FromUnixTimeMilliseconds(1791000000000), token.ExpiresAtUtc);
         using var empty = JsonDocument.Parse("{}");
-        Assert.Null(ClaudeUsageApiClient.ParseAccessToken(empty.RootElement));
+        Assert.Null(ClaudeCredentialLocator.ParseAccessToken(empty.RootElement));
     }
 
     [Fact]
@@ -146,6 +146,8 @@ public sealed class ClaudeUsageTests
 
             Assert.Equal(ClaudeUsageFetchStatus.NotSignedIn, result.Status);
             Assert.Equal(0, handler.CallCount);
+            Assert.Contains(Path.Combine(home, ".credentials.json"), result.Detail);
+            Assert.Contains("file not found", result.Detail);
         }
         finally
         {
@@ -230,6 +232,111 @@ public sealed class ClaudeUsageTests
         Assert.Equal(3, stale.Buckets.Count);
         Assert.Contains("expired", stale.StatusMessage);
         Assert.Contains("last confirmed", stale.StatusMessage);
+    }
+
+    [Fact]
+    public void CandidateHomes_ListsConfigDirThenProfileFoldersWithoutDuplicates()
+    {
+        var env = new Dictionary<string, string?>
+        {
+            ["CLAUDE_CONFIG_DIR"] = @"D:\cfg\claude",
+            ["USERPROFILE"] = @"C:\Users\laur",
+            ["HOME"] = @"C:\Users\laur",
+            ["HOMEDRIVE"] = "C:",
+            ["HOMEPATH"] = @"\Users\laur"
+        };
+
+        var homes = ClaudeHomeLocator.CandidateHomes(name => env.GetValueOrDefault(name));
+
+        Assert.Equal(@"D:\cfg\claude", homes[0]);
+        Assert.Equal(Path.Combine(@"C:\Users\laur", ".claude"), homes[1]);
+        Assert.Equal(homes.Count, homes.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Empty(ClaudeHomeLocator.CandidateHomes(_ => null));
+    }
+
+    [Fact]
+    public void CredentialLocator_FallsThroughToLaterFolderAndReportsEachProbe()
+    {
+        var empty = CreateTempDirectory();
+        var wrongShape = CreateTempDirectory();
+        var good = CreateTempDirectory();
+        try
+        {
+            File.WriteAllText(Path.Combine(wrongShape, ".credentials.json"), """{ "mcpOAuth": {} }""");
+            File.WriteAllText(
+                Path.Combine(good, ".credentials.json"),
+                """{ "claudeAiOauth": { "accessToken": "token-value" } }""");
+
+            var lookup = ClaudeCredentialLocator.Find([empty, wrongShape, good]);
+
+            Assert.Equal("token-value", lookup.Token?.Value);
+            Assert.Equal(
+                [ClaudeCredentialFileState.Missing, ClaudeCredentialFileState.NoAccessToken, ClaudeCredentialFileState.Found],
+                lookup.Probes.Select(probe => probe.State).ToArray());
+
+            var notFound = ClaudeCredentialLocator.Find([empty, wrongShape]);
+            Assert.Null(notFound.Token);
+            Assert.Contains("file not found", notFound.Describe());
+            Assert.Contains("no access token inside", notFound.Describe());
+            Assert.DoesNotContain("token-value", notFound.Describe());
+        }
+        finally
+        {
+            foreach (var directory in new[] { empty, wrongShape, good })
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void CredentialLocator_MarksMalformedJsonAsUnreadableAndKeepsLooking()
+    {
+        var broken = CreateTempDirectory();
+        var good = CreateTempDirectory();
+        try
+        {
+            File.WriteAllText(Path.Combine(broken, ".credentials.json"), "{ not json");
+            File.WriteAllText(Path.Combine(good, ".credentials.json"), """{ "accessToken": "flat-token" }""");
+
+            var lookup = ClaudeCredentialLocator.Find([broken, good]);
+
+            Assert.Equal("flat-token", lookup.Token?.Value);
+            Assert.Equal(ClaudeCredentialFileState.Unreadable, lookup.Probes[0].State);
+        }
+        finally
+        {
+            Directory.Delete(broken, recursive: true);
+            Directory.Delete(good, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("""{ "claudeAiOauth": { "accessToken": "a", "expiresAt": 4102444800000 } }""", "a")]
+    [InlineData("""{ "accessToken": "b" }""", "b")]
+    [InlineData("""{ "access_token": "c", "expires_at": 4102444800 }""", "c")]
+    [InlineData("""{ "oauth": { "access_token": "d" } }""", "d")]
+    [InlineData("""{ "claudeAiOauth": { "accessToken": "  " } }""", null)]
+    [InlineData("""[]""", null)]
+    public void CredentialLocator_ParsesWrappedAndFlatTokenShapes(string json, string? expected)
+    {
+        using var document = JsonDocument.Parse(json);
+
+        var token = ClaudeCredentialLocator.ParseAccessToken(document.RootElement);
+
+        Assert.Equal(expected, token?.Value);
+    }
+
+    [Fact]
+    public async Task Service_StatusMessageNamesTheCheckedPaths()
+    {
+        var detail = @"C:\Users\laur\.claude\.credentials.json (file not found)";
+        var service = CreateService(new StubApiClient(
+            ClaudeUsageFetchResult.From(ClaudeUsageFetchStatus.NotSignedIn, detail)));
+
+        var snapshot = await service.GetSnapshotAsync();
+
+        Assert.Contains(detail, snapshot.StatusMessage);
     }
 
     [Fact]

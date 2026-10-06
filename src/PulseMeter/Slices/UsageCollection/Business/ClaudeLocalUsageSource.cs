@@ -54,7 +54,10 @@ public sealed class ClaudeLocalUsageSource : IClaudeLocalUsageSource
 
     public ClaudeLocalUsageSource(string? claudeHome = null)
     {
-        _projectsRoot = Path.Combine(claudeHome ?? ClaudeHomeLocator.Resolve(), "projects");
+        var homes = claudeHome is null ? ClaudeHomeLocator.CandidateHomes() : [claudeHome];
+        _projectsRoot = Path.Combine(
+            homes.FirstOrDefault(home => Directory.Exists(Path.Combine(home, "projects"))) ?? homes[0],
+            "projects");
     }
 
     public Task<ClaudeLocalUsage> ReadAsync(DateTimeOffset now, CancellationToken cancellationToken = default)

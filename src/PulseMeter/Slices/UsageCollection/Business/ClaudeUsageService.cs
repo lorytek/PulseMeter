@@ -115,7 +115,7 @@ public sealed class ClaudeUsageService : IUsageService
             SyncStatus = syncStatus,
             LastUpdatedUtc = isLive ? now : _lastGoodLiveSnapshot?.LastUpdatedUtc ?? now,
             Source = ClaudeUsageParser.Source,
-            StatusMessage = BuildStatusMessage(limits.Status, syncStatus, local is not null)
+            StatusMessage = BuildStatusMessage(limits.Status, syncStatus, local is not null, limits.Detail)
         };
 
         if (isLive)
@@ -181,7 +181,8 @@ public sealed class ClaudeUsageService : IUsageService
     internal static string? BuildStatusMessage(
         ClaudeUsageFetchStatus status,
         SyncStatus syncStatus,
-        bool hasLocalUsage)
+        bool hasLocalUsage,
+        string? detail = null)
     {
         if (status == ClaudeUsageFetchStatus.Success)
         {
@@ -192,8 +193,9 @@ public sealed class ClaudeUsageService : IUsageService
 
         var reason = status switch
         {
-            ClaudeUsageFetchStatus.NotSignedIn =>
-                "Claude Code sign-in was not found. Run `claude` and sign in with your Claude subscription, then sync again.",
+            ClaudeUsageFetchStatus.NotSignedIn => string.IsNullOrWhiteSpace(detail)
+                ? "Claude Code sign-in was not found. Run `claude` and sign in with your Claude subscription, then sync again."
+                : $"Claude Code sign-in was not found. Checked: {detail}. Run `claude` and sign in with your Claude subscription, then sync again.",
             ClaudeUsageFetchStatus.SignInExpired =>
                 "The Claude Code sign-in has expired. Open Claude Code once to refresh it, then sync again.",
             ClaudeUsageFetchStatus.RateLimited =>
