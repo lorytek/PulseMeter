@@ -4,7 +4,7 @@ Use this before publishing PulseMeter publicly.
 
 - [ ] Confirm `LICENSE` is Apache License 2.0 and README says PulseMeter is open source under Apache-2.0.
 - [ ] Confirm the repository does not include local shortcuts, `artifacts`, `bin`, `obj`, `.agents`, `.codex`, `pulsemeter_build_brief.md`, or `docs/superpowers`.
-- [ ] Confirm community files are present: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `.github/CODEOWNERS`, issue templates, pull request template, `llms.txt`, `.gitleaks.toml`, Dependabot, and security workflow.
+- [ ] Confirm community files are present: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `.github/CODEOWNERS`, issue templates, pull request template, `llms.txt`, `.gitleaks.toml`, and security workflow.
 - [ ] Run `dotnet test PulseMeter.slnx -c Release`.
 - [ ] Run `dotnet build PulseMeter.slnx -c Release`.
 - [ ] Run `powershell -ExecutionPolicy Bypass -File .\scripts\package-release.ps1 -Version 0.6.3`.
