@@ -157,7 +157,7 @@ If Codex CLI is not found, is not signed in, or `codex app-server` is unavailabl
 
 ## Monitoring Claude Code
 
-PulseMeter can also monitor Claude Code. Right-click the tray icon and choose `Monitor` > `Claude Code`; the choice is remembered across restarts, and `Monitor` > `Codex` switches back.
+PulseMeter can also monitor Claude Code. Use the `Switch to Claude Code` button in the expanded window header, or right-click the tray icon and choose `Monitor` > `Claude Code`. The choice is remembered across restarts, and the same button (or `Monitor` > `Codex`) switches back.
 
 - Rate limits (5-hour, weekly, and model-specific weekly limits such as Opus) come from the Claude subscription sign-in that Claude Code already stored in `%USERPROFILE%\.claude\.credentials.json` (or `CLAUDE_CONFIG_DIR`). PulseMeter only reads the access token to request usage from Anthropic; it never refreshes, writes, or uploads credentials elsewhere.
 - Account usage, Daily Usage, Project Health, Burn Analysis, and Usage Momentum are estimated from the token counts in local Claude Code session logs under `%USERPROFILE%\.claude\projects`. Message text is not kept or displayed.
