@@ -72,7 +72,6 @@ public sealed class ReleasePackagingTests
         var featureTemplate = File.ReadAllText(FindWorkspaceFile(".github", "ISSUE_TEMPLATE", "feature_request.md"));
         var codeOwners = File.ReadAllText(FindWorkspaceFile(".github", "CODEOWNERS"));
         var codeOfConduct = File.ReadAllText(FindWorkspaceFile("CODE_OF_CONDUCT.md"));
-        var dependabot = File.ReadAllText(FindWorkspaceFile(".github", "dependabot.yml"));
         var securityWorkflow = File.ReadAllText(FindWorkspaceFile(".github", "workflows", "security.yml"));
         var gitleaks = File.ReadAllText(FindWorkspaceFile(".gitleaks.toml"));
         var llms = File.ReadAllText(FindWorkspaceFile("llms.txt"));
@@ -85,8 +84,7 @@ public sealed class ReleasePackagingTests
         Assert.Contains("Problem Statement", featureTemplate);
         Assert.Contains("* @lorytek", codeOwners);
         Assert.Contains("Contributor Covenant Code of Conduct", codeOfConduct);
-        Assert.Contains("package-ecosystem: \"github-actions\"", dependabot);
-        Assert.Contains("package-ecosystem: \"nuget\"", dependabot);
+        Assert.Contains("--vulnerable --include-transitive", securityWorkflow);
         Assert.Contains("github/codeql-action/init", securityWorkflow);
         Assert.Contains("gitleaks detect", securityWorkflow);
         Assert.Contains("test-access-token", gitleaks);
