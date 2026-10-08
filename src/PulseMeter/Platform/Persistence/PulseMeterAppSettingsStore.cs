@@ -13,7 +13,8 @@ public sealed record PulseMeterAppSettings(
     bool AutoShowWhenCodexFocused = true,
     bool AutoHideWhenFocusLeaves = false,
     bool HasShownTrayHideGuidance = false,
-    bool IsQuickAccessHotkeyRequested = false);
+    bool IsQuickAccessHotkeyRequested = false,
+    string? UsageProvider = null);
 
 /// <summary>A one-shot next-block watch, scoped to a stable rate-limit window.</summary>
 public sealed record RecoveryWatchSettings(

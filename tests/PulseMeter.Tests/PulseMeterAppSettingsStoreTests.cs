@@ -17,7 +17,8 @@ public sealed class PulseMeterAppSettingsStoreTests
             AutoShowWhenCodexFocused: false,
             AutoHideWhenFocusLeaves: true,
             HasShownTrayHideGuidance: true,
-            IsQuickAccessHotkeyRequested: true);
+            IsQuickAccessHotkeyRequested: true,
+            UsageProvider: "Claude");
 
         store.Save(settings);
 
@@ -33,6 +34,7 @@ public sealed class PulseMeterAppSettingsStoreTests
         Assert.True(loaded.AutoHideWhenFocusLeaves);
         Assert.True(loaded.HasShownTrayHideGuidance);
         Assert.True(loaded.IsQuickAccessHotkeyRequested);
+        Assert.Equal("Claude", loaded.UsageProvider);
         Assert.DoesNotContain("budgetAlerts", json);
         Assert.True(File.Exists(path + ".bak"));
     }

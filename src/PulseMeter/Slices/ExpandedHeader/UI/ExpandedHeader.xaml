@@ -100,6 +100,24 @@
                                HorizontalAlignment="Right" />
                 </StackPanel>
 
+                <Button x:Name="SwitchUsageProviderButton"
+                        Height="40"
+                        Margin="0,0,8,0"
+                        Command="{Binding DataContext.SwitchUsageProviderCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                        ToolTip="{Binding DataContext.SwitchUsageProviderTooltip, RelativeSource={RelativeSource AncestorType=Window}}"
+                        AutomationProperties.Name="{Binding DataContext.SwitchUsageProviderTooltip, RelativeSource={RelativeSource AncestorType=Window}}"
+                        Visibility="{Binding DataContext.CanSwitchUsageProvider, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}, FallbackValue=Collapsed}"
+                        Style="{DynamicResource LightButtonStyle}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE8AB;"
+                                   FontFamily="Segoe MDL2 Assets"
+                                   FontSize="15"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Margin="9,0,0,0"
+                                   Text="{Binding DataContext.SwitchUsageProviderText, RelativeSource={RelativeSource AncestorType=Window}}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
                 <Button Height="40"
                         Margin="0,0,8,0"
                         Command="{Binding SyncNowCommand}"
